@@ -1,0 +1,237 @@
+<?php
+// Landing pública para un cliente de Tickex STR
+// URL de prueba: site.php?slug=mi-slug
+
+// Helper e() por si no existe
+if (!function_exists('e')) {
+    function e($str) {
+        return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+// Leer slug desde la URL
+$slug = isset($_GET['slug']) ? trim($_GET['slug']) : '';
+$slug = strtolower($slug);
+
+if ($slug === '') {
+    http_response_code(400);
+    echo 'Falta el parámetro slug.';
+    exit;
+}
+
+// Conexión a SQLite
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+if (!file_exists($dbFile)) {
+    http_response_code(500);
+    echo 'Error: base de datos no encontrada.';
+    exit;
+}
+
+try {
+    $dsn = 'sqlite:' . $dbFile;
+    $db = new PDO($dsn);
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Exception $e) {
+    http_response_code(500);
+    echo 'Error al conectar a la base de datos.';
+    exit;
+}
+
+// Buscar la config del sitio por slug
+try {
+    $stmt = $db->prepare('
+        SELECT admin_id, nombre_publico, texto_hero, texto_intro, visible
+        FROM clientes_sites
+        WHERE slug_publico = :slug
+        LIMIT 1
+    ');
+    $stmt->execute(array(':slug' => $slug));
+    $site = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    http_response_code(500);
+    echo 'Error al cargar la configuración del sitio.';
+    exit;
+}
+
+if (!$site) {
+    http_response_code(404);
+    echo 'Sitio no encontrado.';
+    exit;
+}
+
+if ((int)$site['visible'] !== 1) {
+    // Podés personalizar este mensaje de mantenimiento
+    http_response_code(503);
+    ?>
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="utf-8">
+      <title><?php echo e($site['nombre_publico']); ?> - Mantenimiento</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body { font-family: Arial, sans-serif; margin:0; padding:0; background:#111; color:#eee; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+        .box { max-width:480px; text-align:center; padding:24px; border-radius:8px; background:#1b1b1b; }
+        h1 { margin-top:0; margin-bottom:16px; }
+        p { margin:8px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="box">
+        <h1><?php echo e($site['nombre_publico']); ?></h1>
+        <p>Este sitio se encuentra en mantenimiento.</p>
+        <p>Volvé a visitarnos más tarde.</p>
+        <p style="margin-top:16px; font-size:12px; opacity:0.75;">Powered by Tickex</p>
+      </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// Variables de config
+$nombre_publico = $site['nombre_publico'];
+$texto_hero     = $site['texto_hero'] !== '' ? $site['texto_hero'] : 'Entradas oficiales para nuestros eventos';
+$texto_intro    = $site['texto_intro'] !== '' ? $site['texto_intro'] : 'Encontrá acá todas las fechas disponibles.';
+
+// TODO: más adelante, cargar eventos reales del admin_id = $site['admin_id']
+// Por ahora, usamos un array de ejemplo para maquetar.
+$eventos_demo = array(
+    array(
+        'titulo' => 'Save The Rave',
+        'fecha'  => 'Sáb 15 de febrero, 23:59',
+        'lugar'  => 'Lugar demo',
+        'flyer'  => 'flyer-save-the-rave.png',
+        'link'   => '#'
+    ),
+);
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title><?php echo e($nombre_publico); ?> - Tickex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Arial, sans-serif; background:#05050a; color:#f5f5f5; }
+    a { color:inherit; text-decoration:none; }
+    header { padding:16px 24px; display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,0.85); position:sticky; top:0; z-index:10; }
+    .brand { font-weight:bold; font-size:18px; }
+    .brand span { opacity:0.7; font-weight:normal; font-size:14px; }
+    .header-actions a { margin-left:8px; padding:8px 14px; border-radius:20px; font-size:14px; border:1px solid rgba(255,255,255,0.25); }
+    .header-actions .primary
+
+    .hero { padding:40px 24px 24px; max-width:960px; margin:0 auto; }
+    .hero-title { font-size:28px; margin:0 0 8px; }
+    .hero-sub { font-size:16px; opacity:0.85; margin:0 0 16px; }
+    .hero-actions { margin-top:16px; }
+    .hero-actions input[type="search"] {
+      width:100%; max-width:360px;
+      padding:10px 12px;
+      border-radius:20px;
+      border:none;
+      outline:none;
+      font-size:14px;
+    }
+
+    .main { max-width:960px; margin:0 auto 32px; padding:0 24px 24px; }
+    .event-list-title { margin:24px 0 12px; font-size:18px; }
+    .events-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); grid-gap:16px; }
+    .event-card { background:#111; border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,0.06); display:flex; flex-direction:column; }
+    .event-card img {
+      width:100%;
+      display:block;
+      max-height:260px;
+      object-fit:cover;
+    }
+    .event-body { padding:12px 14px 14px; flex:1; display:flex; flex-direction:column; }
+    .event-title { font-size:16px; margin:0 0 4px; }
+    .event-meta { font-size:13px; opacity:0.8; margin-bottom:10px; }
+    .event-actions { margin-top:auto; display:flex; justify-content:space-between; align-items:center; }
+    .btn { display:inline-block; padding:8px 12px; border-radius:20px; font-size:13px; border:1px solid rgba(255,255,255,0.25); text-align:center; }
+    .btn-primary { background:#ff2e63; border-color:#ff2e63; }
+    .btn-ghost { background:transparent; }
+
+    footer { border-top:1px solid rgba(255,255,255,0.08); padding:24px; font-size:13px; background:#05050a; }
+    .footer-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); grid-gap:16px; margin-bottom:16px; }
+    .footer-col-title { font-weight:bold; margin-bottom:8px; font-size:14px; }
+    .footer-link { display:block; margin-bottom:4px; opacity:0.85; }
+    .footer-bottom { opacity:0.7; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <?php echo e($nombre_publico); ?><br>
+      <span>Powered by Tickex</span>
+    </div>
+    <div class="header-actions">
+      <a href="login.php" class="secondary">Ingresar</a>
+      <a href="registro.php" class="primary">Registrate</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1 class="hero-title"><?php echo e($texto_hero); ?></h1>
+    <p class="hero-sub"><?php echo e($texto_intro); ?></p>
+    <div class="hero-actions">
+      <input type="search" name="q" placeholder="Buscar eventos por nombre, fecha o lugar">
+    </div>
+  </section>
+
+  <main class="main">
+    <h2 class="event-list-title">Próximos eventos</h2>
+
+    <?php if (empty($eventos_demo)): ?>
+      <p>No hay eventos publicados todavía.</p>
+    <?php else: ?>
+      <div class="events-grid">
+        <?php foreach ($eventos_demo as $ev): ?>
+          <article class="event-card">
+            <?php if (!empty($ev['flyer']) && file_exists(__DIR__ . '/' . $ev['flyer'])): ?>
+              <img src="<?php echo e($ev['flyer']); ?>" alt="<?php echo e($ev['titulo']); ?>">
+            <?php endif; ?>
+            <div class="event-body">
+              <h3 class="event-title"><?php echo e($ev['titulo']); ?></h3>
+              <div class="event-meta">
+                <?php echo e($ev['fecha']); ?><br>
+                <?php echo e($ev['lugar']); ?>
+              </div>
+              <div class="event-actions">
+                <a href="<?php echo e($ev['link']); ?>" class="btn btn-primary">Comprar entrada</a>
+                <a href="<?php echo e($ev['link']); ?>" class="btn btn-ghost">Compartir</a>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </main>
+
+  <footer>
+    <div class="footer-grid">
+      <div>
+        <div class="footer-col-title">¿Sos productor o venue?</div>
+        <a href="https://tickex.com.ar" class="footer-link">Vendé con Tickex</a>
+        <a href="https://tickex.com.ar" class="footer-link">Crear evento</a>
+      </div>
+      <div>
+        <div class="footer-col-title">Tickex</div>
+        <span class="footer-link">Ayuda</span>
+        <span class="footer-link">Términos y condiciones</span>
+        <span class="footer-link">Política de privacidad</span>
+      </div>
+      <div>
+        <div class="footer-col-title">Información</div>
+        <span class="footer-link">Botón de arrepentimiento</span>
+        <span class="footer-link">Contacto</span>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© Tickex <?php echo date('Y'); ?></span>
+      <span>Hecho con &hearts; en Argentina</span>
+    </div>
+  </footer>
+</body>
+</html>

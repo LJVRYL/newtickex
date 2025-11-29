@@ -1,0 +1,31 @@
+<?php
+session_start();
+
+// Si no hay sesión nueva, mandar al login único
+if (empty($_SESSION['usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
+$tg = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
+$re = isset($_SESSION['rol_evento']) ? $_SESSION['rol_evento'] : '';
+$eid = isset($_SESSION['evento_id']) ? (int)$_SESSION['evento_id'] : 1; // STR por default
+
+// Ruteo según rol nuevo
+if ($tg === 'super_admin') {
+    header("Location: superadmin.php");
+    exit;
+}
+if ($tg === 'admin_evento') {
+    // AdminSTR entra al panel del evento STR (id 1)
+    header("Location: panel_evento.php?id=1");
+    exit;
+}
+if ($tg === 'staff_evento' && $re === 'puerta') {
+    header("Location: puerta.php?evento_id=".$eid);
+    exit;
+}
+
+// fallback
+header("Location: panel_admin.php");
+exit;

@@ -1,0 +1,204 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+$pdo         = db();
+$errores     = array();
+$mensajeOk   = '';
+$mostrarForm = false;
+$token       = '';
+
+// Campos para el formulario
+$nombre   = '';
+$apellido = '';
+$dni      = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+
+    $token = isset($_GET['token']) ? trim($_GET['token']) : '';
+
+    if ($token === '') {
+        $errores[] = "Token inválido o faltante.";
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE token_confirmacion = :token LIMIT 1");
+        $stmt->execute(array(':token' => $token));
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            $errores[] = "Token inválido o ya utilizado.";
+        } else {
+            // Prellenar datos por si ya tenía algo
+            $nombre   = isset($user['nombre'])   ? $user['nombre']   : '';
+            $apellido = isset($user['apellido']) ? $user['apellido'] : '';
+            $dni      = isset($user['dni'])      ? $user['dni']      : '';
+
+            // Marcar email confirmado si aún no lo estaba
+            if ((int)$user['email_confirmado'] !== 1) {
+                $stmtUp = $pdo->prepare("UPDATE usuarios SET email_confirmado = 1 WHERE id = :id");
+                $stmtUp->execute(array(':id' => (int)$user['id']));
+                $user['email_confirmado'] = 1;
+            }
+
+            $tienePass  = !empty($user['password_hash']);
+            $tieneDatos = ($nombre !== '' && $apellido !== '' && $dni !== '');
+
+            if ($tienePass && $tieneDatos) {
+                $mensajeOk = "Tu email ya está confirmado y tu registro está completo. Ya podés continuar con tus compras y recibir tus entradas por Tickex.";
+            } else {
+                // Falta completar datos
+                $mostrarForm = true;
+            }
+        }
+    }
+
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $token = isset($_POST['token']) ? trim($_POST['token']) : '';
+
+    if ($token === '') {
+        $errores[] = "Token inválido o faltante.";
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE token_confirmacion = :token LIMIT 1");
+        $stmt->execute(array(':token' => $token));
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            $errores[] = "Token inválido o ya utilizado.";
+        } else {
+            // Tomar datos enviados
+            $nombre   = trim(isset($_POST['nombre'])   ? $_POST['nombre']   : '');
+            $apellido = trim(isset($_POST['apellido']) ? $_POST['apellido'] : '');
+            $dni      = trim(isset($_POST['dni'])      ? $_POST['dni']      : '');
+            $pass1    = isset($_POST['password'])  ? $_POST['password']  : '';
+            $pass2    = isset($_POST['password2']) ? $_POST['password2'] : '';
+
+            // Validaciones
+            if ($nombre === '') {
+                $errores[] = "El nombre es obligatorio.";
+            }
+            if ($apellido === '') {
+                $errores[] = "El apellido es obligatorio.";
+            }
+            if ($dni === '') {
+                $errores[] = "El DNI es obligatorio.";
+            }
+            if ($pass1 === '' || $pass2 === '') {
+                $errores[] = "La contraseña y su repetición son obligatorias.";
+            }
+            if ($pass1 !== '' && $pass2 !== '' && $pass1 !== $pass2) {
+                $errores[] = "Las contraseñas no coinciden.";
+            }
+            if ($pass1 !== '' && strlen($pass1) < 6) {
+                $errores[] = "La contraseña debe tener al menos 6 caracteres.";
+            }
+
+            if (empty($errores)) {
+                // Hash de contraseña (compatibilidad con PHP viejos)
+                if (function_exists('password_hash')) {
+                    $passwordHash = password_hash($pass1, PASSWORD_DEFAULT);
+                } else {
+                    $passwordHash = sha1($pass1);
+                }
+
+                $stmtUp = $pdo->prepare("
+                    UPDATE usuarios
+              
+                        apellido           = :apellido,
+                        dni                = :dni,
+                        password_hash      = :ph,
+                        email_confirmado   = 1,
+                        token_confirmacion = NULL
+                    WHERE id = :id
+                ");
+                $stmtUp->execute(array(
+                    ':nombre'   => $nombre,
+                    ':apellido' => $apellido,
+                    ':dni'      => $dni,
+                    ':ph'       => $passwordHash,
+                    ':id'       => (int)$user['id'],
+                ));
+
+                $mensajeOk   = "Listo, tu email quedó confirmado y tu registro fue completado. Ya podés continuar con tus compras y recibir tus entradas por Tickex.";
+                $mostrarForm = false;
+                $token       = '';
+            } else {
+                // Volvemos a mostrar el formulario con errores
+                $mostrarForm = true;
+            }
+        }
+    }
+}
+
+$title = 'Verificación de email';
+include __DIR__.'/inc/layout_top.php';
+?>
+<div class="card" style="max-width:520px;margin:0 auto 16px auto;">
+  <h2>Verificación de email</h2>
+
+  <?php if ($mensajeOk !== ''): ?>
+    <div class="flash ok" style="margin-top:12px;">
+      <?php echo htmlspecialchars($mensajeOk, ENT_QUOTES, 'UTF-8'); ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!empty($errores)): ?>
+    <div class="flash err" style="margin-top:12px;">
+      <ul style="margin:0 0 0 18px;padding:0;">
+        <?php foreach ($errores as $e): ?>
+          <li><?php echo htmlspecialchars($e, ENT_QUOTES, 'UTF-8'); ?></li>
+        <?php endforeach; ?>
+      </ul>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($mostrarForm): ?>
+    <p style="color:var(--muted);margin-top:12px;">
+      Tu email ya fue verificado. Ahora completá tus datos para finalizar el registro.
+    </p>
+
+    <form method="post"
+      <input type="hidden" name="token"
+             value="<?php echo htmlspecialchars($token, ENT_QUOTES, 'UTF-8'); ?>">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <label>Nombre</label>
+          <input type="text" name="nombre"
+                 value="<?php echo htmlspecialchars($nombre, ENT_QUOTES, 'UTF-8'); ?>"
+                 required>
+        </div>
+        <div>
+          <label>Apellido</label>
+          <input type="text" name="apellido"
+                 value="<?php echo htmlspecialchars($apellido, ENT_QUOTES, 'UTF-8'); ?>"
+                 required>
+        </div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <label>DNI</label>
+        <input type="text" name="dni"
+               value="<?php echo htmlspecialchars($dni, ENT_QUOTES, 'UTF-8'); ?>"
+               required>
+      </div>
+
+      <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <label>Contraseña</label>
+          <input type="password" name="password" required>
+        </div>
+        <div>
+          <label>Repetir contraseña</label>
+          <input type="password" name="password2" required>
+        </div>
+      </div>
+
+      <button class="btn" type="submit" style="margin-top:16px;width:100%;">
+        Completar registro
+      </button>
+    </form>
+  <?php endif; ?>
+</div>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

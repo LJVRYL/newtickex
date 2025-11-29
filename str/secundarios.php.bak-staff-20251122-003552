@@ -1,0 +1,335 @@
+<?php
+session_start();
+
+// Resolver usuario de sesión (igual que en panel_admin.php)
+$sessionUser = null;
+if (!empty($_SESSION['usuario'])) {
+    $sessionUser = $_SESSION['usuario'];
+} elseif (!empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === true) {
+    $sessionUser = 'AdminSTR';
+}
+
+if ($sessionUser === null) {
+    header('Location: admin.php');
+    exit;
+}
+
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo "Error DB: " . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+    exit;
+}
+
+// Cargar usuario actual
+$stmtUser = $pdo->prepare("
+    SELECT id, username, tipo_global, nombre
+    FROM usuarios_admin
+    WHERE username = :u
+    LIMIT 1
+");
+$stmtUser->execute([':u' => $sessionUser]);
+$user = $stmtUser->fetch(PDO::FETCH_ASSOC);
+
+if (!$user) {
+    http_response_code(403);
+    echo "Usuario no encontrado.";
+    exit;
+}
+
+function e($s) {
+    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+}
+
+// Solo admin_evento o super_admin pueden gestionar secundarios
+if (!in_array($user['tipo_global'], ['admin_evento', 'super_admin'], true)) {
+    http_response_code(403);
+    echo "No tenés permisos para gestionar administradores secundarios.";
+    exit;
+}
+
+$error = '';
+$okMsg = '';
+
+// Procesar alta de nuevo secundario
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nuevoUser = isset($_POST['username']) ? trim($_POST['username']) : '';
+    $nuevoPass = isset($_POST['password']) ? (string)$_POST['password'] : '';
+    $plantilla = isset($_POST['plantilla']) ? trim($_POST['plantilla']) : 'puerta';
+
+    if ($nuevoUser === '' || $nuevoPass === '') {
+        $error = 'Usuario y contraseña son obligatorios.';
+    } elseif (!preg_match('/^[A-Za-z0-9_\-]{3,40}$/', $nuevoUser)) {
+        $error = 'El usuario debe tener entre 3 y 40 caracteres (letras, números, guión o guión bajo).';
+    } else {
+        // Verificar que no exista ya
+        $stmtChk = $pdo->prepare("SELECT COUNT(*) FROM usuarios_admin WHERE username = :u");
+        $stmtChk->execute([':u' => $nuevoUser]);
+        $existe = (int)$stmtChk->fetchColumn() > 0;
+
+        if ($existe) {
+            $error = 'Ya existe un usuario con ese nombre.';
+        }
+    }
+
+    // Por ahora solo una plantilla: "puerta"
+    if (!$error && $plantilla !== 'puerta') {
+        $error = 'Plantilla de rol no válida.';
+    }
+
+    if (!$error) {
+        try {
+            $stmtIns = $pdo->prepare("
+                INSERT INTO usuarios_admin
+                    (username, password, rol, tipo_global, rol_evento, activo, creado_por_admin_id)
+                VALUES
+                    (:username, :password, :rol, :tipo_global, :rol_evento, 1, :creado_por)
+            ");
+            $stmtIns->execute([
+                ':username'    => $nuevoUser,
+                ':password'    => $nuevoPass,           // plaintext, igual que el resto por ahora
+                ':rol'         => 'staff',              // genérico
+                ':tipo_global' => 'staff_evento',
+                ':rol_evento'  => $plantilla,          // "puerta"
+                ':creado_por'  => (int)$user['id'],
+            ]);
+
+            $okMsg = "Usuario secundario '{$nuevoUser}' creado correctamente con rol '{$plantilla}'.";
+
+        } catch (Throwable $e) {
+            $error = 'Error al crear el usuario secundario: ' . $e->getMessage();
+        }
+    }
+}
+
+// Listar secundarios del admin actual
+$stmtSec = $pdo->prepare("
+    SELECT id, username, tipo_global, rol_evento, activo
+    FROM usuarios_admin
+    WHERE tipo_global = 'staff_evento'
+      AND creado_por_admin_id = :id_admin
+    ORDER BY id ASC
+");
+$stmtSec->execute([':id_admin' => $user['id']]);
+$secundarios = $stmtSec->fetchAll(PDO::FETCH_ASSOC);
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Administradores secundarios – <?php echo e($user['username']); ?></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      padding:16px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:#020617;
+      color:#e5e7eb;
+    }
+    h1 {
+      margin:0 0 6px;
+      font-size:1.3rem;
+    }
+    .sub {
+      font-size:0.85rem;
+      color:#9ca3af;
+      margin-bottom:14px;
+    }
+    .btn-link {
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#111827;
+      color:#e5e7eb;
+      text-decoration:none;
+      font-size:0.8rem;
+      margin-right:8px;
+      border:1px solid #1f2937;
+    }
+    .btn-link:hover { background:#1f2937; }
+    .layout {
+      display:flex;
+      flex-wrap:wrap;
+      gap:16px;
+      margin-top:10px;
+    }
+    .card {
+      background:#020617;
+      border-radius:14px;
+      padding:14px 16px;
+      border:1px solid #1f2937;
+      box-shadow:0 10px 25px rgba(0,0,0,0.5);
+      flex:1 1 260px;
+      min-width:260px;
+    }
+    label {
+      font-size:0.8rem;
+      display:block;
+      margin-bottom:4px;
+      color:#9ca3af;
+    }
+    input[type="text"],
+    input[type="password"],
+    select {
+      width:100%;
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid #374151;
+      background:#020617;
+      color:#e5e7eb;
+      font-size:0.85rem;
+      margin-bottom:8px;
+    }
+    button[type="submit"] {
+      margin-top:6px;
+      padding:8px 14px;
+      border-radius:999px;
+      border:none;
+      background:#d71d24;
+      color:#fff;
+      font-size:0.9rem;
+      font-weight:600;
+      cursor:pointer;
+    }
+    button[type="submit"]:hover { filter:brightness(1.05); }
+    table {
+      width:100%;
+      border-collapse:collapse;
+      margin-top:6px;
+      font-size:0.85rem;
+    }
+    th, td {
+      padding:6px 8px;
+      border-bottom:1px solid #1f2937;
+      vertical-align:middle;
+    }
+    th { background:#111827; text-align:left; }
+    tr:hover td { background:#020617; }
+    .badge-ok {
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:0.75rem;
+      background:#14532d;
+      color:#bbf7d0;
+    }
+    .badge-off {
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:0.75rem;
+      background:#7f1d1d;
+      color:#fecaca;
+    }
+    .msg-error {
+      margin-top:8px;
+      padding:8px 10px;
+      border-radius:8px;
+      background:#7f1d1d;
+      color:#fecaca;
+      font-size:0.8rem;
+      max-width:800px;
+    }
+    .msg-ok {
+      margin-top:8px;
+      padding:8px 10px;
+      border-radius:8px;
+      background:#14532d;
+      color:#bbf7d0;
+      font-size:0.8rem;
+      max-width:800px;
+    }
+    .hint {
+      font-size:0.75rem;
+      color:#6b7280;
+      margin-top:-4px;
+      margin-bottom:6px;
+    }
+  </style>
+</head>
+<body>
+
+<div>
+  <a class="btn-link" href="panel_admin.php">⬅ Volver al panel general</a>
+  <a class="btn-link" href="admin.php">Panel clásico STR</a>
+</div>
+
+<h1>Administradores secundarios</h1>
+<div class="sub">
+  Titular: <strong><?php echo e($user['nombre'] ?: $user['username']); ?></strong> (<?php echo e($user['tipo_global']); ?>)
+</div>
+
+<?php if ($error): ?>
+  <div class="msg-error"><?php echo e($error); ?></div>
+<?php elseif ($okMsg): ?>
+  <div class="msg-ok"><?php echo e($okMsg); ?></div>
+<?php endif; ?>
+
+<div class="layout">
+  <form method="post" class="card">
+    <h2 style="font-size:1rem;margin:0 0 8px;">Crear nuevo secundario</h2>
+    <p class="hint">
+      Por ahora hay una plantilla disponible: <strong>puerta</strong> (modo check-in con vista limitada).
+    </p>
+
+    <label for="username">Usuario secundario</label>
+    <input type="text" id="username" name="username" placeholder="ej: puerta2">
+
+    <label for="password">Contraseña</label>
+    <input type="password" id="password" name="password" placeholder="Definí una clave para este usuario">
+
+    <label for="plantilla">Tipo de rol</label>
+    <select id="plantilla" name="plantilla">
+      <option value="puerta">Puerta (check-in en la entrada)</option>
+    </select>
+
+    <button type="submit">Crear secundario</button>
+  </form>
+
+  <div class="card">
+    <h2 style="font-size:1rem;margin:0 0 8px;">Listado de secundarios</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Usuario</th>
+          <th>Rol evento</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if (!$secundarios): ?>
+          <tr>
+            <td colspan="4" style="font-size:0.8rem;color:#9ca3af;">
+              Todavía no creaste administradores secundarios.
+            </td>
+          </tr>
+        <?php else: ?>
+          <?php foreach ($secundarios as $s): ?>
+            <tr>
+              <td><?php echo (int)$s['id']; ?></td>
+              <td><?php echo e($s['username']); ?></td>
+              <td><?php echo e($s['rol_evento']); ?></td>
+              <td>
+                <?php if ((int)$s['activo'] === 1): ?>
+                  <span class="badge-ok">Activo</span>
+                <?php else: ?>
+                  <span class="badge-off">Inactivo</span>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

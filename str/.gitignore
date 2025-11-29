@@ -1,0 +1,22 @@
+# Bases de datos (producción y local)
+*.sqlite
+*.db
+
+# Logs y archivos temporales
+*.log
+log_mail_registro.txt
+*.tmp
+*.swp
+
+# Backups
+*.bak
+*.bak.*
+str.bak_*/
+
+# Archivos de entorno / secretos (por si aparecen)
+.env
+config.local.php
+
+# Directorios de dependencias (por si en el futuro se usan)
+vendor/
+node_modules/

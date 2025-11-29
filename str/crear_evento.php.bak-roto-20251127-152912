@@ -1,0 +1,247 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Crear evento – TICKEX";
+
+// Sólo super_admin o admin_evento pueden crear eventos
+require_login();
+
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
+if (!in_array($tipoGlobal, array('super_admin','admin_evento','superadmin'), true)) {
+    header('Location: panel_admin.php');
+    exit;
+}
+
+$adminId = 0;
+if (isset($_SESSION['user_id'])) {
+    $adminId = (int)$_SESSION['user_id'];
+} elseif (isset($cu['id'])) {
+    $adminId = (int)$cu['id'];
+}
+
+try {
+    $pdo = db();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "Error DB: " . e($e->getMessage());
+    exit;
+}
+
+// Detectar si existe creado_por_admin_id
+$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCreadoPor = false;
+foreach ($colsEv as $c) {
+    if (isset($c['name']) && $c['name'] === 'creado_por_admin_id') {
+        $hasCreadoPor = true;
+        break;
+    }
+}
+
+// Valores por defecto para repintar form
+$nombre      = '';
+$slug        = '';
+$fechaDesde  = '';
+$fechaHasta  = '';
+$descripcion = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $slug        = isset($_POST['slug']) ? trim($_POST['slug']) : '';
+    $fechaDesde  = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
+    $fechaHasta  = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
+    $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
+
+    $errorMsg = '';
+
+    // Validaciones básicas de nombre y slug
+    if ($nombre === '' || $slug === '') {
+        $errorMsg = 'Nombre y slug son obligatorios.';
+    } elseif (!preg_match('/^[a-z0-9\-]+$/', $slug)) {
+        $errorMsg = 'El slug solo puede tener minúsculas, números y guiones (a-z, 0-9, -).';
+    }
+
+    // Validar formato de fechas (YYYY-MM-DD)
+    if ($errorMsg === '' && $fechaDesde !== '') {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaDesde)) {
+            $errorMsg = 'La fecha "Desde" no tiene un formato válido.';
+        }
+    }
+
+    if ($errorMsg === '' && $fechaHasta !== '') {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaHasta)) {
+            $errorMsg = 'La fecha "Hasta" no tiene un formato válido.';
+        }
+    }
+
+    // Si hay "Hasta" pero no "Desde"
+    if ($errorMsg === '' && $fechaHasta !== '' && $fechaDesde === '') {
+        $errorMsg = 'Si completás la fecha "Hasta", también tenés que definir la fecha "Desde".';
+    }
+
+    // No permitir fecha "Desde" en el pasado
+    if ($errorMsg === '' && $fechaDesde !== '') {
+        $hoy = date('Y-m-d');
+        if ($fechaDesde < $hoy) {
+            $errorMsg = 'La fecha "Desde" no puede ser anterior a hoy.';
+        }
+    }
+
+    // "Hasta" no puede ser anterior a "Desde"
+    if ($errorMsg === '' && $fechaDesde !== '' && $fechaHasta !== '') {
+        if ($fechaHasta < $fechaDesde) {
+            $errorMsg = 'La fecha "Hasta" no puede ser anterior a la fecha "Desde".';
+        }
+    }
+
+    if ($errorMsg !== '') {
+        flash('warn', $errorMsg);
+    } else {
+        // Manejar flyer (opcional)
+        $flyerFilename = null;
+        $flyerError = '';
+
+        if (isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['flyer']['error'] === UPLOAD_ERR_OK) {
+                $tmpName = $_FILES['flyer']['tmp_name'];
+                $size    = (int)$_FILES['flyer']['size'];
+
+                if ($size > 2 * 1024 * 1024) { // 2MB
+                    $flyerError = 'El flyer no puede pesar más de 2 MB.';
+                } else {
+                    $originalName = $_FILES['flyer']['name'];
+                    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+                    if (!in_array($ext, array('png', 'jpg', 'jpeg'), true)) {
+                        $flyerError = 'Solo se permiten imágenes PNG o JPG.';
+                    } else {
+                        $sa
+                        $newName  = time() . '_' . $safeBase;
+                        $destPath = __DIR__ . '/event_flyers/' . $newName;
+
+                        if (!move_uploaded_file($tmpName, $destPath)) {
+                            $flyerError = 'No se pudo guardar el flyer en el servidor.';
+                        } else {
+                            $flyerFilename = 'event_flyers/' . $newName;
+                        }
+                    }
+                }
+            } else {
+                $flyerError = 'Error al subir el flyer (código: ' . (int)$_FILES['flyer']['error'] . ').';
+            }
+        }
+
+        if ($flyerError !== '') {
+            flash('err', $flyerError);
+        } else {
+            try {
+                $pdo->beginTransaction();
+
+                // Insertar evento (con o sin creado_por_admin_id según schema)
+                if ($hasCreadoPor) {
+                    $stmtEv = $pdo->prepare("
+                        INSERT INTO eventos
+                            (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, creado_por_admin_id)
+                        VALUES
+                            (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :creador)
+                    ");
+                    $stmtEv->execute(array(
+                        ':nombre'      => $nombre,
+                        ':slug'        => $slug,
+                        ':descripcion' => $descripcion,
+                        ':flyer'       => $flyerFilename,
+                        ':fdesde'      => $fechaDesde !== '' ? $fechaDesde : null,
+                        ':fhasta'      => $fechaHasta !== '' ? $fechaHasta : null,
+                        ':creador'     => $adminId,
+                    ));
+                } else {
+                    $stmtEv = $pdo->prepare("
+                        INSERT INTO eventos
+                            (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en)
+                        VALUES
+                            (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'))
+                    ");
+                    $stmtEv->execute(array(
+                        ':nombre'      => $nombre,
+                        ':slug'        => $slug,
+                        ':descripcion' => $descripcion,
+                        ':flyer'       => $flyerFilename,
+                        ':fdesde'      => $fechaDesde !== '' ? $fechaDesde : null,
+                        ':fhasta'      => $fechaHasta !== '' ? $fechaHasta : null,
+                    ));
+                }
+
+                $eventoId = (int)$pdo->lastInsertId();
+                $pdo->commit();
+
+                // Redirigir a pantalla de éxito
+                header('Location: evento_creado.php?evento_id=' . $eventoId);
+                exit;
+
+            } catch (Exception $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                flash('err', 'Error al crear el evento: ' . $e->getMessage());
+            }
+        }
+    }
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
+  <?php if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin'): ?>
+    <a class="btn secondary" href="superadmin.php">SuperAdmin</a>
+  <?php endif; ?>
+</div>
+
+<div class="card">
+  <h2>Crear nuevo evento</h2>
+  <div style="color:var(--muted);font-size:14px;">
+    Usuario: <strong><?php echo e(isset($_SESSION['usuario']) ? $_SESSION['usuario'] : ''); ?></strong>
+    (<?php echo e($tipoGlobal); ?>)<br>
+    Esta pantalla crea solo el <strong>evento</strong>. Después vas a poder configurar las entradas
+    desde la pantalla de edición del evento.
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+  <div class="card">
+    <h3>Datos del evento</h3>
+
+    <label for="nombre">Nombre del evento</label>
+    <input type="text" id="nombre" name="nombre" required value="<?php echo e($nombre); ?>">
+
+    <label for="slug">Slug / URL corta (ej: "str2", "retro")</label>
+    <input type="text" id="slug" name="slug" required
+           placeholder="solo minúsculas, números y -" value="<?php echo e($slug); ?>">
+
+    <label for="descripcion">Descripción breve (opcional)</label>
+    <textarea id="descripcion" name="descripcion"
+              placeholder="Texto descriptivo del evento..."><?php echo e($descripcion); ?></textarea>
+
+    <label>Fechas del evento (desde / hasta)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="flex:1 1 140px;">
+        <label for="fecha_desde">Desde</label>
+        <input type="date" id="fecha_desde" name="fecha_desde"
+               value="<?php echo e($fechaDesde); ?>"
+               min="<?php echo date('Y-m-d'); ?>">
+      </div>
+      <div style="flex:1 1 140px;">
+        <label for="fecha_hasta">Hasta</label>
+        <input type="date" id="fecha_hasta" name="fecha_hasta"
+               value="<?php echo e($fechaHasta); ?>"
+               min="<?php echo date('Y-m-d'); ?>">
+      </div>
+    </div>
+
+    <label for="flyer">Flyer del evento (PNG/JPG, máx. 2MB)</label>
+    <input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg">
+  </div>
+
+  <button class="btn" type="submit">Crear evento</button>
+</form>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

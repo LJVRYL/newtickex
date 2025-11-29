@@ -1,0 +1,163 @@
+<?php
+session_start();
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+if (empty($_SESSION['usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
+$adminId    = isset($_SESSION['user_id'])     ? (int)$_SESSION['user_id'] : 0;
+
+if (!in_array($tipoGlobal, array('admin_evento','super_admin'))) {
+    echo "No tenés permiso para ver este panel.";
+    exit;
+}
+
+$eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($eventoId <= 0) {
+    echo "ID de evento inválido.";
+    exit;
+}
+
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+$pdo = new PDO('sqlite:' . $dbFile);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+// obtener datos del evento
+$stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id=:id");
+$stmtEv->execute(array(':id'=>$eventoId));
+$evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
+
+if (!$evento) {
+    echo "Evento no encontrado.";
+    exit;
+}
+
+if ($tipoGlobal === 'admin_evento') {
+    $creador = isset($evento['creado_por_admin_id']) ? (int)$evento['creado_por_admin_id'] : 0;
+    if ($creador !== $adminId) {
+        echo "No tenés permiso para este evento.";
+        exit;
+    }
+}
+
+// filtros
+$q       = isset($_GET['q'])      ? trim($_GET['q'])       : '';
+$fTipo   = isset($_GET['tipo'])   ? trim($_GET['tipo'])    : '';
+$fEstado = isset($_GET['estado']) ? trim($_GET['estado'])  : '';
+
+$where  = array("evento_id = :eid");
+$params = array(':eid'=>$eventoId);
+
+if ($q !== '') {
+    $where[] = "(nombre LIKE :q OR email LIKE :q OR codigo LIKE :q)";
+    $params[':q'] = '%'.$q.'%';
+}
+if ($fTipo !== '') {
+    $where[] = "tipo = :tipo";
+    $params[':tipo'] = $fTipo;
+}
+if ($fEstado === 'checkin_ok') {
+    $where[] = "checked_in = 1";
+}
+if ($fEstado === 'pendiente') {
+    $where[] = "checked_in = 0";
+}
+
+// ejecutar
+$sql = "
+SELECT *
+FROM entradas
+WHERE ".implode(" AND ",$where)."
+ORDER BY id DESC
+";
+$stmtRows = $pdo->prepare($sql);
+$stmtRows->execute($params);
+$rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
+
+// estadísticas
+$total     = count($rows);
+$checkins  = 0;
+$faltan    = 0;
+foreach ($rows as $r) {
+    if ((int)$r['checked_in'] === 1) $checkins++;
+}
+$faltan = $total - $checkins;
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel del Evento – <?php echo e($evento['nombre']); ?></title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{
+  font-family:system-ui,-apple-system,"Segoe UI";
+  background:#050505;
+  color:#f5f5f5;
+  padding:16px;
+}
+</style>
+</head>
+<body>
+
+<h1><?php echo e($evento['nombre']); ?></h1>
+<div>Slug: <strong><?php echo e($evento['slug']); ?></strong></div>
+<div style="margin-top:6px;">
+  <a href="panel_admin.php" style="color:#ffdd33">← Volver al panel general</a>
+</div>
+
+<h2 style="margin-top:20px;">Entradas del evento</h2>
+
+<form method="get" style="margin-top:12px;">
+  <input type="hidden" name="id" value="<?php echo $eventoId; ?>">
+  Buscar: <input type="text" name="q" value="<?php echo e($q); ?>">
+  Tipo: <input type="text" name="tipo" value="<?php echo e($fTipo); ?>">
+  Estado:
+  <select name="estado">
+    <option value="">Todos</option>
+    <option value="checkin_ok" <?php if($fEstado==='checkin_ok') echo 'selected'; ?>>Checkeados</option>
+    <option value="pendiente"  <?php if($fEstado==='pendiente')  echo 'selected'; ?>>Pendientes</option>
+  </select>
+  <button type="submit">Filtrar</button>
+</form>
+
+<p>Total: <?php echo $total; ?> — Check-ins: <?php echo $checkins; ?> — Pendientes: <?php echo $faltan; ?></p>
+
+<table border="1" cellpadding="6" cellspacing="0">
+<tr>
+  <th>ID</th>
+  <th>Nombre</th>
+  <th>Email</th>
+  <th>Tipo</th>
+  <th>Código</th>
+  <th>Estado</th>
+  <th>Acciones</th>
+</tr>
+<?php foreach($rows as $r): ?>
+<tr>
+  <td><?php echo (int)$r['id']; ?></td>
+  <td><?php echo e($r['nombre']); ?></td>
+  <td><?php echo e($r['email']); ?></td>
+  <td><?php echo e($r['tipo']); ?></td>
+  <td><?php echo e($r['codigo']); ?></td>
+  <td>
+    <?php if((int)$r['checked_in']===1): ?>
+      <span style="color:#9f9">OK</span>
+    <?php else: ?>
+      <span style="color:#faa">Pendiente</span>
+    <?php endif; ?>
+  </td>
+  <td>
+    <a href="ticket.php?c=<?php echo urlencode($r['codigo']); ?>">Ver</a>
+  </td>
+</tr>
+<?php endforeach; ?>
+</table>
+
+</body>
+</html>

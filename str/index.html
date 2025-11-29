@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Save The Rave – Registro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background: #1a1a1a;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    }
+
+    .flyer {
+      background: #d71d24;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .flyer img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .form-wrapper {
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .title {
+      font-size: 1.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      font-size: 0.95rem;
+      color: #cccccc;
+      line-height: 1.4;
+      margin-top: 4px;
+    }
+
+    form {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    label {
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    input[type="text"],
+    input[type="email"] {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #444;
+      background: #111;
+      color: #f5f5f5;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    input[type="text"]:focus,
+    input[type="email"]:focus {
+      border-color: #ffdd33;
+      box-shadow: 0 0 0 1px #ffdd33;
+    }
+
+    .captcha-box {
+      border-radius: 10px;
+      border: 1px dashed #555;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #151515;
+    }
+
+    .captcha-question {
+      font-size: 0.9rem;
+    }
+
+    .captcha-input {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .captcha-input input {
+      max-width: 80px;
+    }
+
+    .small-note {
+      font-size: 0.75rem;
+      color: #999;
+    }
+
+    button {
+      margin-top: 6px;
+      padding: 11px 14px;
+      border-radius: 999px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: linear-gradient(135deg, #ffdd33, #ff8a00);
+      color: #111;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 26px rgba(0, 0, 0, 0.6);
+      opacity: 0.95;
+    }
+
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: wait;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .status {
+      min-height: 18px;
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+
+    .status.ok {
+      color: #5ad47a;
+    }
+
+    .status.error {
+      color: #ff7070;
+    }
+
+    .footer-note {
+      margin-top: auto;
+      font-size: 0.75rem;
+      color: #777;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+
+      .flyer {
+        order: -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Lado del flyer -->
+    <div class="flyer">
+      <img src="flyer-save-the-rave.png" alt="Flyer Save The Rave" />
+    </div>
+
+    <!-- Lado del formulario -->
+    <div class="form-wrapper">
+      <header>
+        <div class="title">Save The Rave</div>
+        <p class="subtitle">
+          Completá el formulario para reservar tu entrada. Más adelante vas a recibir
+          un email con tu QR y la info de la fiesta.
+        </p>
+      </header>
+
+      <form id="registro-form">
+        <div class="input-group">
+          <label for="nombre">Nombre / Alias *</label>
+          <input id="nombre" name="nombre" type="text" required maxlength="80" />
+        </div>
+
+        <div class="input-group">
+          <label for="email">Email *</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            inputmode="email"
+            autocomplete="email"
+          />
+        </div>
+
+        <!-- CAPTCHA simple (cuenta) -->
+        <div class="captcha-box">
+          <div class="captcha-question" id="captcha-question">
+            <!-- Se rellena con JS -->
+          </div>
+          <div class="captcha-input">
+            <input
+              type="number"
+              id="captcha-answer"
+              name="captcha-answer"
+              required
+              placeholder="Respuesta"
+            />
+          </div>
+          <div class="small-note">
+            Pequeña verificación anti-bots. Para producción, después podemos usar Google reCAPTCHA si querés.
+          </div>
+        </div>
+
+        <button type="submit" id="submit-btn">Reservar entrada</button>
+      </form>
+
+      <div id="status" class="status"></div>
+
+      <div class="footer-note">
+        Tus datos se usan solo para gestionar la lista y tu entrada a la fiesta.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 🔐 CAPTCHA simple
+    let captchaResultado = null;
+
+    function generarCaptcha() {
+      const a = Math.floor(Math.random() * 8) + 2; // 2–9
+      const b = Math.floor(Math.random() * 8) + 2; // 2–9
+      captchaResultado = a + b;
+      const pregunta = document.getElementById("captcha-question");
+      pregunta.textContent = `Para verificar que sos humano: ¿cuánto es ${a} + ${b}?`;
+    }
+
+    generarCaptcha();
+
+    const form = document.getElementById("registro-form");
+    const statusEl = document.getElementById("status");
+    const submitBtn = document.getElementById("submit-btn");
+
+    // 👉 Backend PHP local
+    const SCRIPT_URL = "registro.php";
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      statusEl.textContent = "";
+      statusEl.className = "status";
+
+      const nombre = document.getElementById("nombre").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const captchaAnswer = parseInt(
+        document.getElementById("captcha-answer").value,
+        10
+      );
+
+      if (!nombre || !email) {
+        statusEl.textContent = "Completá nombre y email.";
+        statusEl.classList.add("error");
+        return;
+      }
+
+      if (Number.isNaN(captchaAnswer) || captchaAnswer !== captchaResultado) {
+        statusEl.textContent = "Respuesta de verificación incorrecta. Probá de nuevo.";
+        statusEl.classList.add("error");
+        generarCaptcha();
+        document.getElementById("captcha-answer").value = "";
+        return;
+      }
+
+      const payload = {
+        nombre,
+        email,
+        timestamp: new Date().toISOString()
+      };
+
+      submitBtn.disabled = true;
+      statusEl.textContent = "Enviando datos...";
+      statusEl.classList.remove("ok", "error");
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          if (!data.ok) {
+            throw new Error(data.error || "Error en el servidor");
+          }
+
+          statusEl.textContent =
+            "¡Listo! Tu entrada #" + data.id + " fue registrada.";
+          statusEl.classList.add("ok");
+          form.reset();
+          generarCaptcha();
+        })
+        .catch(function (error) {
+          console.error(error);
+          statusEl.textContent =
+            "Hubo un problema al enviar tus datos. Probá de nuevo más tarde.";
+          statusEl.classList.add("error");
+        })
+        .finally(function () {
+          submitBtn.disabled = false;
+        });
+    });
+  </script>
+</body>
+</html>

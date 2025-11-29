@@ -1,0 +1,220 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Editar evento – TICKEX";
+
+require_login();
+
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
+if (!in_array($tipoGlobal, array('super_admin','admin_evento','superadmin'), true)) {
+    http_response_code(403);
+    include __DIR__.'/inc/layout_top.php';
+    echo "<div class='card error'><h2>Acceso denegado</h2><p>No tenés permisos para editar eventos.</p></div>";
+    include __DIR__.'/inc/layout_bottom.php';
+    exit;
+}
+
+$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id'])?(int)$cu['id']:0);
+
+// aceptar id o evento_id
+$eventoId = 0;
+if (isset($_GET['id'])) $eventoId = (int)$_GET['id'];
+if (isset($_GET['evento_id'])) $eventoId = (int)$_GET['evento_id'];
+if ($eventoId <= 0) abort_404("ID de evento inválido.");
+
+$pdo = db();
+
+// Detectar si existe creado_por_admin_id
+$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCreadoPor = false;
+foreach($colsEv as $c){
+    if (isset($c['name']) && $c['name']==='creado_por_admin_id') { $hasCreadoPor=true; break; }
+}
+
+// Cargar evento
+$stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id=:id");
+$stmtEv->execute(array(':id'=>$eventoId));
+$evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
+if (!$evento) abort_404("Evento no encontrado.");
+
+// admin_evento solo su evento
+if ($tipoGlobal === 'admin_evento' && $hasCreadoPor) {
+    $creador = isset($evento['creado_por_admin_id']) ? (int)$evento['creado_por_admin_id'] : 0;
+    if ($creador !== $adminId) {
+        http_response_code(403);
+        include __DIR__.'/inc/layout_top.php';
+        echo "<div class='card error'><h2>Evento no autorizado</h2><p>No podés editar este evento.</p></div>";
+        include __DIR__.'/inc/layout_bottom.php';
+        exit;
+    }
+}
+
+// Defaults para form (precarga)
+$nombre      = isset($evento['nombre']) ? $evento['nombre'] : '';
+$slug        = isset($evento['slug']) ? $evento['slug'] : '';
+$descripcion = isset($evento['descripcion']) ? $evento['descripcion'] : '';
+$fechaDesde  = isset($evento['fecha_desde']) ? $evento['fecha_desde'] : '';
+$fechaHasta  = isset($evento['fecha_hasta']) ? $evento['fecha_hasta'] : '';
+$flyerActual = isset($evento['flyer_filename']) ? $evento['flyer_filename'] : '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $nombreNuevo      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $descripcionNueva = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
+    $fechaDesdeNueva  = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
+    $fechaHastaNueva  = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
+
+    // Validaciones básicas
+    if ($nombreNuevo === '') {
+        flash('warn', 'El nombre del evento es obligatorio.');
+    } else {
+
+        // ===== Flyer (opcional) =====
+        $flyerFilename = $flyerActual;
+        $flyerError = '';
+
+        // checkbox para borrar flyer
+        $removeFlyer = isset($_POST['remove_flyer']) ? true : false;
+        if ($removeFlyer) {
+            $flyerFilename = null;
+        }
+
+        if (isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['flyer']['error'] === UPLOAD_ERR_OK) {
+                $tmpName = $_FILES['flyer']['tmp_name'];
+                $size    = (int)$_FILES['flyer']['size'];
+
+                if ($size > 2 * 1024 * 1024) {
+                    $flyerError = 'El flyer no puede pesar más de 2 MB.';
+                } else {
+                    $originalName = $_FILES['flyer']['name'];
+                    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+                    if (!in_array($ext, array('png', 'jpg', 'jpeg'), true)) {
+                        $flyerError = 'Solo se permiten imágenes PNG o JPG.';
+                    } else {
+                        $safeBase = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $originalName);
+                        $newName  = time() . '_' . $safeBase;
+                        $destPath = __DIR__ . '/event_flyers/' . $newName;
+
+                        if (!move_uploaded_file($tmpName, $destPath)) {
+                            $flyerError = 'No se pudo guardar el flyer en el servidor.';
+                        } else {
+                            $flyerFilename = 'event_flyers/' . $newName;
+
+                            // Si había flyer anterior y no es el mismo, intentamos borrar el archivo viejo
+                            if ($flyerActual && $flyerActual !== $flyerFilename) {
+                                $oldPath = __DIR__ . '/' . $flyerActual;
+                                if (file_exists($oldPath)) { @unlink($oldPath); }
+                            }
+                        }
+                    }
+                }
+            } else {
+                $flyerError = 'Error al subir el flyer (código: ' . (int)$_FILES['flyer']['error'] . ').';
+            }
+        }
+
+        if ($flyerError !== '') {
+            flash('err', $flyerError);
+        } else {
+            try {
+                $stmtUp = $pdo->prepare("
+                    UPDATE eventos SET
+                        nombre = :nombre,
+                        descripcion = :descripcion,
+                        flyer_filename = :flyer,
+                        fecha_desde = :fdesde,
+                        fecha_hasta = :fhasta
+                    WHERE id = :id
+                ");
+                $stmtUp->execute(array(
+                    ':nombre'      => $nombreNuevo,
+                    ':descripcion' => $descripcionNueva,
+                    ':flyer'       => $flyerFilename,
+                    ':fdesde'      => ($fechaDesdeNueva !== '' ? $fechaDesdeNueva : null),
+                    ':fhasta'      => ($fechaHastaNueva !== '' ? $fechaHastaNueva : null),
+                    ':id'          => $eventoId
+                ));
+
+                flash('ok', 'Evento actualizado correctamente.');
+
+                // recargar datos para repintar form
+                $nombre      = $nombreNuevo;
+                $descripcion = $descripcionNueva;
+                $fechaDesde  = $fechaDesdeNueva;
+                $fechaHasta  = $fechaHastaNueva;
+                $flyerActual = $flyerFilename;
+
+            } catch (Exception $e) {
+                flash('err', 'Error al actualizar el evento: '.$e->getMessage());
+            }
+        }
+    }
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
+  <a class="btn secondary" href="panel_evento.php?id=<?php echo $eventoId; ?>">Administrar entradas</a>
+</div>
+
+<div class="card">
+  <h2>Editar evento</h2>
+  <div style="color:var(--muted);font-size:14px;">
+    Estás editando: <strong><?php echo e($nombre); ?></strong><br>
+    Slug fijo: <code><?php echo e($slug); ?></code> (no se puede cambiar)
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+  <div class="card">
+    <h3>Datos del evento</h3>
+
+    <label for="nombre">Nombre del evento</label>
+    <input type="text" id="nombre" name="nombre" required value="<?php echo e($nombre); ?>">
+
+    <label>Slug / URL (bloqueado)</label>
+    <input type="text" value="<?php echo e($slug); ?>" disabled>
+
+    <label for="descripcion">Descripción breve (opcional)</label>
+    <textarea id="descripcion" name="descripcion" placeholder="Texto descriptivo del evento..."><?php echo e($descripcion); ?></textarea>
+
+    <label>Fechas del evento (desde / hasta)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="flex:1 1 140px;">
+        <label for="fecha_desde">Desde</label>
+        <input type="date" id="fecha_desde" name="fecha_desde" value="<?php echo e($fechaDesde); ?>">
+      </div>
+      <div style="flex:1 1 140px;">
+        <label for="fecha_hasta">Hasta</label>
+        <input type="date" id="fecha_hasta" name="fecha_hasta" value="<?php echo e($fechaHasta); ?>">
+      </div>
+    </div>
+
+    <label for="flyer">Flyer del evento (PNG/JPG, máx. 2MB)</label>
+    <input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg">
+
+    <?php if ($flyerActual): ?>
+      <div style="margin-top:8px;">
+        <div style="color:var(--muted);font-size:13px;margin-bottom:6px;">Flyer actual:</div>
+        <img src="<?php echo e($flyerActual); ?>" alt="Flyer" style="max-width:220px;border-radius:10px;border:1px solid var(--line);">
+        <div style="margin-top:6px;">
+          <label style="display:flex;gap:6px;align-items:center;">
+            <input type="checkbox" name="remove_flyer" value="1" style="width:auto;">
+            Quitar flyer (dejar sin imagen)
+          </label>
+        </div>
+      </div>
+    <?php else: ?>
+      <div style="color:var(--muted);font-size:13px;margin-top:6px;">Este evento no tiene flyer cargado.</div>
+    <?php endif; ?>
+
+  </div>
+
+  <button class="btn" type="submit">Guardar cambios</button>
+</form>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

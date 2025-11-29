@@ -1,0 +1,184 @@
+<?php
+session_start();
+
+if (empty($_SESSION['usuario'])) {
+    header('Location: admin.php');
+    exit;
+}
+
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo "Error DB: " . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+    exit;
+}
+
+// Usuario
+$stmtUser = $pdo->prepare("
+    SELECT id, username, tipo_global
+    FROM usuarios_admin
+    WHERE username = :u
+    LIMIT 1
+");
+$stmtUser->execute([':u' => $_SESSION['usuario']]);
+$user = $stmtUser->fetch(PDO::FETCH_ASSOC);
+
+// Por ahora, sólo super_admin y admin_evento
+if (!$user || !in_array($user['tipo_global'], ['super_admin', 'admin_evento'], true)) {
+    header('Location: admin.php');
+    exit;
+}
+
+// Listar eventos
+$stmtEv = $pdo->query("
+    SELECT id, nombre, slug, flyer_filename, fecha_desde, fecha_hasta
+    FROM eventos
+    ORDER BY id ASC
+");
+$eventos = $stmtEv->fetchAll(PDO::FETCH_ASSOC);
+
+function e($s) {
+    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+}
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Eventos – TICKEX</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin:0;
+      padding:16px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:#020617;
+      color:#e5e7eb;
+    }
+    h1 {
+      font-size:1.4rem;
+      margin:0 0 4px;
+    }
+    .sub {
+      font-size:0.85rem;
+      color:#9ca3af;
+      margin-bottom:14px;
+    }
+    .btn-link {
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#111827;
+      color:#e5e7eb;
+      text-decoration:none;
+      font-size:0.8rem;
+      margin-right:8px;
+      border:1px solid #1f2937;
+    }
+    .btn-link:hover { background:#1f2937; }
+    table {
+      width:100%;
+      border-collapse:collapse;
+      margin-top:10px;
+      font-size:0.85rem;
+    }
+    th, td {
+      padding:6px 8px;
+      border-bottom:1px solid #1f2937;
+      vertical-align:middle;
+    }
+    th {
+      background:#111827;
+      text-align:left;
+    }
+    tr:hover td {
+      background:#020617;
+    }
+    .badge-date {
+      font-size:0.75rem;
+      color:#9ca3af;
+    }
+    img.flyer-thumb {
+      max-width:70px;
+      border-radius:8px;
+      border:1px solid #1f2937;
+    }
+  </style>
+</head>
+<body>
+
+<div>
+  <a class="btn-link" href="admin.php">⬅ Volver al panel principal</a>
+  <a class="btn-link" href="crear_evento.php">Crear nuevo evento</a>
+  <?php if ($user['tipo_global'] === 'super_admin'): ?>
+    <a class="btn-link" href="superadmin.php">SuperAdmin</a>
+  <?php endif; ?>
+</div>
+
+<h1>Eventos – TICKEX</h1>
+<div class="sub">
+  Usuario: <strong><?php echo e($user['username']); ?></strong> (<?php echo e($user['tipo_global']); ?>)<br>
+  Listado de eventos registrados en esta base.
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Flyer</th>
+      <th>Nombre</th>
+      <th>Slug</th>
+      <th>Fecha(s)</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    <?php if (!$eventos): ?>
+      <tr>
+        <td colspan="6" style="font-size:0.85rem;color:#9ca3af;">
+          Todavía no hay eventos registrados.
+        </td>
+      </tr>
+    <?php else: ?>
+      <?php foreach ($eventos as $ev): ?>
+        <tr>
+          <td><?php echo (int)$ev['id']; ?></td>
+          <td>
+            <?php if (!empty($ev['flyer_filename']) && file_exists(__DIR__ . '/' . $ev['flyer_filename'])): ?>
+              <img src="<?php echo e($ev['flyer_filename']); ?>" alt="Flyer" class="flyer-thumb">
+            <?php else: ?>
+              <span style="font-size:0.75rem;color:#6b7280;">Sin flyer</span>
+            <?php endif; ?>
+          </td>
+          <td><?php echo e($ev['nombre']); ?></td>
+          <td><?php echo e($ev['slug']); ?></td>
+          <td class="badge-date">
+            <?php
+              $fd = $ev['fecha_desde'] ?: '';
+              $fh = $ev['fecha_hasta'] ?: '';
+              if ($fd === '' && $fh === '') {
+                  echo 'Sin fechas';
+              } else {
+                  echo e($fd);
+                  if ($fh !== '') {
+                      echo ' → ' . e($fh);
+                  }
+              }
+            ?>
+          </td>
+          <td>
+            <a class="btn-link" href="panel_evento.php?id=<?php echo (int)$ev['id']; ?>">Administrar</a>
+            <a class="btn-link" href="editar_evento.php?id=<?php echo (int)$ev['id']; ?>">Editar</a>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </tbody>
+</table>
+
+</body>
+</html>

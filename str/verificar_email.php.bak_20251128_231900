@@ -1,0 +1,150 @@
+<?php
+// verificar_email.php – Marca el email como confirmado usando el token_confirmacion
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+
+$estado = 'inicio';
+$mensaje = '';
+
+$token = isset($_GET['token']) ? trim($_GET['token']) : '';
+
+if ($token === '') {
+    $estado  = 'error';
+    $mensaje = 'Falta el token de verificación.';
+} else {
+    try {
+        if (!file_exists($dbFile)) {
+            throw new Exception('No se encontró la base de datos.');
+        }
+
+        $pdo = new PDO('sqlite:' . $dbFile);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        $st = $pdo->prepare("SELECT * FROM usuarios WHERE token_confirmacion = :t LIMIT 1");
+        $st->execute(array(':t' => $token));
+        $u = $st->fetch(PDO::FETCH_ASSOC);
+
+        if (!$u) {
+            $estado  = 'error';
+            $mensaje = 'Token inválido o ya utilizado.';
+        } else {
+            if ((int)$u['email_confirmado'] === 1) {
+                $estado  = 'ok';
+                $mensaje = 'Tu email ya estaba confirmado. Ya podés usar tu cuenta con normalidad.';
+            } else {
+                $up = $pdo->prepare("
+                    UPDATE usuarios
+                    SET email_confirmado = 1,
+                        token_confirmacion = NULL
+                    WHERE id = :id
+                ");
+                $up->execute(array(':id' => (int)$u['id']));
+
+                $estado  = 'ok';
+                $mensaje = 'Email confirmado correctamente. A partir de ahora vas a poder recibir entradas y notificaciones en esta casilla.';
+            }
+        }
+
+    } catch (Exception $e) {
+        $estado  = 'error';
+        $mensaje = 'Error en el servidor: ' . $e->getMessage();
+    }
+}
+?>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Verificación de email - Tickex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #050509;
+      --card: #101018;
+      --accent: #ff4d76;
+      --accent-soft: rgba(255,77,118,0.15);
+      --text: #f5f5f5;
+      --muted: #aaaaaa;
+      --border: #262637;
+      --ok: #45c77a;
+      --error: #ff5c5c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #191933 0, #050509 55%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 460px;
+      padding: 24px;
+    }
+    .card {
+      background: linear-gradient(145deg, rgba(16,16,24,0.98), rgba(9,9,16,0.98));
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      padding: 24px 24px 20px;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.6);
+    }
+    .logo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .logo-wrap img {
+      display: block;
+      height: 120px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      text-align: center;
+    }
+    .msg {
+      font-size: 14px;
+      text-align: center;
+      margin-top: 12px;
+      color: var(--muted);
+    }
+    .status-ok {
+      color: var(--ok);
+      font-weight: 600;
+    }
+    .status-error {
+      color: var(--error);
+      font-weight: 600;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="tickex-logo_sobre_oscuro.svg" alt="Tickex">
+      </div>
+      <h1>Verificación de email</h1>
+      <div class="msg">
+        <?php if ($estado === 'ok'): ?>
+          <div class="status-ok">✔ <?php echo htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php else: ?>
+          <div class="status-error">✖ <?php echo htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+        <br>
+        Ahora ya podés continuar con tus compras y recibir tus entradas por Tickex.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

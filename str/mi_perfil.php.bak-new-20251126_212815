@@ -1,0 +1,18 @@
+<?php
+// mi_perfil.php - version simple, sin edicion, solo mensaje
+
+require __DIR__ . '/inc/bootstrap.php';
+require_login();
+
+$title = 'Mi perfil';
+require __DIR__ . '/inc/layout_top.php';
+?>
+<div class="card" style="max-width:640px;">
+  <h2>Mi perfil</h2>
+  <p style="margin:8px 0 16px;">
+    Esta sección de perfil está en mantenimiento por el momento.
+  </p>
+  <a href="panel_admin.php" class="btn">Volver al panel</a>
+</div>
+<?php
+require __DIR__ . '/inc/layout_bottom.php';

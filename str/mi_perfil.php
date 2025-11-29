@@ -1,0 +1,188 @@
+<?php
+// mi_perfil.php - Perfil del admin (nombre, email, dni, cbu) SIN avatar para evitar errores
+
+require __DIR__ . '/inc/bootstrap.php';
+require_login();
+
+$cu = current_user();
+
+$tipoGlobal = isset($_SESSION['tipo_global'])
+    ? $_SESSION['tipo_global']
+    : (isset($cu['rol']) ? $cu['rol'] : '');
+
+$userId = isset($cu['id'])
+    ? (int)$cu['id']
+    : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0);
+
+if ($userId <= 0) {
+    http_response_code(403);
+    $title = 'Sesion invalida';
+    require __DIR__ . '/inc/layout_top.php';
+    echo '<div class="card"><div class="alert alert-danger">Sesion invalida (falta user_id).</div></div>';
+    require __DIR__ . '/inc/layout_bottom.php';
+    exit;
+}
+
+// Conectar DB
+try {
+    $pdo = db();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo 'Error DB.';
+    exit;
+}
+
+// Cargar usuario
+$user = null;
+try {
+    $stmt = $pdo->prepare(
+        'SELECT id, username, nombre, email, dni, cbu
+         FROM usuarios_admin
+         WHERE id = :id
+         LIMIT 1'
+    );
+    $stmt->execute(array(':id' => $userId));
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    http_response_code(500);
+    echo 'Error cargando usuario.';
+    exit;
+}
+
+if (!$user) {
+    http_response_code(403);
+    $title = 'Usuario no encontrado';
+    require __DIR__ . '/inc/layout_top.php';
+    echo '<div class="card"><div class="alert alert-danger">Usuario no encontrado.</div></div>';
+    require __DIR__ . '/inc/layout_bottom.php';
+    exit;
+}
+
+$error = '';
+$okMsg = '';
+
+// Procesar POST
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $email  = isset($_POST['email'])  ? trim($_POST['email'])  : '';
+    $dni    = isset($_POST['dni'])    ? trim($_POST['dni'])    : '';
+    $cbu    = isset($_POST['cbu'])    ? trim($_POST['cbu'])    : '';
+
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'El email no tiene un formato valido.';
+    }
+
+    if ($error === '') {
+        try {
+            $stmtUpd = $pdo->prepare(
+                'UPDATE usuarios_admin
+                 SET nombre = :nombre,
+                     email  = :email,
+                     dni    = :dni,
+                     cbu    = :cbu
+                 WHERE id = :id'
+            );
+            $stmtUpd->execute(array(
+                ':nombre' => ($nombre !== '' ? $nombre : null),
+                ':email'  => ($email  !== '' ? $email  : null),
+                ':dni'    => ($dni    !== '' ? $dni    : null),
+                ':cbu'    => ($cbu    !== '' ? $cbu    : null),
+                ':id'     => (int)$user['id'],
+            ));
+
+            $okMsg = 'Perfil actualizado correctamente.';
+
+            // Refrescar datos en memoria
+            $user['nombre'] = $nombre;
+            $user['email']  = $email;
+            $user['dni']    = $dni;
+            $user['cbu']    = $cbu;
+
+        } catch (Exception $e) {
+            $error = 'Error al guardar el perfil.';
+        }
+    }
+}
+
+// Layout
+$title = 'Mi perfil';
+require __DIR__ . '/inc/layout_top.php';
+?>
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
+</div>
+
+<div class="card">
+  <h2>Mi perfil</h2>
+  <div style="color:var(--muted);font-size:14px;">
+    Usuario: <strong><?php echo e($user['username']); ?></strong>
+    (<?php echo e($tipoGlobal); ?>)
+  </div>
+</div>
+
+<?php if ($okMsg !== ''): ?>
+  <div class="card">
+    <div class="alert alert-success">
+      <?php echo e($okMsg); ?>
+    </div>
+  </div>
+<?php endif; ?>
+
+<?php if ($error !== ''): ?>
+  <div class="card">
+    <div class="alert alert-danger">
+      <?php echo e($error); ?>
+    </div>
+  </div>
+<?php endif; ?>
+
+<form method="post">
+  <div class="card">
+    <h3>Datos del perfil</h3>
+
+    <div style="margin-bottom:10px;">
+    
+      <input type="text" id="nombre" name="nombre"
+             v
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email"
+             value="<?php echo e($user['email']); ?>">
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <label for="dni">DNI / Documento</label>
+      <input type="text" id="dni" name="dni"
+             value="<?php echo e($user['dni']); ?>">
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <label for="cbu">CBU / Cuenta para pagos</label>
+      <input type="text" id="cbu" name="cbu"
+             value="<?php echo e($user['cbu']); ?>">
+    </div>
+
+    <button type="submit" class="btn" style="margin-top:12px;">
+      Guardar cambios
+    </button>
+  </div>
+</form>
+
+<div class="card">
+  <h3>Seguridad</h3>
+  <p style="margin-bottom:10px;font-size:14px;">
+    Desde aca vas a poder gestionar tu contraseña.
+  </p>
+  <a href="cambiar_password.php" class="btn secondary">
+    Cambiar contraseña
+  </a>
+  <p style="margin-top:8px;font-size:12px;color:var(--muted);">
+    La opcion de recuperar contraseña se hace desde la pantalla de login (cuando no estas logueado).
+  </p>
+</div>
+
+<?php
+require __DIR__ . '/inc/layout_bottom.php';
