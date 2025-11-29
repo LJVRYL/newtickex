@@ -115,7 +115,7 @@ include __DIR__ . '/inc/layout_top.php';
 <div class="card" style="max-width:480px;margin:0 auto 16px auto;">
   <form method="post">
     <label for="email">Email</label>
-    <input type="email"
+    <input type="text"
            id="email"
            name="email"
            r
