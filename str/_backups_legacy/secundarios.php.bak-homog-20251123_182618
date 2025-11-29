@@ -1,0 +1,259 @@
+<?php
+session_start();
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+// ===== AUTH: solo admin_evento o super_admin =====
+if (empty($_SESSION['usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
+if (!($tipoGlobal === 'admin_evento' || $tipoGlobal === 'super_admin')) {
+    header("Location: login.php");
+    exit;
+}
+
+// ===== DB =====
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Throwable $ex) {
+    http_response_code(500);
+    echo "Error DB: " . e($ex->getMessage());
+    exit;
+}
+
+// usuario actual
+$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+if ($adminId <= 0) {
+    echo "Sesión inválida (sin user_id).";
+    exit;
+}
+
+$error = '';
+$okMsg = '';
+
+// ===== Crear Staff =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username  = trim(isset($_POST['username']) ? $_POST['username'] : '');
+    $password  = (string)(isset($_POST['password']) ? $_POST['password'] : '');
+    $plantilla = trim(isset($_POST['plantilla']) ? $_POST['plantilla'] : 'puerta');
+    $eventoId  = (int)(isset($_POST['evento_id']) ? $_POST['evento_id'] : 0);
+
+    if ($username === '' || $password === '') {
+        $error = "Usuario y contraseña son obligatorios.";
+    } elseif ($eventoId <= 0) {
+        $error = "Tenés que asignar un evento.";
+    } else {
+        // por ahora solo plantilla puerta
+        $rolEvento  = 'puerta';
+        $tipoGlobalNuevo = 'staff_evento';
+
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO usuarios_admin
+                    (username, password, rol, tipo_global, rol_evento, evento_id, activo, creado_por_admin_id)
+                VALUES
+                    (:u, :p, :rol, :tg, :re, :eid, 1, :creador)
+            ");
+            $stmt->execute(array(
+                ':u'       => $username,
+                ':p'       => $password,
+                ':rol'     => $rolEvento,
+                ':tg'      => $tipoGlobalNuevo,
+                ':re'      => $rolEvento,
+                ':eid'     => $eventoId,
+                ':creador' => $adminId,
+            ));
+
+            $okMsg = "Staff creado: {$username} (evento #{$eventoId}).";
+        } catch (Throwable $ex) {
+            $error = "Error al crear staff: " . $ex->getMessage();
+        }
+    }
+}
+
+// ===== Eventos del admin actual =====
+// SuperAdmin ve todos; admin_evento ve solo los propios
+if ($tipoGlobal === 'super_admin') {
+    $stmtEv = $pdo->query("SELECT id, nombre, slug FROM eventos ORDER BY id DESC");
+    $eventos = $stmtEv->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $stmtEv = $pdo->prepare("
+        SELECT id, nombre, slug
+        FROM eventos
+        WHERE creado_por_admin_id = :aid
+        ORDER BY id DESC
+    ");
+    $stmtEv->execute(array(':aid'=>$adminId));
+    $eventos = $stmtEv->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// ===== Staff del admin actual (con evento) =====
+if ($tipoGlobal === 'super_admin') {
+    $stmtStaff = $pdo->query("
+        SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo,
+               e.nombre AS evento_nombre, e.slug AS evento_slug
+        FROM usuarios_admin u
+        LEFT JOIN eventos e ON e.id = u.evento_id
+        WHERE u.tipo_global='staff_evento'
+        ORDER BY u.id DESC
+    ");
+    $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $stmtStaff = $pdo->prepare("
+        SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo,
+               e.nombre AS evento_nombre, e.slug AS evento_slug
+        FROM usuarios_admin u
+        LEFT JOIN eventos e ON e.id = u.evento_id
+        WHERE u.tipo_global='staff_evento'
+          AND u.creado_por_admin_id = :aid
+        ORDER BY u.id DESC
+    ");
+    $stmtStaff->execute(array(':aid'=>$adminId));
+    $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
+}
+
+?>
+<
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Mi staff – Administrador</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{color-scheme:dark;}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+      background:#050505;color:#f5f5f5;padding:16px;
+    }
+    h1{margin:0 0 6px;font-size:1.35rem;}
+    .small{font-size:.8rem;color:#9ca3af;}
+
+    .topbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+    .btn-link{
+      display:inline-block;padding:6px 10px;border-radius:10px;background:#222;color:#eee;text-decoration:none;
+      font-size:.85rem;white-space:nowrap;
+    }
+    .btn-link:hover{background:#2d2d2d;}
+
+    .card{
+      background:#141414;border-radius:12px;padding:12px;
+      box-shadow:0 8px 20px rgba(0,0,0,.4);
+      max-width:600px;
+    }
+    label{display:block;font-size:.85rem;color:#ccc;margin:8px 0 4px;}
+    input,select{
+      width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:#111;color:#f5f5f5;font-size:.9rem;
+    }
+    button{
+      margin-top:10px;padding:9px 12px;border-radius:999px;border:none;background:#d71d24;color:#fff;font-weight:600;cursor:pointer;
+    }
+    button:hover{filter:brightness(1.05);}
+
+    table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.9rem;}
+    th,td{border-bottom:1px solid #333;padding:8px;vertical-align:middle;}
+    th{background:#181818;text-align:left;}
+    tr:hover td{background:#111;}
+
+    .badge-on{
+      padding:2px 8px;border-radius:999px;background:#124221;color:#a6f3b7;font-size:.75rem;
+    }
+    .badge-off{
+      padding:2px 8px;border-radius:999px;background:#402018;color:#ffb39a;font-size:.75rem;
+    }
+    .muted{color:#9ca3af;font-size:.85rem;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="btn-link" href="panel_admin.php">Volver al panel general</a>
+  <a class="btn-link" href="eventos.php">Eventos</a>
+  <a class="btn-link" href="login.php?logout=1">Salir</a>
+</div>
+
+<h1>Mi staff</h1>
+<div class="small">Acá creás usuarios tipo Puerta (y a futuro otros roles).</div>
+
+<div class="card" style="margin-top:12px;">
+  <form method="post">
+    <label>Usuario staff</label>
+    <input name="username" required>
+
+    <label>Contraseña</label>
+    <input type="text" name="password" required>
+
+    <label>Plantilla / Rol</label>
+    <select name="plantilla">
+      <option value="puerta">Puerta (check-in)</option>
+    </select>
+
+    <label>Asignar a evento</la
+    <select name="evento_id" required>
+      <option value="">Elegí un evento...</option>
+      <?php foreach($eventos as $ev): ?>
+        <option value="<?php echo (int)$ev['id']; ?>">
+          #<?php echo (int)$ev['id']; ?> — <?php echo e($ev['nombre']); ?> (<?php echo e($ev['slug']); ?>)
+        </option>
+      <?php endforeach; ?>
+    </select>
+
+    <button type="submit">Crear staff</button>
+
+    <?php if($error): ?>
+      <div style="margin-top:10px;background:#3a1114;color:#ffb3b3;padding:8px;border-radius:8px;font-size:.85rem;"><?php echo e($error); ?></div>
+    <?php endif; ?>
+    <?php if($okMsg): ?>
+      <div style="margin-top:10px;background:#0f2a16;color:#a6f3b7;padding:8px;border-radius:8px;font-size:.85rem;"><?php echo e($okMsg); ?></div>
+    <?php endif; ?>
+  </form>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Usuario</th>
+      <th>Rol</th>
+      <th>Evento</th>
+      <th>Estado</th>
+    </tr>
+  </thead>
+  <tbody>
+  <?php if(empty($staffRows)): ?>
+    <tr><td colspan="5" class="muted">No hay staff creado todavía.</td></tr>
+  <?php else: ?>
+    <?php foreach($staffRows as $s): ?>
+      <tr>
+        <td><?php echo (int)$s['id']; ?></td>
+        <td><?php echo e($s['username']); ?></td>
+        <td><?php echo e($s['rol_evento']); ?></td>
+        <td>
+          <?php
+            $en = isset($s['evento_nombre']) ? $s['evento_nombre'] : '';
+            $es = isset($s['evento_slug']) ? $s['evento_slug'] : '';
+            if ($en !== '') echo e($en) . " (" . e($es) . ")";
+            else echo "#".(int)$s['evento_id'];
+          ?>
+        </td>
+        <td>
+          <?php if((int)$s['activo']===1): ?>
+            <span class="badge-on">Activo</span>
+          <?php else: ?>
+            <span class="badge-off">Inactivo</span>
+          <?php endif; ?>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+  <?php endif; ?>
+  </tbody>
+</table>
+
+</body>
+</html>

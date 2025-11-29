@@ -1,0 +1,38 @@
+<?php
+require_once __DIR__ . '/inc/auth.php';
+require_once __DIR__ . '/inc/bootstrap.php';
+
+$tg = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
+
+if (!in_array($tg, array('admin_evento','super_admin'), true)) {
+    header('Location: login.php');
+    exit;
+}
+
+$page_title = 'Mi sitio';
+require __DIR__ . '/inc/layout_top.php';
+?>
+<div class="page">
+  <div class="page-header">
+    <h1>Mi sitio</h1>
+    <p class="lead">
+      Configurá la mini web pública donde tus clientes finales van a ver tus eventos y comprar entradas.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p>Esta es la versión inicial de <strong>Mi sitio</strong>. Próximamente acá vas a poder:</p>
+      <ul>
+        <li>Definir el nombre y la descripción pública de tu sitio</li>
+        <li>Elegir qué eventos se muestran en la landing</li>
+        <li>Configurar colores básicos y, más adelante, el logo</li>
+      </ul>
+      <p>
+        Por ahora es solo una pantalla de prueba para validar el flujo y el diseño dentro del panel.
+      </p>
+    </div>
+  </div>
+</div>
+<?php
+require __DIR__ . '/inc/layout_bottom.php';

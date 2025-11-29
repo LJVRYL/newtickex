@@ -1,0 +1,270 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Crear evento – TICKEX";
+
+// Sólo super_admin o admin_evento pueden crear eventos
+require_login();
+
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
+if (!in_array($tipoGlobal, array('super_admin','admin_evento','superadmin'), true)) {
+    header('Location: panel_admin.php');
+    exit;
+}
+
+$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0);
+
+try {
+    $pdo = db();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "Error DB: " . e($e->getMessage());
+    exit;
+}
+
+// Detectar si existe creado_por_admin_id
+$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCreadoPor = false;
+foreach ($colsEv as $c) {
+    if (isset($c['name']) && $c['name'] === 'creado_por_admin_id') {
+        $hasCreadoPor = true;
+        break;
+    }
+}
+
+// Valores por defecto para repintar form
+$nombre = '';
+$slug = '';
+$fechaDesde = '';
+$fechaHasta = '';
+$descripcion = '';
+
+// Valores por defecto para la entrada inicial (se completan vía inputs ocultos)
+$te_nombre      = '';
+$te_tipo        = 'free';
+$te_precio      = 0;
+$te_cant_total  = 0;
+$te_hora_limite = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $nombre      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $slug        = isset($_POST['slug']) ? trim($_POST['slug']) : '';
+    $fechaDesde  = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
+    $fechaHasta  = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
+    $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
+
+    // Tipo de entrada inicial (viene de inputs ocultos)
+    $te_nombre      = isset($_POST['te_nombre']) ? trim($_POST['te_nombre']) : '';
+    $te_tipo        = isset($_POST['te_tipo']) ? trim($_POST['te_tipo']) : 'free'; // free / paga
+    $te_precio      = isset($_POST['te_precio']) ? (int)$_POST['te_precio'] : 0;
+    $te_cant_total  = isset($_POST['te_cant_total']) ? (int)$_POST['te_cant_total'] : 0;
+    $te_hora_limite = isset($_POST['te_hora_limite']) ? trim($_POST['te_hora_limite']) : '';
+
+    // Validaciones básicas
+    if ($nombre === '' || $slug === '') {
+        flash('warn', 'Nombre y slug son obligatorios.');
+    } elseif (!preg_match('/^[a-z0-9\-]+$/', $slug)) {
+        flash('warn', 'El slug solo puede tener minúsculas, números y guiones (a-z, 0-9, -).');
+    } elseif ($te_nombre === '') {
+        // En la práctica, siempre viene "General" desde los inputs ocultos
+        flash('warn', 'Debés definir al menos un tipo de entrada (nombre).');
+    } elseif ($te_tipo === 'paga' && $te_precio <= 0) {
+        flash('warn', 'Para entradas pagas, el precio debe ser mayor a 0.');
+    } else {
+
+        // Manejar flyer (opcional pero recomendado)
+        $flyerFilename = null;
+        $flyerError = '';
+
+        if (isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['flyer']['error'] === UPLOAD_ERR_OK) {
+                $tmpName = $_FILES['flyer']['tmp_name'];
+                $size    = (int)$_FILES['flyer']['size'];
+
+                if ($size > 2 * 1024 * 1024) { // 2MB
+                    $flyerError = 'El flyer no puede pesar más de 2 MB.';
+                } else {
+                    $originalName = $_FILES['flyer']['name'];
+                    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+                    if (!in_array($ext, array('png', 'jpg', 'jpeg'), true)) {
+                        $flyerError = 'Solo se permiten imágenes PNG o JPG.';
+                    } else {
+                        $safeBase = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $originalName);
+                        $newName  = time() . '_' . $safeBase;
+                        $destPath = __DIR__ . '/event_flyers/' . $newName;
+
+                        if (!move_uploaded_file($tmpName, $destPath)) {
+                            $f
+                        } else {
+                            // ACÁ era donde faltaba la asignación
+                            $flyerFilename = 'event_flyers/' . $newName;
+                        }
+                    }
+                }
+            } else {
+                $flyerError = 'Error al subir el flyer (código: ' . (int)$_FILES['flyer']['error'] . ').';
+            }
+        }
+
+        if ($flyerError !== '') {
+            flash('err', $flyerError);
+        } else {
+            try {
+                $pdo->beginTransaction();
+
+                // Insertar evento (con o sin creado_por_admin_id según schema)
+                if ($hasCreadoPor) {
+                    $stmtEv = $pdo->prepare("
+                        INSERT INTO eventos
+                            (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, creado_por_admin_id)
+                        VALUES
+                            (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :creador)
+                    ");
+                    $stmtEv->execute(array(
+                        ':nombre'      => $nombre,
+                        ':slug'        => $slug,
+                        ':descripcion' => $descripcion,
+                        ':flyer'       => $flyerFilename,
+                        ':fdesde'      => $fechaDesde !== '' ? $fechaDesde : null,
+                        ':fhasta'      => $fechaHasta !== '' ? $fechaHasta : null,
+                        ':creador'     => $adminId,
+                    ));
+                } else {
+                    $stmtEv = $pdo->prepare("
+                        INSERT INTO eventos
+                            (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en)
+                        VALUES
+                            (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'))
+                    ");
+                    $stmtEv->execute(array(
+                        ':nombre'      => $nombre,
+                        ':slug'        => $slug,
+                        ':descripcion' => $descripcion,
+                        ':flyer'       => $flyerFilename,
+                        ':fdesde'      => $fechaDesde !== '' ? $fechaDesde : null,
+                        ':fhasta'      => $fechaHasta !== '' ? $fechaHasta : null,
+                    ));
+                }
+
+                $eventoId = (int)$pdo->lastInsertId();
+
+                // ===============================
+                // Insertar tipo de entrada inicial
+                // compat con schema actual:
+                // (evento_id, categoria, nombre, tipo_venta, precio, cantidad_total,
+                //  cantidad_disponible, hora_limite, descripcion)
+                // ===============================
+                $categoria = 'GENERAL';
+                $tipoVenta = strtoupper($te_tipo); // free/paga -> FREE/PAGA
+                if ($tipoVenta !== 'FREE' && $tipoVenta !== 'PAGA') {
+                    $tipoVenta = 'FREE';
+                }
+
+                $precio = ($tipoVenta === 'PAGA') ? $te_precio : 0;
+                if ($precio < 0) $precio = 0;
+
+                $cantidadTotal = max(0, (int)$te_cant_total);
+                $cantidadDisp  = $cantidadTotal;
+                $horaLimite    = ($te_hora_limite !== '') ? $te_hora_limite : null;
+
+                $stmtTE = $pdo->prepare("
+                    INSERT INTO tipos_entrada
+                        (evento_id, categoria, nombre, tipo_venta, precio,
+                         cantidad_total, cantidad_disponible, hora_limite, descripcion)
+                    VALUES
+                        (:evento_id, :categoria, :nombre, :tipo_venta, :precio,
+                         :ctotal, :cdisp, :hora_limite, :descripcion)
+                ");
+                $stmtTE->execute(array(
+                    ':evento_id'   => $eventoId,
+                    ':categoria'   => $categoria,
+                    ':nombre'      => $te_nombre,
+                    ':tipo_venta'  => $tipoVenta,
+                    ':precio'      => $precio,
+                    ':ctotal'      => $cantidadTotal,
+                    ':cdisp'       => $cantidadDisp,
+                    ':hora_limite' => $horaLimite,
+                    ':descripcion' => null,
+                ));
+
+                $pdo->commit();
+
+                // 🔁 NUEVO FLUJO:
+                // en vez de ir a "evento_creado.php" o "editar_evento.php"
+                // vamos a una pantalla específica para configurar las entradas de este evento
+                header('Location: configurar_entradas_evento.php?id=' . $eventoId);
+                exit;
+
+            } catch (Exception $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                flash('err', 'Error al crear el evento: ' . $e->getMessage());
+            }
+        }
+    }
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
+  <?php if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin'): ?>
+    <a class="btn secondary" href="superadmin.php">SuperAdmin</a>
+  <?php endif; ?>
+</div>
+
+<div class="card">
+  <h2>Crear nuevo evento</h2>
+  <div style="color:var(--muted);font-size:14px;">
+    Usuario: <strong><?php echo e(isset($_SESSION['usuario']) ? $_SESSION['usuario'] : ''); ?></strong>
+    (<?php echo e($tipoGlobal); ?>)<br>
+    Paso 1: definís los datos del evento. En el siguiente paso vas a configurar las entradas usando tus plantillas de <strong>Mis entradas</strong>.
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+
+  <div class="card">
+    <h3>Datos del evento</h3>
+
+    <label for="nombre">Nombre del evento</label>
+    <input type="text" id="nombre" name="nombre" required value="<?php echo e($nombre); ?>">
+
+    <label for="slug">Slug / URL corta (ej: "str2", "retro")</label>
+    <input type="text" id="slug" name="slug" required
+           placeholder="solo minúsculas, números y -" value="<?php echo e($slug); ?>">
+
+    <label for="descripcion">Descripción breve (opcional)</label>
+    <textarea id="descripcion" name="descripcion"
+              placeholder="Texto descriptivo del evento..."><?php echo e($descripcion); ?></textarea>
+
+    <label>Fechas del evento (desde / hasta)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="flex:1 1 140px;">
+        <label for="fecha_desde">Desde</label>
+        <input type="date" id="fecha_desde" name="fecha_desde" value="<?php echo e($fechaDesde); ?>">
+      </div>
+      <div style="flex:1 1 140px;">
+        <label for="fecha_hasta">Hasta</label>
+        <input type="date" id="fecha_hasta" name="fecha_hasta" value="<?php echo e($fechaHasta); ?>">
+      </div>
+    </div>
+
+    <label for="flyer">Flyer del evento (PNG/JPG, máx. 2MB)</label>
+    <input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg">
+  </div>
+
+  <!-- Entradas iniciales ocultas, para que haya al menos 1 tipo asociado -->
+  <input type="hidden" name="te_nombre" value="General">
+  <input type="hidden" name="te_tipo" value="free">
+  <input type="hidden" name="te_precio" value="0">
+  <input type="hidden" name="te_cant_total" value="0">
+  <input type="hidden" name="te_hora_limite" value="">
+
+  <button class="btn" type="submit">Crear evento</button>
+</form>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

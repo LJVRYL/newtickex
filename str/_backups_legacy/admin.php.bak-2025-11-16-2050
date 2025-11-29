@@ -1,0 +1,195 @@
+<?php
+session_start();
+
+// Credenciales de acceso
+define('ADMIN_USER', 'AdminSTR');
+define('ADMIN_PASS', 'savetherave69');
+
+// Logout
+if (isset($_GET['logout'])) {
+    $_SESSION = array();
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    session_destroy();
+    header('Location: admin.php');
+    exit;
+}
+
+$isLogged = !empty($_SESSION['is_admin']);
+$error = '';
+
+// Procesar login (POST)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user         = isset($_POST['user']) ? trim($_POST['user']) : '';
+    $pass         = isset($_POST['pass']) ? $_POST['pass'] : '';
+    $captcha_user = isset($_POST['captcha']) ? trim($_POST['captcha']) : '';
+
+    $captcha_expected = isset($_SESSION['admin_captcha_answer'])
+        ? $_SESSION['admin_captcha_answer']
+        : null;
+
+    if (
+        $user === ADMIN_USER &&
+        $pass === ADMIN_PASS &&
+        $captcha_expected !== null &&
+        (int)$captcha_user === (int)$captcha_expected
+    ) {
+        $_SESSION['is_admin'] = true;
+        unset($_SESSION['admin_captcha_answer']);
+        header('Location: admin.php');
+        exit;
+    } else {
+        $error = 'Credenciales o captcha incorrectos.';
+    }
+}
+
+// Generar nuevo captcha si NO está logueado
+if (!$isLogged) {
+    $captchaA = rand(1, 9);
+    $captchaB = rand(1, 9);
+    $_SESSION['admin_captcha_answer'] = $captchaA + $captchaB;
+}
+
+// Si no está logueado, mostramos el formulario de login y salimos
+if (!$isLogged):
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login Admin – Save The Rave</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 24px 24px 20px;
+      box-shadow: 0 18px 35px rgba(0,0,0,0.6);
+    }
+    h1 {
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    p.sub {
+      font-size: 0.9rem;
+      color: #aaa;
+      margin-bottom: 18px;
+      text-align: center;
+    }
+    .field {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      color: #ccc;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #151515;
+      color: #f5f5f5;
+      font-size: 0.9rem;
+    }
+    .captcha-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .captcha-op {
+      padding: 8px 12px;
+      background: #222;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    button {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 0;
+      border: none;
+      border-radius: 999px;
+      background: #d71d24;
+      color: white;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:hover {
+      filter: brightness(1.08);
+    }
+    .error {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #3a1114;
+      color: #ffb3b3;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Panel Admin – STR</h1>
+    <p class="sub">Ingresá usuario, contraseña y resolvé la suma.</p>
+
+    <form method="post" action="admin.php">
+      <div class="field">
+        <label for="user">Usuario</label>
+        <input type="text" id="user" name="user" autocomplete="off" required />
+      </div>
+
+      
+        <label for="pass">Contraseña</label>
+        <input type="password" id="pass" name="pass" autocomplete="off" required />
+      </div>
+
+      <div class="field">
+        <label>Captcha (respuesta en número)</label>
+        <div class="captcha-box">
+          <div class="captcha-op">
+            <?php echo $captchaA; ?> + <?php echo $captchaB; ?> = ?
+          </div>
+          <input type="text" name="captcha" autocomplete="off" required />
+        </div>
+      </div>
+
+      <button type="submit">Entrar al panel</button>
+
+      <?php if (!empty($error)): ?>
+        <div cTES, 'UTF-8'); ?></div>
+      <?php endif; ?>
+    </form>
+  </div>
+</body>
+</html>
+<?php
+// Importantísimo: salimos para que NO siga ejecutando nada más.
+exit;
+endif;
+
+// Si llegó hasta acá, ya está logueado -> cargamos el core del panel
+require __DIR__ . '/admin_core.php';

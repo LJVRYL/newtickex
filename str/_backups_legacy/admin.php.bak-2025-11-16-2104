@@ -1,0 +1,562 @@
+<?php
+session_start();
+
+// Credenciales de acceso al panel
+define('ADMIN_USER', 'AdminSTR');
+define('ADMIN_PASS', 'savetherave69');
+
+// Helper para escapar (XSS safe)
+function e($str) {
+    return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
+}
+
+// Logout sencillo
+if (isset($_GET['logout'])) {
+    $_SESSION = array();
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"],
+            $params["domain"],
+            $params["secure"],
+            $params["httponly"]
+        );
+    }
+    session_destroy();
+    header('Location: admin.php');
+    exit;
+}
+
+$isLogged = (!empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === true);
+$error = '';
+
+// Procesar login
+if (!$isLogged && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user         = isset($_POST['user']) ? trim($_POST['user']) : '';
+    $pass         = isset($_POST['pass']) ? $_POST['pass'] : '';
+    $captcha_user = isset($_POST['captcha']) ? trim($_POST['captcha']) : '';
+
+    $captcha_expected = isset($_SESSION['admin_captcha_answer'])
+        ? $_SESSION['admin_captcha_answer']
+        : null;
+
+    if (
+        $user === ADMIN_USER &&
+        $pass === ADMIN_PASS &&
+        $captcha_expected !== null &&
+        (int)$captcha_user === (int)$captcha_expected
+    ) {
+        $_SESSION['is_admin'] = true;
+        unset($_SESSION['admin_captcha_answer']);
+        header('Location: admin.php');
+        exit;
+    } else {
+        $error = 'Credenciales o captcha incorrectos.';
+    }
+}
+
+// Si NO está logueado, generamos captcha y mostramos login
+if (!$isLogged) {
+    $captchaA = rand(1, 9);
+    $captchaB = rand(1, 9);
+    $_SESSION['admin_captcha_answer'] = $captchaA + $captchaB;
+    ?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login Admin – Save The Rave</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 24px 24px 20px;
+      box-shadow: 0 18px 35px rgba(0,0,0,0.6);
+    }
+    h1 {
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    p.sub {
+      font-size: 0.9rem;
+      color: #aaa;
+      margin-bottom: 18px;
+      text-align: center;
+    }
+    .field { margin-bottom: 14px; }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      color: #ccc;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #151515;
+      color: #f5f5f5;
+      font-size: 0.9rem;
+    }
+    .captcha-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .captcha-op {
+      padding: 8px 12px;
+      background: #222;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    button {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 0;
+      border: none;
+      border-radius: 999px;
+      background: #d71d24;
+      color: white;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    .error {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #3a1114;
+      color: #ffb3b3;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Panel Admin – STR</h1>
+    <p class="sub">Ingresá usuario, contraseña y resolvé la suma.</p>
+
+    <form method="post" action="admin.php">
+      <div class="field">
+        <label for="user">Usuario</label>
+        <input type="text" id="user" name="user" autocomplete="off" required />
+      </div>
+
+      <div class="field">
+        <label for="pass">Contraseña</label>
+        <input type="password" id="pass" name="pass" autocomplete="off" required />
+      </div>
+
+      <div class="field">
+        <label>Captcha (respuesta en número)</label>
+        <div class="captcha-box">
+          <div class="captcha-op">
+            <?php echo $captchaA; ?> + <?php echo $captchaB; ?> = ?
+          </div>
+          <input type="text" name="captcha" autocomplete="off" required />
+        </div>
+      </div>
+
+      <button type="submit">Entrar al panel</button>
+
+      <?php if (!empty($error)): ?>
+        <div class="error"><?php echo e($error); ?></div>
+      <?php endif; ?>
+    </form>
+  </div>
+</body>
+</html>
+<?php
+    exit;
+}
+
+// ========================
+//  SI LLEGÓ ACÁ -> LOGUEADO
+// ========================
+
+// Ruta de la base
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+
+// Verificación rápida de la base
+if (!file_exists($dbFile)) {
+    http_response_code(500);
+    echo "Base de datos no encontrada en: " . e($dbFile);
+    exit;
+}
+
+// Conexión PDO
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "Error al conectar a la base: " . e($e->getMessage());
+    exit;
+}
+
+// Eliminar entrada si viene ?delete=ID
+if (isset($_GET['delete'])) {
+    $id = (int) $_GET['delete'];
+    if ($id > 0) {
+        $stmtDel = $pdo->prepare('DELETE FROM entradas WHERE id = :id');
+        $stmtDel->execute([':id' => $id]);
+    }
+    header('Location: admin.php');
+    exit;
+}
+
+// ==== Filtros ====
+// Búsqueda libre por nombre, mail o código
+$q = '';
+if (isset($_GET['q'])) {
+    $q = trim($_GET['q']);
+}
+
+// Filtro por tipo (ANTICIPADA, FREE, etc.)
+$filtroTipo = '';
+if (isset($_GET['tipo'])) {
+    $filtroTipo = trim($_GET['tipo']);
+}
+
+// Filtro por estado (checked_in / pendiente)
+$filtroEstado = '';
+if (isset($_GET['estado'])) {
+    $filtroEstado = trim($_GET['estado']);
+}
+
+$where = array();
+$params = array();
+
+if ($q !== '') {
+    $where[] = '(nombre LIKE :q OR email LIKE :q OR codigo LIKE :q)';
+    $params[':q'] = '%' . $q . '%';
+}
+
+if ($filtroTipo !== '') {
+    $where[] = 'tipo = :tipo';
+    $params[':tipo'] = $filtroTipo;
+}
+
+if ($filtroEstado === 'checkin_ok') {
+    $where[] = 'checked_in = 1';
+} elseif ($filtroEstado === 'pendiente') {
+    $where[] = 'checked_in = 0';
+}
+
+$whereSql = '';
+if (!empty($where)) {
+    $whereSql = 'WHERE ' . implode(' AND ', $where);
+}
+
+// === CONTADORES ===
+$total = (int) $pdo->query("SELECT COUNT(*) FROM entradas")->fetchColumn();
+$checkins = (int) $pdo->query("SELECT COUNT(*) FROM entradas WHERE checked_in = 1")->fetchColumn();
+$faltan = max(0, $total - $checkins);
+
+// Obtener entradas con filtros
+$sql = "SELECT * FROM entradas $whereSql ORDER BY id DESC";
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Tipos distintos para combo
+$tiposStmt = $pdo->query("SELECT DISTINCT tipo FROM entradas ORDER BY tipo ASC");
+$tipos = $tiposStmt->fetchAll(PDO::FETCH_COLUMN);
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Save The Rave – Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #050505;
+      color: #f5f5f5;
+      padding: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.4rem;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: #141414;
+      border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      min-width: 150px;
+    }
+    .card .label {
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+    .card .value {
+      margin-top: 3px;
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+    .filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filters input,
+    .filters select {
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #111;
+      color: #f5f5f5;
+      font-size: 0.85rem;
+    }
+    .filters button {
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: none;
+      background: #d71d24;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .filters button:hover { filter: brightness(1.05); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border-bottom: 1px solid #333;
+      padding: 6px 8px;
+      vertical-align: middle;
+    }
+    th {
+      background: #181818;
+      text-align: left;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    tr:hover td {
+      background: #111;
+    }
+    .badge-ok {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #124221;
+      color: #a6f3b7;
+      font-size: 0.75rem;
+    }
+    .badge-pend {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #402018;
+      color: #ffb39a;
+      font-size: 0.75rem;
+    }
+    .btn-link {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 8px;
+      background: #222;
+      color: #eee;
+      text-decoration: none;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+    .btn-link:hover { background: #2d2d2d; }
+    .btn-danger {
+      background: #b51c26;
+    }
+    .btn-danger:hover {
+      background: #d0212d;
+    }
+    .logout {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: #222;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      text-decoration: none;
+      color: #eee;
+    }
+    .logout:hover { background: #2f2f2f; }
+    @media (max-width: 800px) {
+      table {
+        font-size: 0.78rem;
+      }
+      th, td {
+        padding: 5px 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<a href="admin.php?logout=1" class="logout">Cerrar sesión</a>
+
+<div class="top-bar">
+  <div>
+    <h1>Panel Admin – Save The Rave</h1>
+    <div style="font-size:0.8rem;color:#aaa;">Listado y control de entradas</div>
+  </div>
+
+  <div class="stats">
+    <div class="card">
+      <div class="label">Entradas totales</div>
+      <div class="value"><?php echo (int)$total; ?></div>
+    </div>
+    <div class="card">
+      <div class="label">Check-ins realizados</div>
+      <div class="value"><?php echo (int)$checkins; ?></div>
+    </div>
+    <div class="card">
+      <div class="label">Faltan por escanear</div>
+      <div class="value"><?php echo (int)$faltan; ?></div>
+    </div>
+  </div>
+</div>
+
+<form method="get" class="filters">
+  <input
+    type="text"
+    name="q"
+    placeholder="Buscar por nombre, mail o código"
+    value="<?php echo e($q); ?>"
+  />
+  <select name="tipo">
+    <option value="">Todos los tipos</option>
+    <?php foreach ($tipos as $t): ?>
+      <option value="<?php echo e($t); ?>" <?php if ($t === $filtroTipo) echo 'selected'; ?>>
+        <?php echo e($t); ?>
+      </option>
+    <?php endforeach; ?>
+  </select>
+  <select name="estado">
+    <option value="">Todos los estados</option>
+    <option value="checkin_ok" <?php if ($filtroEstado === 'checkin_ok') echo 'selected'; ?>>Sólo checkeados</option>
+    <option value="pendiente" <?php if ($filtroEstado === 'pendiente') echo 'selected'; ?>>Sólo pendientes</option>
+  </select>
+  <button type="submit">Filtrar</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Nombre / Alias</th>
+      <th>Email</th>
+      <th>Fecha registro</th>
+      <th>Tipo</th>
+      <th>Código</th>
+      <th>Estado</th>
+      <th>Check-IN</th>
+      <th>Ver entrada</th>
+      <th>Email / texto</th>
+      <th>Eliminar</th>
+    </tr>
+  </thead>
+  <tbody>
+  <?php foreach ($rows as $r): ?>
+    <?php
+      $estadoOk = (isset($r['checked_in']) && (int)$r['checked_in'] === 1);
+      $codigo   = isset($r['codigo']) ? $r['codigo'] : '';
+    ?>
+    <tr>
+      <td><?php echo (int)$r['id']; ?></td>
+      <td><?php echo e($r['nombre']); ?></td>
+      <td><?php echo e($r['email']); ?></td>
+      <td><?php echo e($r['fecha_registro']); ?></td>
+      <td><?php echo e($r['tipo']); ?></td>
+      <td><?php echo e($codigo); ?></td>
+      <td>
+        <?php if ($estadoOk): ?>
+          <span class="badge-ok">Check in OK</span>
+        <?php else: ?>
+          <span class="badge-pend">Pendiente</span>
+        <?php endif; ?>
+      </td>
+      <td>
+        <?php if (!$estadoOk && $codigo !== ''): ?>
+          <a class="btn-link" href="checkin.php?c=<?php echo urlencode($codigo); ?>">
+            Hacer check in
+          </a>
+        <?php elseif ($estadoOk): ?>
+          <span style="font-size:0.75rem;color:#9f9;">Ya checkeada</span>
+        <?php endif; ?>
+      </td>
+      <td>
+        <?php if ($codigo !== ''): ?>
+          <a class="btn-link" href="ticket.php?c=<?php echo urlencode($codigo); ?>" target="_blank">
+            Ver entrada
+          </a>
+        <?php endif; ?>
+      </td>
+      <td>
+        <?php if ($codigo !== ''): ?>
+          <a class="btn-link" href="email_template.php?c=<?php echo urlencode($codigo); ?>" target="_blank">
+            Ver texto
+          </a>
+        <?php endif; ?>
+      </td>
+      <td>
+        <a
+          class="btn-link btn-danger"
+          href="admin.php?delete=<?php echo (int)$r['id']; ?>"
+          onclick="return confirm('¿Seguro que querés eliminar la entrada #<?php echo (int)$r['id']; ?>?');"
+        >
+          Eliminar
+        </a>
+      </td>
+    </tr>
+  <?php endforeach; ?>
+  </tbody>
+</table>
+
+</body>
+</html>

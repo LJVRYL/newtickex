@@ -1,0 +1,120 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+
+require_login();
+
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
+$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0);
+
+// Solo super_admin / superadmin / admin_evento
+if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
+    header('Location: login.php');
+    exit;
+}
+
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($id <= 0) {
+    flash('warn', 'ID de evento inválido.');
+    header('Location: panel_admin.php');
+    exit;
+}
+
+try {
+    $pdo = db();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "Error DB: " . e($e->getMessage());
+    exit;
+}
+
+// Buscar evento
+$stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id = :id LIMIT 1");
+$stmtEv->execute(array(':id' => $id));
+$ev = $stmtEv->fetch(PDO::FETCH_ASSOC);
+
+if (!$ev) {
+    flash('warn', 'Evento no encontrado.');
+    header('Location: panel_admin.php');
+    exit;
+}
+
+// Permisos: super_admin / superadmin todo; admin_evento solo sus eventos si tiene creado_por_admin_id
+$puedeBorrar = false;
+if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
+    $puedeBorrar = true;
+} elseif ($tipoGlobal === 'admin_evento') {
+    if (isset($ev['creado_por_admin_id']) && (int)$ev['creado_por_admin_id'] === $adminId) {
+        $puedeBorrar = true;
+    }
+}
+
+if (!$puedeBorrar) {
+    flash('warn', 'No tenés permiso para eliminar este evento.');
+    header('Location: panel_admin.php');
+    exit;
+}
+
+// Guardamos el flyer para borrarlo después
+$flyerFilename = (!empty($ev['flyer_filename'])) ? $ev['flyer_filename'] : null;
+
+// Detectar si entradas tiene evento_id
+$colsEnt = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
+$hasEventoIdEntradas = false;
+foreach ($colsEnt as $c) {
+    if (isset($c['name']) && $c['name'] === 'evento_id') {
+        $hasEventoIdEntradas = true;
+        break;
+    }
+}
+
+// Detectar si tipos_entrada tiene evento_id
+$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+$hasEventoIdTipos = false;
+foreach ($colsTE as $c) {
+    if (isset($c['name']) && $c['name'] === 'evento_id') {
+        $hasEventoIdTipos = true;
+        break;
+    }
+}
+
+try {
+    $pdo->beginTransaction();
+
+    // Borrar entradas asociadas
+    if ($hasEventoIdEntradas) {
+        $stmtDelEnt = $pdo->prepare("DELETE FROM entradas WHERE evento_id = :id");
+        $stmtDelEnt->execute(array(':id' => $id));
+    }
+
+    // Borrar tipos_entrada asociadas
+    if ($hasEventoIdTipos) {
+        $stmtDelTE = $pdo->prepare("DELETE FROM tipos_entrada WHERE evento_id = :id");
+        $stmtDelTE->execute(array(':id' => $id));
+    }
+
+    // Borrar evento
+    $stmtDelEv = $pdo->prepare("DELETE FROM eventos WHERE id = :id");
+    $stmtDelEv->execute(array(':id' => $id));
+
+    $pdo->commit();
+} catch (Exception $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    flash('err', 'Error al eliminar el evento: ' . $e->getMessage());
+    header('Location: panel_admin.php');
+    exit;
+}
+
+// Borrar flyer del disco si existe
+if ($flyerFilename) {
+    $fullPath = __DIR__ . '/' . $flyerFilename;
+    if (is_file($fullPath)) {
+        @unlink($fullPath);
+    }
+}
+
+flash('ok', 'Evento eliminado correctamente (ID ' . $id . ').');
+header('Location: panel_admin.php');
+exit;
