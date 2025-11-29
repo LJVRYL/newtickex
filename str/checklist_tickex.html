@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Checklist – Proyecto TICKEX / STR</title>
+  <style>
+    :root {
+      --accent: #2563eb;
+      --accent-soft: #e0edff;
+      --accent-strong: #1d4ed8;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --border-soft: #e5e7eb;
+      --bg-main: #f3f4f6;
+      --card-bg: #ffffff;
+      --danger: #b91c1c;
+      --ok: #15803d;
+      --warn: #b45309;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top left, #e0edff 0, #f3f4f6 40%, #f9fafb 100%);
+      color: var(--text-main);
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 26px;
+      margin: 0 0 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h1 span.badge {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      border: 1px solid #bfdbfe;
+    }
+
+    .subtitle {
+      margin: 0 0 20px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .top-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .top-links a {
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-decoration: none;
+      color: #1f2933;
+      border: 1px solid var(--border-soft);
+      background: #ffffffcc;
+      backdrop-filter: blur(8px);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr);
+      gap: 18px;
+      align-items: flex-start;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding: 16px;
+      }
+      .grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 14px;
+      padding: 16px 18px;
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.09);
+    }
+
+    .card h2 {
+      font-size: 16px;
+      margin: 0 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .card h3 {
+      font-size: 14px;
+      margin: 14px 0 6px;
+    }
+
+    .tag {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      color: var(--text-muted);
+      background: #f9fafb;
+    }
+
+    .tag.ok {
+      border-color: #bbf7d0;
+      background: #ecfdf5;
+      color: var(--ok);
+    }
+
+    .tag.warn {
+      border-color: #fed7aa;
+      background: #fffbeb;
+      color: var(--warn);
+    }
+
+    .tag.danger {
+      border-color: #fecaca;
+      background: #fef2f2;
+      color: var(--danger);
+    }
+
+    .checklist-section {
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #e5e7eb;
+    }
+
+    .checklist-section:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+
+    .checklist-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #111827;
+    }
+
+    .checklist-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    ul.checklist {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    ul.checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    ul.checklist li label {
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+
+    ul.checklist input[type="checkbox"] {
+      margin-top: 2px;
+    }
+
+    .pill-row {
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #4b5563;
+    }
+
+    .note {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .method {
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .method strong {
+      font-weight: 600;
+    }
+
+    .method ul {
+      margin: 4px 0 8px 18px;
+      padding: 0;
+    }
+
+    .method li {
+      font-size: 13px;
+      margin-bottom: 3px;
+    }
+
+    code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      background: #f9fafb;
+      border-radius: 4px;
+      padding: 1px 4px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .footer {
+      margin-top: 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>
+        Checklist TICKEX / STR
+        <span class="badge">Proyecto en evolución</span>
+      </h1>
+      <p class="subtitle">
+        Hoja de ruta viva para el sistema de tickets STR (str.tickex.com.ar). 
+        La idea es ir tildando tareas a medida que avanzamos y poder sumar colaboradores 
+        sin perder el contexto.
+      </p>
+      <div class="top-links">
+        <a href="runbook_tickex.html" target="_blank">📘 Ver Runbook técnico</a>
+        <a href="checklist_tickex.html">✅ Checklist (esta página)</a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Columna izquierda: checklist principal -->
+      <div class="card">
+        <h2>
+          Flujo usuario final & core de negocio
+          <span class="tag warn">MVP en progreso</span>
+        </h2>
+
+        <div class="checklist-section">
+          <div class="checklist-title">1. Registro y cuenta de usuario</div>
+          <div class="checklist-sub">Lo que ya tenemos y lo que falta para cerrar el circuito completo.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                Paso 1 – <code>registro_usuario.php</code> recibe email, crea usuario (si no existe), genera <code>token_confirmacion</code> y envía mail de verificación.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Paso 2 – <code>verificar_email.php</code> muestra formulario con nombre, apellido, DNI y contraseña (dos campos) cuando el token es válido.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Guardar datos del formulario de Paso 2 en <code>usuarios</code> (incluyendo <code>password_hash</code> con <code>password_hash()</code>), marcar <code>email_confirmado = 1</code> y limpiar token.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Al terminar Paso 2, loguear automáticamente al usuario y redirigir a <code>panel_usuario.php</code>.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Manejo de caso “email ya registrado”: si el mail existe y está confirmado, mostrar mensaje claro y link directo a <code>login.php</code>.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Manejo de caso “email no confirmado”: ofrecer botón para reenviar mail de verificación desde el paso de registro.
+              </label>
+            </li>
+          </ul>
+        </div>
+
+        <div class="checklist-section">
+          <div class="checklist-title">2. Login y recuperación de contraseña</div>
+          <div class="checklist-sub">Acceso seguro y forma de recuperar la cuenta.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                <code>login.php</code> para usuarios finales usando <code>password_verify()</code> y sesión <code>$_SESSION['usuario_id']</code>.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Pantalla “Olvidé mi contraseña” (<code>olvide_password.php</code>) que genera token de reset asociado al usuario.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Pantalla <code>reset_password.php</code> que pide nueva contraseña (dos veces), valida y actualiza <code>password_hash</code>.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Mensajes de feedback claros en login / reset (email inexistente, token vencido, etc.).
+              </label>
+            </li>
+          </ul>
+        </div>
+
+        <div class="checklist-section">
+          <div class="checklist-title">3. Panel del usuario final</div>
+          <div class="checklist-sub">Que el cliente entienda qué es su cuenta Tickex y vea sus tickets.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                <code>panel_usuario.php</code> existente, con datos básicos del usuario y listado de entradas asociadas a su email.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                En el listado de entradas, mostrar nombre del evento (JOIN con <code>eventos</code>) en lugar de solo <code>evento_id</code>.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Agregar link “Ver ticket” que abra <code>ticket.php?c=CODIGO</code> en otra pestaña.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Mostrar badge de estado de la entrada (Válida / Usada) según el campo <code>checked_in</code>.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Si <code>email_confirmado == 0</code>, mostrar aviso visible y botón “Reenviar email de confirmación”.
+              </label>
+            </li>
+          </ul>
+        </div>
+
+        <div class="checklist-section">
+          <div class="checklist-title">4. Front público de eventos (futuro cercano)</div>
+          <div class="checklist-sub">Sitio para que los clientes compren entradas directamente.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox">
+                Página pública por evento (<code>/site.php?slug=...</code> o similar) con info, flyer, tipos de entrada y precios.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Selección de cantidad de entradas por tipo y generación de “orden” de compra (sin medio de pago aún).
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Integrar con el sistema de <code>entradas</code> (alta y envío de mails al confirmar pago).
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Más adelante, integrar algún gateway de pago (billetera, etc.).
+              </label>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Columna derecha: organizador + metodología + infra -->
+      <div class="card">
+        <h2>
+          Panel organizador & metodología de trabajo
+          <span class="tag ok">Base estable</span>
+        </h2>
+
+        <div class="checklist-section">
+          <div class="checklist-title">5. Panel organizador (admin / puerta)</div>
+          <div class="checklist-sub">Mantener y mejorar lo que ya existe del sistema viejo, pero adaptado al multi-evento.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                <code>panel_admin.php</code> – listado de eventos, acceso a detalle y acciones básicas.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                <code>panel_evento.php</code> – detalle del evento, entradas, check-ins, etc.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                <code>puerta.php</code> – vista para control de acceso y check-in de QR, funcionando en el esquema nuevo.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Definir bien qué ve cada rol (superadmin, admin_evento, staff/puerta) y ocultar columnas que no necesita el rol puerta (email, fecha registro, etc.).
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Formalizar papelera lógica (<code>eventos_eliminados</code>, <code>entradas_eliminadas</code>) para no perder historial.
+              </label>
+            </li>
+          </ul>
+        </div>
+
+        <div class="checklist-section">
+          <div class="checklist-title">6. Infraestructura & mails</div>
+          <div class="checklist-sub">Lo que ya está más duro en el servidor y lo que nos falta afinar.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox" checked>
+                Mails enviándose con <code>mail()</code> desde PHP (<code>test_mail_tickex.php</code>, <code>registro.php</code>, <code>send_ticket_cli.php</code>).
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Revisar y dejar estable SPF, DKIM y DMARC para <code>tickex.com.ar</code> para mejorar entregabilidad en Gmail / Outlook.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Documentar en el runbook el estado actual de Apache, PHP y la base <code>save_the_rave.sqlite</code> (ruta, backups, dumps).
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Rutina clara de backups (dump de SQLite + copia de código) previa a grandes cambios.
+              </label>
+            </li>
+          </ul>
+        </div>
+
+        <div class="checklist-section">
+          <div class="checklist-title">7. Metodología de trabajo (oficial)</div>
+          <div class="checklist-sub">Cómo vamos a trabajar de acá en adelante para no romper nada.</div>
+          <div class="method">
+            <p><strong>Modo actual (“producción guiada”):</strong></p>
+            <ul>
+              <li>Trabajamos en <code>/opt/ferozo3/web/str</code> siempre por consola (SSH).</li>
+              <li>Antes de tocar un archivo importante: backup rápido (<code>cp archivo.php archivo.php.bak_fecha</code>).</li>
+              <li>Editar siempre con bloques <code>cat <<'PHP' &gt; archivo.php</code> (sin nano/vi) para mantener control del contenido.</li>
+              <li>Validar sintaxis con <code>php -l archivo.php</code> antes de probar en el navegador.</li>
+              <li>Si funciona bien, registrar el cambio en Git:
+                <code>git status</code> → <code>git add</code> → <code>git commit</code> → <code>git push</code>.
+              </li>
+            </ul>
+
+            <p><strong>Próximo paso (“trabajo local + servidor”):</strong></p>
+            <ul>
+              <li>Clonar <code>https://github.com/LJVRYL/newtickex.git</code> en una PC de desarrollo.</li>
+              <li>Abrir el proyecto en un editor (VS Code, por ejemplo) con vista previa y herramientas de IA.</li>
+              <li>Probar los cambios localmente (o en un entorno de staging) antes de subirlos al VPS.</li>
+              <li>Subir cambios al servidor solo desde ramas ya probadas.</li>
+            </ul>
+          </div>
+          <div class="note">
+            Por ahora seguimos con el flujo por consola, pero con Git como red de seguridad. 
+            Cuando tengamos un poco más de aire, el objetivo es sumar entorno local y más colaboradores 
+            trabajando contra el repo <code>newtickex</code>.
+          </div>
+        </div>
+
+        <div class="checklist-section">
+          <div class="checklist-title">8. Ideas futuras (parking)</div>
+          <div class="checklist-sub">Cosas importantes, pero que no bloquean el MVP.</div>
+          <ul class="checklist">
+            <li>
+              <label>
+                <input type="checkbox">
+                Diseñador de sala / butacas conectado a la tabla <code>salones</code> (teatros, numeradas, sectores, etc.).
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Panel para que un usuario cliente pueda “evolucionar” a organizador (rol adicional) desde Tickex.
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox">
+                Dashboard con métricas (ventas por evento, canales, check-in en tiempo real).
+              </label>
+            </li>
+          </ul>
+          <div class="pill-row">
+            <span class="pill">Versión 2.0</span>
+            <span class="pill">No bloquear MVP</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          Este checklist es un documento vivo. Si algo cambia en la arquitectura o en la forma de trabajar, 
+          actualizar acá y en <code>runbook_tickex.html</code> para que cualquier colaborador pueda subirse rápido al proyecto.
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
