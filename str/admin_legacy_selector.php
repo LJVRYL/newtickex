@@ -2,6 +2,37 @@
 require_once __DIR__ . '/inc/bootstrap.php';
 $title = 'Selector de paneles admin – Legacy';
 
+// Compatibilidad: si faltan helpers de auth (deploys legacy), definimos mínimos
+if (!function_exists('require_login')) {
+    function require_login()
+    {
+        if (empty($_SESSION['usuario']) && empty($_SESSION['usuario_id'])) {
+            header('Location: login.php');
+            exit;
+        }
+    }
+}
+
+if (!function_exists('current_user')) {
+    function current_user()
+    {
+        $u = array();
+        if (isset($_SESSION['usuario_id'])) {
+            $u['id'] = (int) $_SESSION['usuario_id'];
+        }
+        if (isset($_SESSION['usuario_rol'])) {
+            $u['rol'] = $_SESSION['usuario_rol'];
+        }
+        if (isset($_SESSION['usuario'])) {
+            $u['usuario'] = $_SESSION['usuario'];
+        }
+        if (isset($_SESSION['usuario_email'])) {
+            $u['email'] = $_SESSION['usuario_email'];
+        }
+        return $u;
+    }
+}
+
 // Solo usuarios autenticados y administrativos
 require_login();
 
@@ -14,7 +45,7 @@ if ($rol === '' && isset($_SESSION['tipo_global'])) {
 if (!in_array($rol, array('admin_evento', 'super_admin', 'superadmin'), true)) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
-    echo "<div class='card error'><h2>Acceso denegado</h2><p>No tenés permiso para ver este selector.</p></div>";
+    echo "<div class='card error'><h2>Acceso restringido</h2><p>Esta página es solo para administradores.</p></div>";
     include __DIR__ . '/inc/layout_bottom.php';
     exit;
 }
@@ -66,12 +97,9 @@ include __DIR__ . '/inc/layout_top.php';
 ?>
 
 <div class="card" style="margin-bottom:16px;">
-  <h2>Selector de paneles administrativos (legacy)</h2>
+  <h1 style="margin:0;">Selector de paneles administrativos (legacy)</h1>
   <p style="color:var(--muted); margin-top:6px;">
-    Accesos rápidos a los distintos paneles de administración y sus variantes legacy.
-  </p>
-  <p style="color:#475569; margin-top:4px;">
-    Solo visible para usuarios con roles administrativos válidos.
+    Desde esta página podés navegar a los paneles viejos y actuales para inspección y soporte.
   </p>
 </div>
 
