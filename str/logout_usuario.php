@@ -1,7 +1,19 @@
 <?php
 session_start();
 
-// Limpiar variables de sesión
+// Claves conocidas que queremos limpiar de forma explícita
+$keys = array(
+    'usuario', 'usuario_id', 'usuario_email', 'usuario_nombre', 'usuario_rol', 'nombre', 'email',
+    'tipo_global', 'rol', 'rol_evento', 'es_admin', 'admin_id', 'user_id', 'evento_id',
+    'usuario_lista', 'usuario_clientes', 'token', 'uid'
+);
+foreach ($keys as $k) {
+    if (isset($_SESSION[$k])) {
+        unset($_SESSION[$k]);
+    }
+}
+
+// Limpiar todo el array de sesión por las dudas
 $_SESSION = array();
 
 // Borrar cookie de sesión si existe

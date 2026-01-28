@@ -13,8 +13,24 @@ if (!function_exists('e')) {
 $tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
 $adminId    = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
-if (!in_array($tipoGlobal, array('admin_evento','super_admin'), true)) {
+if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
     abort_404("No tenés permiso.");
+}
+
+// Verificar que exista la tabla plantillas_entrada
+$hasTablaPlantillas = false;
+$error = '';
+$okMsg = '';
+$chkTpl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='plantillas_entrada' LIMIT 1");
+if ($chkTpl && $chkTpl->fetch(PDO::FETCH_ASSOC)) {
+  $hasTablaPlantillas = true;
+}
+
+if (!$hasTablaPlantillas) {
+  include __DIR__.'/inc/layout_top.php';
+  echo "<div class='card'><h2>Plantillas no disponibles</h2><p>No existe la tabla <code>plantillas_entrada</code> en esta base. Creala o importá el esquema para usar Mis Entradas.</p></div>";
+  include __DIR__.'/inc/layout_bottom.php';
+  exit;
 }
 
 /* ========= BASE ========= */
@@ -40,6 +56,7 @@ function validar_categoria_tipo($categoria, $tipo){
 
 /* ========= ELIMINAR PLANTILLA ========= */
 if (isset($_GET['del_id'])) {
+  if ($hasTablaPlantillas && isset($_GET['del_id'])) {
     $delId = (int)$_GET['del_id'];
 
     $st = $pdo->prepare("SELECT id, admin_id, creado_por_admin_id FROM plantillas_entrada WHERE id=?");
@@ -68,7 +85,7 @@ $editId  = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
 $editing = false;
 $editRow = null;
 
-if ($editId>0) {
+if ($hasTablaPlantillas && $editId>0) {
     $st = $pdo->prepare("SELECT * FROM plantillas_entrada WHERE id=?");
     $st->execute(array($editId));
     $editRow = $st->fetch(PDO::FETCH_ASSOC);
@@ -92,7 +109,7 @@ if ($editId>0) {
 $error = '';
 $okMsg = '';
 
-if ($_SERVER['REQUEST_METHOD']==='POST') {
+if ($hasTablaPlantillas && $_SERVER['REQUEST_METHOD']==='POST') {
 
     $nombre    = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
     $categoria = isset($_POST['categoria']) ? trim($_POST['categoria']) : '';
@@ -112,11 +129,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
     if ($nombre==='') $error = "El nombre es obligatorio.";
     if (!$error && $categoria==='') $error = "La categoría es obligatoria.";
-    if (!$error && !in_array($tipo, $tiposAll, true))
+    if (!$error && !in_array($tipo, $tiposAll, true)) $error = "Tipo inválido.";
     if (!$error && $precio<0) $error = "Precio inválido.";
-    if (
 
-    if (!$error && $hora!=='') {
+    if (!$error && $hora!=='' ) {
         if (!preg_match('/^\d{2}:\d{2}$/', $hora)) {
             $error = "Hora inválida (HH:MM).";
         }

@@ -1,360 +1,152 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Save The Rave – Registro</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tickex | Ticketera con cobro directo a tu CBU</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/str.css">
+  <link rel="stylesheet" href="assets/str-theme.css">
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #111;
-      color: #f5f5f5;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 900px;
-      background: #1a1a1a;
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    }
-
-    .flyer {
-      background: #d71d24;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .flyer img {
-      max-width: 100%;
-      height: auto;
-      display: block;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    }
-
-    .form-wrapper {
-      padding: 24px 28px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-
-    .title {
-      font-size: 1.8rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-weight: 800;
-    }
-
-    .subtitle {
-      font-size: 0.95rem;
-      color: #cccccc;
-      line-height: 1.4;
-      margin-top: 4px;
-    }
-
-    form {
-      margin-top: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    label {
-      font-size: 0.9rem;
-      margin-bottom: 4px;
-      display: block;
-    }
-
-    .input-group {
-      display: flex;
-      flex-direction: column;
-    }
-
-    input[type="text"],
-    input[type="email"] {
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid #444;
-      background: #111;
-      color: #f5f5f5;
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    input[type="text"]:focus,
-    input[type="email"]:focus {
-      border-color: #ffdd33;
-      box-shadow: 0 0 0 1px #ffdd33;
-    }
-
-    .captcha-box {
-      border-radius: 10px;
-      border: 1px dashed #555;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      background: #151515;
-    }
-
-    .captcha-question {
-      font-size: 0.9rem;
-    }
-
-    .captcha-input {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .captcha-input input {
-      max-width: 80px;
-    }
-
-    .small-note {
-      font-size: 0.75rem;
-      color: #999;
-    }
-
-    button {
-      margin-top: 6px;
-      padding: 11px 14px;
-      border-radius: 999px;
-      border: none;
-      font-size: 0.95rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: linear-gradient(135deg, #ffdd33, #ff8a00);
-      color: #111;
-      cursor: pointer;
-      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
-    }
-
-    button:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 14px 26px rgba(0, 0, 0, 0.6);
-      opacity: 0.95;
-    }
-
-    button:active {
-      transform: translateY(0);
-      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    button:disabled {
-      opacity: 0.4;
-      cursor: wait;
-      box-shadow: none;
-      transform: none;
-    }
-
-    .status {
-      min-height: 18px;
-      font-size: 0.85rem;
-      margin-top: 4px;
-    }
-
-    .status.ok {
-      color: #5ad47a;
-    }
-
-    .status.error {
-      color: #ff7070;
-    }
-
-    .footer-note {
-      margin-top: auto;
-      font-size: 0.75rem;
-      color: #777;
-    }
-
-    @media (max-width: 768px) {
-      .container {
-        grid-template-columns: 1fr;
-      }
-
-      .flyer {
-        order: -1;
-      }
-    }
+    :root { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--fg); }
+    .page { max-width: 1100px; margin: 0 auto; padding: 24px 18px 80px; }
+    .topbar-landing { display:flex; align-items:center; justify-content:space-between; padding: 12px 4px 14px; gap:12px; position: sticky; top:0; z-index:5; background: var(--bg); backdrop-filter: blur(8px); }
+    .topbar-landing .logo { font-weight: 800; letter-spacing: 0.04em; font-size: 1.05rem; color: var(--fg); text-decoration: none; }
+    .topbar-landing .actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; align-items: center; padding: 32px 22px; border-radius: var(--radius); background: linear-gradient(135deg, rgba(37,99,235,0.15), rgba(56,189,248,0.12)); border: 1px solid var(--border-subtle); box-shadow: 0 16px 40px rgba(0,0,0,0.18); }
+    .hero h1 { font-size: 2.1rem; margin: 0 0 10px; line-height: 1.2; }
+    .hero p { color: var(--fg-muted); margin: 0 0 14px; font-size: 1rem; }
+    .hero .bullets { display: grid; gap: 8px; margin: 12px 0 16px; }
+    .hero .bullets div { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--fg); }
+    .hero .media { background: var(--bg-elevated); border-radius: var(--radius); border: 1px solid var(--border-subtle); padding: 14px; box-shadow: var(--shadow-soft); }
+    .section { margin: 36px 0; }
+    .section h2 { margin: 0 0 10px; font-size: 1.6rem; }
+    .section p.lead { color: var(--fg-muted); margin: 0 0 16px; }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .feature { padding: 16px; border-radius: var(--radius); border: 1px solid var(--border-subtle); background: var(--bg-elevated); box-shadow: var(--shadow-soft); }
+    .feature h3 { margin: 0 0 6px; font-size: 1.05rem; }
+    .feature p { margin: 0; color: var(--fg-muted); }
+    .steps { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .step { padding: 14px; border-radius: var(--radius); border: 1px dashed var(--border-subtle); background: var(--bg-elevated); }
+    .step strong { display: block; margin-bottom: 6px; }
+    .statbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .stat { padding: 10px 12px; border-radius: var(--radius); background: var(--bg-elevated); border: 1px solid var(--border-subtle); }
+    .pricing { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .card-ghost { border: 1px solid var(--border-subtle); background: var(--bg-elevated); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow-soft); }
+    .cta-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+    .faq { border-top: 1px solid var(--border-subtle); padding-top: 12px; }
+    .faq-item { padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
+    .faq-item h4 { margin: 0 0 6px; }
+    .faq-item p { margin: 0; color: var(--fg-muted); }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 0; }
+    .badge { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--fg-muted); font-size: 0.9rem; }
+    @media (max-width: 600px) { .hero { padding: 24px 18px; } }
   </style>
 </head>
-<body>
-  <div class="container">
-    <!-- Lado del flyer -->
-    <div class="flyer">
-      <img src="flyer-save-the-rave.png" alt="Flyer Save The Rave" />
-    </div>
-
-    <!-- Lado del formulario -->
-    <div class="form-wrapper">
-      <header>
-        <div class="title">Save The Rave</div>
-        <p class="subtitle">
-          Completá el formulario para reservar tu entrada. Más adelante vas a recibir
-          un email con tu QR y la info de la fiesta.
-        </p>
-      </header>
-
-      <form id="registro-form">
-        <div class="input-group">
-          <label for="nombre">Nombre / Alias *</label>
-          <input id="nombre" name="nombre" type="text" required maxlength="80" />
-        </div>
-
-        <div class="input-group">
-          <label for="email">Email *</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            inputmode="email"
-            autocomplete="email"
-          />
-        </div>
-
-        <!-- CAPTCHA simple (cuenta) -->
-        <div class="captcha-box">
-          <div class="captcha-question" id="captcha-question">
-            <!-- Se rellena con JS -->
-          </div>
-          <div class="captcha-input">
-            <input
-              type="number"
-              id="captcha-answer"
-              name="captcha-answer"
-              required
-              placeholder="Respuesta"
-            />
-          </div>
-          <div class="small-note">
-            Pequeña verificación anti-bots. Para producción, después podemos usar Google reCAPTCHA si querés.
-          </div>
-        </div>
-
-        <button type="submit" id="submit-btn">Reservar entrada</button>
-      </form>
-
-      <div id="status" class="status"></div>
-
-      <div class="footer-note">
-        Tus datos se usan solo para gestionar la lista y tu entrada a la fiesta.
+<body class="theme-dark">
+  <div class="page">
+    <div class="topbar-landing">
+      <a class="logo" href="#">Tickex</a>
+      <div class="actions">
+        <a class="btn secondary" href="login.php">Ingresar</a>
+        <a class="btn" href="panel_admin.php">Crear cuenta</a>
       </div>
     </div>
+    <header class="hero">
+      <div>
+        <h1>Ticketera con cobro directo a tu CBU</h1>
+        <p>Publicá tu evento en minutos, cobra sin intermediarios y validá entradas QR sin conexión. Tickex potencia tu venta end-to-end.</p>
+        <div class="bullets">
+          <div>✅ Cobros directos en tu CBU</div>
+          <div>✅ QR antifraude, escaneo offline</div>
+          <div>✅ Configurá cargo por servicio opcional</div>
+        </div>
+        <div class="cta-row">
+          <a class="btn" href="#comenzar">Crear mi evento</a>
+          <a class="btn secondary" href="#faq">Ver cómo funciona</a>
+        </div>
+        <div class="statbar">
+          <div class="stat">Liquidaciones rápidas · sin retenciones ocultas</div>
+          <div class="stat">Soporte 24/7</div>
+        </div>
+      </div>
+      <div class="media">
+        <div style="aspect-ratio: 16/9; border-radius: 12px; background: radial-gradient(circle at 30% 30%, rgba(56,189,248,0.18), rgba(37,99,235,0.08)); border: 1px dashed var(--border-subtle); display: flex; align-items: center; justify-content: center; color: var(--fg-muted);">
+          Video demo (30s)
+        </div>
+      </div>
+    </header>
+
+    <section class="section" id="comenzar">
+      <h2>Todo lo que necesitas para vender online</h2>
+      <p class="lead">Configura tu evento, cobra directo y controla accesos con un solo panel.</p>
+      <div class="grid">
+        <div class="feature"><h3>Página en minutos</h3><p>Crea tu landing de evento con fechas, tandas y combos.</p></div>
+        <div class="feature"><h3>Cobro directo a CBU</h3><p>Pasarela propia, acreditación clara y reportes de liquidación.</p></div>
+        <div class="feature"><h3>QR antifraude offline</h3><p>Escaneo desde web o app, incluso sin conexión.</p></div>
+        <div class="feature"><h3>RRPP y links referidos</h3><p>Vende con tu equipo y medí qué vende cada uno.</p></div>
+        <div class="feature"><h3>Butacas y sectores</h3><p>Asientos numerados o sectores generales en el mismo flujo.</p></div>
+        <div class="feature"><h3>Combos y promos</h3><p>2x1, tandas, productos y consumos en un solo checkout.</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Así de simple</h2>
+      <div class="steps">
+        <div class="step"><strong>1. Crea tu evento</strong>Nombre, fechas, cupos y precios en minutos.</div>
+        <div class="step"><strong>2. Configura cobros</strong>Conecta tu CBU y define si sumas cargo por servicio.</div>
+        <div class="step"><strong>3. Comparte el link/QR</strong>Publica en redes o imprime el QR para flyers.</div>
+        <div class="step"><strong>4. Escanea y cobra</strong>Check-in instantáneo con reportes en vivo.</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Liquidación clara y sin esperas</h2>
+      <p class="lead">Pasarela propia + CBU dedicado. No retenemos tu dinero.</p>
+      <div class="pricing">
+        <div class="card-ghost">
+          <h3>Sin cargo al comprador</h3>
+          <p class="lead">Puedes configurar cargo por servicio si quieres absorberlo o trasladarlo.</p>
+          <div class="badges">
+            <span class="badge">CBU dedicado</span>
+            <span class="badge">Liquidación rápida</span>
+            <span class="badge">Reportes en vivo</span>
+          </div>
+        </div>
+        <div class="card-ghost">
+          <h3>Transparente</h3>
+          <p class="lead">Verás tus liquidaciones y retenciones en el momento. Sin cajas negras.</p>
+        </div>
+      </div>
+      <div class="cta-row">
+        <a class="btn" href="#cta-final">Quiero cobrar en mi CBU</a>
+        <a class="btn secondary" href="mailto:ventas@tickex.com">Hablar con ventas</a>
+      </div>
+    </section>
+
+    <section class="section" id="faq">
+      <h2>FAQ rápida</h2>
+      <div class="faq">
+        <div class="faq-item"><h4>¿Cuándo recibo mi dinero?</h4><p>Acreditamos en tu CBU según el esquema acordado; sin retenciones ocultas.</p></div>
+        <div class="faq-item"><h4>¿Puedo escanear sin internet?</h4><p>Sí. Descarga los datos y valida offline. Cada QR es único y antifraude.</p></div>
+        <div class="faq-item"><h4>¿Puedo sumar RRPP con links?</h4><p>Asignas links de referido y ves ventas por vendedor en el panel.</p></div>
+        <div class="faq-item"><h4>¿Cómo manejo butacas y sectores?</h4><p>Define sectores, asientos o generales; todo convive en el mismo checkout.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="cta-final">
+      <div class="card-ghost">
+        <h2>¿Listo para vender con cobro directo?</h2>
+        <p class="lead">Abrí tu evento ahora. Si necesitas ayuda, nuestro equipo te guía en minutos.</p>
+        <div class="cta-row">
+          <a class="btn" href="panel_admin.php">Crear mi evento</a>
+          <a class="btn secondary" href="https://wa.me/5491124071171" target="_blank" rel="noreferrer">Hablar por WhatsApp</a>
+        </div>
+      </div>
+    </section>
   </div>
-
-  <script>
-    // 🔐 CAPTCHA simple
-    let captchaResultado = null;
-
-    function generarCaptcha() {
-      const a = Math.floor(Math.random() * 8) + 2; // 2–9
-      const b = Math.floor(Math.random() * 8) + 2; // 2–9
-      captchaResultado = a + b;
-      const pregunta = document.getElementById("captcha-question");
-      pregunta.textContent = `Para verificar que sos humano: ¿cuánto es ${a} + ${b}?`;
-    }
-
-    generarCaptcha();
-
-    const form = document.getElementById("registro-form");
-    const statusEl = document.getElementById("status");
-    const submitBtn = document.getElementById("submit-btn");
-
-    // 👉 Backend PHP local
-    const SCRIPT_URL = "registro.php";
-
-    form.addEventListener("submit", function (event) {
-      event.preventDefault();
-      statusEl.textContent = "";
-      statusEl.className = "status";
-
-      const nombre = document.getElementById("nombre").value.trim();
-      const email = document.getElementById("email").value.trim();
-      const captchaAnswer = parseInt(
-        document.getElementById("captcha-answer").value,
-        10
-      );
-
-      if (!nombre || !email) {
-        statusEl.textContent = "Completá nombre y email.";
-        statusEl.classList.add("error");
-        return;
-      }
-
-      if (Number.isNaN(captchaAnswer) || captchaAnswer !== captchaResultado) {
-        statusEl.textContent = "Respuesta de verificación incorrecta. Probá de nuevo.";
-        statusEl.classList.add("error");
-        generarCaptcha();
-        document.getElementById("captcha-answer").value = "";
-        return;
-      }
-
-      const payload = {
-        nombre,
-        email,
-        timestamp: new Date().toISOString()
-      };
-
-      submitBtn.disabled = true;
-      statusEl.textContent = "Enviando datos...";
-      statusEl.classList.remove("ok", "error");
-
-      fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      })
-        .then(function (res) {
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          return res.json();
-        })
-        .then(function (data) {
-          if (!data.ok) {
-            throw new Error(data.error || "Error en el servidor");
-          }
-
-          statusEl.textContent =
-            "¡Listo! Tu entrada #" + data.id + " fue registrada.";
-          statusEl.classList.add("ok");
-          form.reset();
-          generarCaptcha();
-        })
-        .catch(function (error) {
-          console.error(error);
-          statusEl.textContent =
-            "Hubo un problema al enviar tus datos. Probá de nuevo más tarde.";
-          statusEl.classList.add("error");
-        })
-        .finally(function () {
-          submitBtn.disabled = false;
-        });
-    });
-  </script>
 </body>
 </html>

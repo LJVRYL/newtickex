@@ -1,5 +1,13 @@
 <?php
 // inc/bootstrap.php (PHP5-safe)
+// Asegurar path de sesiones escribible (WSL suele bloquear /var/lib/php/sessions)
+$sp = ini_get('session.save_path');
+if (!$sp || !is_writable($sp)) {
+    $tmp = sys_get_temp_dir();
+    if (is_dir($tmp) && is_writable($tmp)) {
+        session_save_path($tmp);
+    }
+}
 session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 

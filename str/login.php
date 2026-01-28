@@ -3,6 +3,15 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Asegurar path de sesiones escribible (WSL suele bloquear /var/lib/php/sessions)
+$sp = ini_get('session.save_path');
+if (!$sp || !is_writable($sp)) {
+  $tmp = sys_get_temp_dir();
+  if (is_dir($tmp) && is_writable($tmp)) {
+    session_save_path($tmp);
+  }
+}
+
 session_start();
 
 // Conexión directa a la misma base que usamos en registro_usuario.php
@@ -22,12 +31,24 @@ $errores = array();
 $email   = '';
 $pass    = '';
 
-// Si ya está logueado, mandarlo directo al panel
+// ---------------------------------------------------------------------
+// Si ya está logueado, mandarlo directo al panel correspondiente
+// ---------------------------------------------------------------------
+if (!empty($_SESSION['es_admin']) && !empty($_SESSION['admin_id'])) {
+    // Usuario admin ya logueado
+    header('Location: panel_admin.php');
+    exit;
+}
+
 if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
+    // Usuario común ya logueado
     header('Location: panel_usuario.php');
     exit;
 }
 
+// ---------------------------------------------------------------------
+// Manejo del POST (login)
+// ---------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = isset($_POST['email']) ? trim($_POST['email']) : '';
     $pass  = isset($_POST['password']) ? $_POST['password'] : '';
@@ -41,7 +62,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errores)) {
         try {
             $stmt = $pdo->prepare("
-                SELECT id, nombre, apellido, email, password_hash, rol, email_confirmado
+                SELECT
+                  id,
+                  nombre,
+                  apellido,
+                  email,
+                  password_hash,
+                  password AS legacy_password,
+                  rol,
+                  email_confirmado,
+                  tipo_global
                 FROM usuarios
                 WHERE email = :email
                 LIMIT 1
@@ -53,15 +83,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errores[] = 'Email o contraseña incorrectos.';
             } else {
                 $passwordHash = $u['password_hash'];
+                $legacyPass   = isset($u['legacy_password']) ? $u['legacy_password'] : '';
 
-                // Compatibilidad: password_verify si existe, sino MD5 plano
+                // Compatibilidad: prueba bcrypt/verify, luego md5, luego texto plano del campo legacy
                 $okPass = false;
                 if ($passwordHash !== '' && $passwordHash !== null) {
-                    if (function_exists('password_verify')) {
-                        $okPass = password_verify($pass, $passwordHash);
-                    } else {
-                        $okPass = (md5($pass) === $passwordHash);
-                    }
+                  if (function_exists('password_verify') && strpos($passwordHash, '$2y$') === 0) {
+                    $okPass = password_verify($pass, $passwordHash);
+                  }
+                  // Fallback para hashes legacy en MD5 (32 caracteres hex)
+                  if (!$okPass && strlen($passwordHash) === 32 && ctype_xdigit($passwordHash)) {
+                    $okPass = (md5($pass) === strtolower($passwordHash));
+                  }
+                }
+
+                // Si aún no validó, intentamos con el campo legacy_password (de usuarios_admin)
+                if (!$okPass && $legacyPass !== '') {
+                  if (strlen($legacyPass) === 32 && ctype_xdigit($legacyPass)) {
+                    $okPass = (md5($pass) === strtolower($legacyPass));
+                  } else {
+                    $okPass = ($pass === $legacyPass);
+                  }
                 }
 
                 if (!$okPass) {
@@ -70,11 +112,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Si querés forzar que tenga email confirmado:
                     // if ((int)$u['email_confirmado'] !== 1) { ... }
 
-                    $_SESSION['usuario_id']    = (int)$u['id'];
-                    $_SESSION['usuario_email'] = $u['email'];
-                    $_SESSION['usuario_nombre']= trim($u['nombre'] . ' ' . $u['apellido']);
-                    $_SESSION['usuario_rol']   = $u['rol'];
+                    // Datos base del usuario (vista usuarios)
+                    $_SESSION['usuario_id']     = (int)$u['id'];
+                    $_SESSION['usuario_email']  = $u['email'];
+                    $_SESSION['usuario_nombre'] = trim($u['nombre'] . ' ' . $u['apellido']);
+                    $_SESSION['usuario_rol']    = $u['rol'];
+                    $_SESSION['tipo_global']    = isset($u['tipo_global']) ? $u['tipo_global'] : '';
+                    // Compatibilidad con scripts legacy
+                    $_SESSION['nombre']         = $_SESSION['usuario_nombre'];
+                    $_SESSION['usuario']        = $u['email'];
 
+                    // -----------------------------------------------------
+                    // NUEVO: si también existe en usuarios_admin → admin
+                    // -----------------------------------------------------
+                    try {
+                        $stmtAdmin = $pdo->prepare("
+                            SELECT
+                                id,
+                                username,
+                                email,
+                                rol,
+                                tipo_global,
+                                rol_evento
+                            FROM usuarios_admin
+                            WHERE email = :email
+                              AND activo = 1
+                            LIMIT 1
+                        ");
+                        $stmtAdmin->execute(array(':email' => $u['email']));
+                        $adminRow = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
+
+                        if ($adminRow) {
+                          // Es un admin del sistema → setear sesión como admin
+                          $_SESSION['es_admin']    = true;
+                          $_SESSION['admin_id']    = (int)$adminRow['id'];
+                          $_SESSION['user_id']     = (int)$adminRow['id']; // muchos scripts usan user_id
+                          $_SESSION['usuario']     = $adminRow['username'];
+                          $_SESSION['rol']         = $adminRow['rol'];
+                          $_SESSION['tipo_global'] = $adminRow['tipo_global'];
+                          $_SESSION['rol_evento']  = isset($adminRow['rol_evento']) ? $adminRow['rol_evento'] : '';
+
+                          // Si no había nombre/email en la vista usuarios, usar los de admin
+                          if (empty($_SESSION['usuario_nombre']) && isset($adminRow['nombre'])) {
+                            $_SESSION['usuario_nombre'] = $adminRow['nombre'];
+                            $_SESSION['nombre'] = $adminRow['nombre'];
+                          }
+                          if (empty($_SESSION['usuario_email']) && isset($adminRow['email'])) {
+                            $_SESSION['usuario_email'] = $adminRow['email'];
+                            $_SESSION['email'] = $adminRow['email'];
+                          }
+
+                          // Redirigimos al panel de admins
+                          header('Location: panel_admin.php');
+                          exit;
+                        }
+                    } catch (Exception $e) {
+                        // Si falla la consulta de admins, no rompemos el login de usuario común
+                        // error_log('Error consultando usuarios_admin: '.$e->getMessage());
+                    }
+
+                    // Si NO es admin, seguimos con el flujo normal de usuario común:
                     header('Location: panel_usuario.php');
                     exit;
                 }
@@ -85,7 +182,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ---------------------------------------------------------------------
 // Vista
+// ---------------------------------------------------------------------
 include __DIR__ . '/inc/layout_top.php';
 ?>
 <div class="card" style="max-width:480px;margin:0 auto 16px auto;text-align:center;">
@@ -118,7 +217,6 @@ include __DIR__ . '/inc/layout_top.php';
     <input type="text"
            id="email"
            name="email"
-           r
            value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
 
     <label for="password">Contraseña</label>
@@ -144,3 +242,4 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
+

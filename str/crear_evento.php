@@ -44,6 +44,9 @@ $fechaDesde  = '';
 $fechaHasta  = '';
 $descripcion = '';
 
+// flash messages
+$flashes = function_exists('flash_get_all') ? flash_get_all() : array();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $nombre      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
@@ -59,6 +62,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errorMsg = 'Nombre y slug son obligatorios.';
     } elseif (!preg_match('/^[a-z0-9\-]+$/', $slug)) {
         $errorMsg = 'El slug solo puede tener minúsculas, números y guiones (a-z, 0-9, -).';
+    } else {
+        // Unicidad de slug
+        $stSlug = $pdo->prepare("SELECT id FROM eventos WHERE slug = :slug LIMIT 1");
+        $stSlug->execute(array(':slug'=>$slug));
+        $slugRow = $stSlug->fetch(PDO::FETCH_ASSOC);
+        if ($slugRow) {
+            $errorMsg = 'Ese slug ya está en uso por otro evento.';
+        }
     }
 
     // Manejar flyer (opcional)
@@ -138,17 +149,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: configurar_entradas_evento.php?id=' . $eventoId);
             exit;
 
-        } catch (Exception $e) {
+                } catch (Exception $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            flash('err', 'Error al crear el evento: ' . $e->getMessage());
+                        $msg = $e->getMessage();
+                        if (stripos($msg, 'unique') !== false && stripos($msg, 'slug') !== false) {
+                                $msg = 'Ese slug ya está en uso por otro evento.';
+                        }
+                        flash('err', 'Error al crear el evento: ' . $msg);
         }
     }
 }
 
 include __DIR__.'/inc/layout_top.php';
 ?>
+<?php if (!empty($flashes)): ?>
+    <div class="card" style="max-width:640px;margin:0 auto 12px auto;">
+        <?php foreach ($flashes as $f): ?>
+            <div class="flash <?php echo e($f['type']); ?>"><?php echo e($f['msg']); ?></div>
+        <?php endforeach; ?>
+    </div>
+<?php endif; ?>
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
   <?php if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin'): ?>
