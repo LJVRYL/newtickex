@@ -20,3 +20,12 @@ config.local.php
 # Directorios de dependencias (por si en el futuro se usan)
 vendor/
 node_modules/
+
+# Local/prod data (never commit)
+str/*.sqlite
+str/*.sqlite.bak-*
+str/*.db
+str/*bridge*_error.log
+
+# Local/prod data backups (never commit)
+*.sqlite.bak-*
