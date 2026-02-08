@@ -1,31 +1,28 @@
-# Bases de datos (producción y local)
+# DB / runtime
 *.sqlite
+*.sqlite3
+save_the_rave.sqlite
 *.db
-
-# Logs y archivos temporales
 *.log
-log_mail_registro.txt
-*.tmp
-*.swp
 
-# Backups
-*.bak
-*.bak.*
-str.bak_*/
+# backups / temp
+BKP/
+*.bak_*
+*.broken_*
+*.CURRENT_*
+*.pre_fix_*
+/tmp/
+tools/*.tsv
 
-# Archivos de entorno / secretos (por si aparecen)
-.env
-config.local.php
+# secrets
+.secrets/
+inc/*.secret.php
+inc/*token*
 
-# Directorios de dependencias (por si en el futuro se usan)
-vendor/
-node_modules/
+# dumps / exports
+save_the_rave*.sql
+log_*.txt
 
-# Local/prod data (never commit)
-str/*.sqlite
-str/*.sqlite.bak-*
-str/*.db
-str/*bridge*_error.log
-
-# Local/prod data backups (never commit)
-*.sqlite.bak-*
+# accidental weird files
+$*
+[*]

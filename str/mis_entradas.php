@@ -11,8 +11,8 @@ $tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
 $userId     = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
 if ($tipoGlobal !== 'admin_evento' && $tipoGlobal !== 'super_admin') {
-    http_response_code(403);
-    $title = 'Acceso restringido';
+        header('Location: /login.php?next=' . urlencode($_SERVER['REQUEST_URI']), true, 302);
+    exit;
     require __DIR__ . '/inc/layout_top.php';
     echo '<div class="card"><div class="alert alert-danger">Acceso restringido.</div></div>';
     require __DIR__ . '/inc/layout_bottom.php';
@@ -449,43 +449,51 @@ require __DIR__ . '/inc/layout_top.php';
   <?php if (empty($plantillas)): ?>
     <p>No tenes plantillas cargadas todavia.</p>
   <?php else: ?>
-    <table style="width:100%;border-co:0.9em;">
-      <thead>
-        <tr>
-          <th>Categoria</th>
-          <th>Nombre</th>
-          <th>Tipo</th>
-          <th>Precio</th>
-          <th>Cant.</th>
-          <th>Activo</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($plantillas as $p): ?>
+    <div style="overflow:auto;margin-top:8px;">
+      <table class="table">
+        <thead>
           <tr>
-            <td><?php echo e($p['categoria']); ?></td>
-            <td><?php echo e($p['nombre']); ?></td>
-            <td><?php echo e($p['tipo']); ?></td>
-            <td><?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
-            <td><?php echo (int)$p['cantidad_default']; ?></td>
-            <td><?php echo ((int)$p['activo'] ? '✔' : '✖'); ?></td>
-            <td style="white-space:nowrap;">
-              <a href="mis_entradas.php?action=edit<a href="mis_entradas.php?action=edit&amp;id=amp;id=<?php echo (int)$p['id']; ?>"
-                 title="Editar">&#9998;</a>
-
-              <form method="post" action="mis_entradas.php"
-                    style="display:inline;"
-                    onsubmit="return confirm('Seguro que queres eliminar esta plantilla?');">
-                <input type="hidden" name="action" value="delete">
-                <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
-                <button type="submit" class="btn-link" title="Borrar">&#128465;</button>
-              </form>
-            </td>
+            <th>Categoria</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Precio</th>
+            <th>Cant.</th>
+            <th>Activo</th>
+            <th style="text-align:right;">Acciones</th>
           </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          <?php foreach ($plantillas as $p): ?>
+            <tr>
+              <td><?php echo e($p['categoria']); ?></td>
+              <td><?php echo e($p['nombre']); ?></td>
+              <td><?php echo e($p['tipo']); ?></td>
+              <td><?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
+              <td><?php echo (int)$p['cantidad_default']; ?></td>
+              <td>
+                <?php if ((int)$p['activo'] === 1): ?>
+                  <span style="color:var(--ok);font-weight:700;">Activo</span>
+                <?php else: ?>
+                  <span style="color:var(--warn);font-weight:700;">Inactivo</span>
+                <?php endif; ?>
+              </td>
+              <td style="text-align:right;white-space:nowrap;">
+                <a class="btn secondary" style="padding:6px 10px;font-size:14px;" href="mis_entradas.php?action=edit&amp;id=<?php echo (int)$p['id']; ?>" title="Editar">
+                  ✏️
+                </a>
+                <form method="post" action="mis_entradas.php" style="display:inline;" onsubmit="return confirm('Seguro que queres eliminar esta plantilla?');">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
+                  <button type="submit" class="btn danger" title="Borrar" style="padding:6px 10px;font-size:14px;">
+                    🗑️
+                  </button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
   <?php endif; ?>
 </div>
 

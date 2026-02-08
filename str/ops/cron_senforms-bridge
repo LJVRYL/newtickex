@@ -1,0 +1,1 @@
+* * * * * root flock -n /tmp/senforms_bridge.lock /usr/local/sbin/senforms_bridge_refresh.sh >>/var/log/senforms_bridge_refresh.log 2>&1

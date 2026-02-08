@@ -46,6 +46,26 @@ foreach ($colsEv as $c) {
     }
 }
 
+// Detectar columnas opcionales en tipos_entrada
+$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCategoria  = false;
+$hasTipoVenta  = false;
+$hasHoraLimite = false;
+foreach ($colsTE as $c) {
+  if (isset($c['name'])) {
+    if ($c['name'] === 'categoria') $hasCategoria = true;
+    if ($c['name'] === 'tipo_venta') $hasTipoVenta = true;
+    if ($c['name'] === 'hora_limite') $hasHoraLimite = true;
+  }
+}
+
+// Detectar si existe la tabla plantillas_entrada
+$hasTablaPlantillas = false;
+$stmtTbl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='plantillas_entrada' LIMIT 1");
+if ($stmtTbl && $stmtTbl->fetch(PDO::FETCH_ASSOC)) {
+  $hasTablaPlantillas = true;
+}
+
 // admin_evento solo puede tocar sus eventos
 if ($tipoGlobal === 'admin_evento' && $hasCreadoPor) {
     $creador = isset($evento['creado_por_admin_id']) ? (int)$evento['creado_por_admin_id'] : 0;
@@ -79,24 +99,28 @@ if (isset($_GET['del_te'])) {
 // =======================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template'])) {
 
+  if (!$hasTablaPlantillas) {
+    $error = "Esta base no tiene 'plantillas_entrada'. Crealas o agregá tipos manualmente.";
+  }
+
     $tplId = isset($_POST['tpl_id']) ? (int)$_POST['tpl_id'] : 0;
     if ($tplId <= 0) {
         $error = "Plantilla inválida.";
     }
 
-    if ($error === '') {
-        if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
-            $stTpl = $pdo->prepare("SELECT * FROM plantillas_entrada WHERE id = ? AND activo = 1");
-            $stTpl->execute(array($tplId));
-        } else {
-            $stTpl = $pdo->prepare("SELECT * FROM plantillas_entrada WHERE id = ? AND activo = 1 AND creado_por_admin_id = ?");
-            $stTpl->execute(array($tplId, $adminId));
-        }
+    if ($error === '' && $hasTablaPlantillas) {
+      if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
+        $stTpl = $pdo->prepare("SELECT * FROM plantillas_entrada WHERE id = ? AND activo = 1");
+        $stTpl->execute(array($tplId));
+      } else {
+        $stTpl = $pdo->prepare("SELECT * FROM plantillas_entrada WHERE id = ? AND activo = 1 AND creado_por_admin_id = ?");
+        $stTpl->execute(array($tplId, $adminId));
+      }
 
-        $tpl = $stTpl->fetch(PDO::FETCH_ASSOC);
-        if (!$tpl) {
-            $error = "No se encontró la plantilla o no tenés permiso para usarla.";
-        }
+      $tpl = $stTpl->fetch(PDO::FETCH_ASSOC);
+      if (!$tpl) {
+        $error = "No se encontró la plantilla o no tenés permiso para usarla.";
+      }
     }
 
     if ($error === '') {
@@ -107,51 +131,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
         $cant      = (int)$tpl['cantidad_default'];
         $hora      = isset($tpl['hora_limite_default']) ? $tpl['hora_limite_default'] : null;
         $desc      = isset($tpl['descripcion']) ? $tpl['descripcion'] : null;
+        $catVal    = $hasCategoria ? (isset($tpl['categoria']) ? $tpl['categoria'] : null) : null;
 
         if ($tipoVenta === 'FREE') {
-            $precio = 0;
+          $precio = 0;
         }
 
-        $sqlIns = "INSERT INTO tipos_entrada
-                   (evento_id, categoria, nombre, tipo, tipo_venta, precio,
-                    cantidad_total, cantidad_disponible, hora_limite, descripcion)
-                   VALUES
-                   (:eid, :cat, :nom, :tipo, :tv, :pre, :ct, :cd, :hl, :desc)";
+        // Build INSERT compatible con esquemas sin categoria/tipo_venta/hora_limite
+        $cols = array('evento_id','nombre','tipo','precio','cantidad_total','cantidad_disponible');
+        $vals = array(':eid',':nom',':tipo',':pre',':ct',':cd');
+        $params = array(
+          ':eid'  => $eventoId,
+          ':nom'  => $tpl['nombre'],
+          ':tipo' => $tipoVenta,
+          ':pre'  => $precio,
+          ':ct'   => $cant,
+          ':cd'   => $cant,
+        );
 
+        if ($hasCategoria) {
+          $cols[] = 'categoria';
+          $vals[] = ':cat';
+          $params[':cat'] = $catVal;
+        }
+        if ($hasTipoVenta) {
+          $cols[] = 'tipo_venta';
+          $vals[] = ':tv';
+          $params[':tv'] = $tipoVenta;
+        }
+        if ($hasHoraLimite) {
+          $cols[] = 'hora_limite';
+          $vals[] = ':hl';
+          $params[':hl'] = $hora;
+        }
+
+        // descripcion si existe la columna
+        $hasDesc = false;
+        foreach ($colsTE as $c) {
+          if (isset($c['name']) && $c['name'] === 'descripcion') {
+            $hasDesc = true; break;
+          }
+        }
+        if ($hasDesc) {
+          $cols[] = 'descripcion';
+          $vals[] = ':desc';
+          $params[':desc'] = $desc;
+        }
+
+        $sqlIns = "INSERT INTO tipos_entrada (".implode(',', $cols).") VALUES (".implode(',', $vals).")";
         $stIns = $pdo->prepare($sqlIns);
-        $stIns->execute(array(
-            ':eid'  => $eventoId,
-            ':cat'  => $tpl['categoria'],
-            ':nom'  => $tpl['nombre'],
-            ':tipo' => $tipoVenta,
-            ':tv'   => $tipoVenta,
-            ':pre'  => $precio,
-            ':ct'   => $cant,
-            ':cd'   => $cant,
-            ':hl'   => $hora,
-            ':desc' => $desc
-        ));
+        $stIns->execute($params);
 
         $okMsg = "Tipo de entrada agregado al evento desde Mis Entradas.";
     }
 }
 
-// ===== Tipos ya asociados al evento =====
-$stTE = $pdo->prepare("SELECT * FROM tipos_entrada WHERE evento_id = ? ORDER BY categoria ASC, nombre ASC, id ASC");
-$stTE->execute(array($eventoId));
+    // ===== Tipos ya asociados al evento =====
+    $orderBy = $hasCategoria ? 'categoria ASC, nombre ASC, id ASC' : 'nombre ASC, id ASC';
+    $stTE = $pdo->prepare("SELECT * FROM tipos_entrada WHERE evento_id = ? ORDER BY $orderBy");
+    $stTE->execute(array($eventoId));
 $tiposEvento = $stTE->fetchAll(PDO::FETCH_ASSOC);
 
 // ===== Plantillas (Mis Entradas) del admin =====
-if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
+if ($hasTablaPlantillas) {
+  if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
     $sqlTplList = "SELECT * FROM plantillas_entrada WHERE activo = 1 ORDER BY categoria ASC, nombre ASC";
     $stTplList = $pdo->prepare($sqlTplList);
     $stTplList->execute();
-} else {
+  } else {
     $sqlTplList = "SELECT * FROM plantillas_entrada WHERE activo = 1 AND creado_por_admin_id = ? ORDER BY categoria ASC, nombre ASC";
     $stTplList = $pdo->prepare($sqlTplList);
     $stTplList->execute(array($adminId));
+  }
+  $plantillas = $stTplList->fetchAll(PDO::FETCH_ASSOC);
+} else {
+  $plantillas = array();
 }
-$plantillas = $stTplList->fetchAll(PDO::FETCH_ASSOC);
 
 // ===== Texto de fechas para el HTML =====
 $fd = isset($evento['fecha_desde']) ? $evento['fecha_desde'] : '';
@@ -219,8 +274,9 @@ include __DIR__.'/inc/layout_top.php';
       <label for="tpl_id" class="muted">Plantilla:</label>
       <select name="tpl_id" id="tpl_id">
         <?php foreach ($plantillas as $tpl): ?>
+          <?php $catTpl = isset($tpl['categoria']) ? $tpl['categoria'] : 'General'; ?>
           <option value="<?php echo (int)$tpl['id']; ?>">
-            <?php echo e($tpl['categoria']); ?> – <?php echo e($tpl['nombre']); ?>
+            <?php echo e($catTpl); ?> – <?php echo e($tpl['nombre']); ?>
             (<?php echo e($tpl['tipo']); ?>,
              $<?php echo (int)$tpl['precio_default']; ?>,
              <?php echo (int)$tpl['cantidad_default']; ?>)
@@ -256,13 +312,16 @@ include __DIR__.'/inc/layout_top.php';
         <?php foreach ($tiposEvento as $te): ?>
           <tr>
             <td><?php echo (int)$te['id']; ?></td>
-            <td><?php echo e($te['categoria']); ?></td>
+            <?php $cat = isset($te['categoria']) ? $te['categoria'] : ''; ?>
+            <?php $tv  = isset($te['tipo_venta']) ? $te['tipo_venta'] : (isset($te['tipo'])?$te['tipo']:''); ?>
+            <?php $hl  = isset($te['hora_limite']) ? $te['hora_limite'] : ''; ?>
+            <td><?php echo e($cat); ?></td>
             <td><?php echo e($te['nombre']); ?></td>
-            <td><?php echo e($te['tipo_venta']); ?></td>
+            <td><?php echo e($tv); ?></td>
             <td>$<?php echo (int)$te['precio']; ?></td>
             <td><?php echo (int)$te['cantidad_total']; ?></td>
             <td><?php echo (int)$te['cantidad_disponible']; ?></td>
-            <td><?php echo e($te['hora_limite']); ?></td>
+            <td><?php echo e($hl); ?></td>
             <td>
               <a class="btn secondary"
                  href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>&del_te=<?php echo (int)$te['id']; ?>"

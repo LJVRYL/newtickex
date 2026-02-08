@@ -1,7 +1,9 @@
 <?php
+require_once __DIR__ . "/str_diag.php";
 
-
-
+if (( ?? "") === "POST") {
+  str_diag_log("[STR][POST] editar_evento.php id=" . ( ?? "?") . " keys=" . implode(",", array_keys()));
+}
 header("X-STR-HIT: 1");
 file_put_contents("/tmp/str-hit.log", date("c")." HIT editar_evento\n", FILE_APPEND);
 file_put_contents("/tmp/str-hit.log", date("c")." HIT editar_evento\n", FILE_APPEND);
@@ -137,36 +139,20 @@ if ($_SERVER["REQUEST_METHOD"]==="POST" && isset($_POST["add_from_template"])) {
             $precio = 0;
         }
 
-        $stIns=$pdo->prepare("
-            INSERT INTO tipos_entrada
-              (evento_id, nombre, tipo, precio,
-               cantidad_total, cantidad_disponible, hora_limite, reglas_precio)
-            VALUES
-              (:eid,:nom,:tipo,:pre,:ct,:cd,:hl,:reg)
-        ");
-
-        $pre = (int)($tpl["precio_default"] ?? $tpl["precio"] ?? 0);
-        $ct  = (int)($tpl["cantidad_default"] ?? $tpl["cantidad_total"] ?? 0);
-        $hl  = ($tpl["hora_limite_default"] ?? $tpl["hora_limite"] ?? null);
-        $reg = ($tpl["reglas_default"] ?? $tpl["reglas_precio"] ?? null);
-
-        $tipo = $tpl["tipo"] ?? ($tpl["tipo_venta"] ?? null);
-        if ($tipo === null || $tipo === "") {
-          $tipo = ($pre > 0) ? "paga" : "free";
-        }
-        if ($tipo !== "free" && $tipo !== "paga") { $tipo = "free"; }
-
+        $stIns=$pdo->prepare("\n            INSERT INTO tipos_entrada\n              (evento_id, categoria, nombre, tipo_venta, precio,\n               cantidad_total, cantidad_disponible, hora_limite, descripcion)\n            VALUES\n              (:eid,:cat,:nom,:tv,:pre,:ct,:cd,:hl,:desc)\n        ");
         $stIns->execute(array(
-          ":eid"  => $eventoId,
-          ":nom"  => ($tpl["nombre"] ?? ""),
-          ":tipo" => $tipo,
-          ":pre"  => $pre,
-          ":ct"   => $ct,
-          ":cd"   => $ct,
-          ":hl"   => $hl,
-          ":reg"  => $reg
+            ":eid"=>$eventoId,
+            ":cat"=>$tpl["categoria"],
+            ":nom"=>$tpl["nombre"],
+            ":tv"=>$tipoVenta,
+            ":pre"=>$precio,
+            ":ct"=>$cant,
+            ":cd"=>$cant,
+            ":hl"=>$hora,
+            ":desc"=>$desc
         ));
-$okMsg="Tipo agregado desde Mis Entradas.";
+
+        $okMsg="Tipo agregado desde Mis Entradas.";
     }
 }
 
