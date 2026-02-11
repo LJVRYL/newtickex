@@ -670,8 +670,8 @@ function get_economic_stats($pdo, $evento_id) {
         
         while ($row = $stmtStr->fetch(PDO::FETCH_ASSOC)) {
             $tipo = isset($row['tipo']) ? trim((string)$row['tipo']) : 'Desconocido';
-            $qty = (int)($row['qty'] ?? 0);
-            $monto = (float)($row['monto'] ?? 0);
+            $qty = isset($row['qty']) ? (int)$row['qty'] : 0;
+            $monto = isset($row['monto']) ? (float)$row['monto'] : 0;
             
             $stats['entradas_vendidas'] += $qty;
             $stats['total_recaudado'] += $monto;
@@ -756,8 +756,8 @@ function get_economic_stats($pdo, $evento_id) {
 
                     while ($row = $stmtBridge->fetch(PDO::FETCH_ASSOC)) {
                         $tipo = isset($row['tipo']) && $row['tipo'] ? trim((string)$row['tipo']) : 'Tickex';
-                        $qty = (int)($row['qty'] ?? 0);
-                        $monto = (float)($row['monto'] ?? 0);
+                        $qty = isset($row['qty']) ? (int)$row['qty'] : 0;
+                        $monto = isset($row['monto']) ? (float)$row['monto'] : 0;
 
                         $stats['entradas_vendidas'] += $qty;
                         $stats['total_recaudado'] += $monto;
