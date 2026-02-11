@@ -19,18 +19,46 @@ try {
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
   ]);
 
-  $st = $pdo->prepare("SELECT event_public_id FROM tickex_event_map WHERE str_event_id = :id LIMIT 1");
+  // Detectar slug del evento y forzar el nuevo EventPublicId si es 4aniversario
+  $eventSlug = '';
+  $stSlug = $pdo->prepare("SELECT slug FROM eventos WHERE id = :id LIMIT 1");
+  if ($stSlug->execute([':id' => $id])) {
+    $rowSlug = $stSlug->fetch();
+    if ($rowSlug && isset($rowSlug['slug'])) {
+      $eventSlug = strtolower(trim((string)$rowSlug['slug']));
+    }
+  }
+
+  $st = $pdo->prepare("SELECT event_public_id, event_slug FROM tickex_event_map WHERE str_event_id = :id LIMIT 1");
   $st->execute([':id' => $id]);
   $row = $st->fetch();
 
-  if (!$row || empty($row['event_public_id'])) {
+  $publicId = ($row && !empty($row['event_public_id'])) ? trim((string)$row['event_public_id']) : '';
+
+  $targetSlug = '4aniversario';
+  $targetPublicId = '08462152-64ed-4444-89ff-37c01d5b56c0';
+
+  if ($eventSlug === $targetSlug && $publicId !== $targetPublicId) {
+    $sql = $row
+      ? "UPDATE tickex_event_map SET event_slug = :slug, event_public_id = :pub WHERE str_event_id = :id"
+      : "INSERT INTO tickex_event_map (str_event_id, event_slug, event_public_id) VALUES (:id, :slug, :pub)";
+
+    $stUp = $pdo->prepare($sql);
+    $stUp->execute([
+      ':id'   => $id,
+      ':slug' => $targetSlug,
+      ':pub'  => $targetPublicId,
+    ]);
+
+    $publicId = $targetPublicId;
+  }
+
+  if ($publicId === '') {
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     echo "No existe mapeo Tickex para este evento STR (id=$id).\n";
     exit;
   }
-
-  $publicId = trim((string)$row['event_public_id']);
   $url = "https://tickex.com.ar/Ticket/PublicTicket?EventPublicId=" . rawurlencode($publicId);
 
   header("Location: $url", true, 302);

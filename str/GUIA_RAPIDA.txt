@@ -1,0 +1,368 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    GUÍA RÁPIDA DE REFERENCIA                               ║
+║                    panel_evento.php - Refactor 2026                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+                              QUICK REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+¿QUÉ SE HIZO?
+─────────────
+  1. Unificación de entradas (STR + Tickex) en una sola tabla
+  2. Nuevo módulo para registrar ingresos manuales
+  3. AJAX para agregar/eliminar ingresos sin recargar
+  4. Mantiene estructura visual y permisos existentes
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ARCHIVOS CLAVES
+────────────────
+
+Estructura HTML:
+  panel_evento.php        ← Panel principal (refactorizado)
+
+Helpers:
+  inc/unified_tickets.php ← Lógica de unificación
+  inc/manual_income.php   ← Gestión de ingresos
+
+API:
+  add_manual_income.php   ← POST para agregar
+  delete_manual_income.php← POST para eliminar
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CÓMO FUNCIONA
+──────────────
+
+1. UNIFICACIÓN DE ENTRADAS
+   
+   panel_evento.php
+   └─ get_unified_entries(pdo, evento_id, filters)
+      ├─ SELECT FROM entradas (STR)
+      ├─ SELECT FROM v_senforms_bridge_status OR senforms_bridge_tickets
+      ├─ Normaliza a formato común
+      └─ Retorna array unificado
+
+2. INGRESOS MANUALES
+   
+   Agregar:
+   └─ Formulario → add_manual_income.php → BD
+   
+   Eliminar:
+   └─ Botón 🗑 → delete_manual_income.php → BD
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TABLA DE DATOS (unificada)
+───────────────────────────
+
+Campos que visualiza:
+  • Origen      → STR o TICKEX
+  • ID          → ticket_id
+  • Nombre      → nombre
+  • Email       → email
+  • Tipo        → tipo (VIP, General, etc)
+  • Código/Ref  → ticket_ref
+  • Pago        → is_paid (✓ o ✗)
+  • Estado      → is_checked_in (OK o Pendiente)
+  • Acciones    → Link a ticket (STR) o texto (TICKEX)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BASE DE DATOS
+──────────────
+
+Tabla nueva (creada automáticamente):
+  manual_income
+  ├─ id (PK)
+  ├─ evento_id (FK)
+  ├─ concepto (qué es el ingreso)
+  ├─ monto (cantidad en dinero)
+  ├─ descripcion (notas adicionales)
+  ├─ creado_por (user_id de quien lo agregó)
+  ├─ created_at (timestamp automático)
+  └─ updated_at (timestamp automático)
+
+Índice:
+  idx_manual_income_evento (para queries rápidas)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+JAVASCRIPT (AJAX)
+──────────────────
+
+Agregar ingreso:
+  form#formManualIncome
+  └─ submit → fetch('/add_manual_income.php')
+     ├─ POST con FormData
+     └─ Reload en éxito
+
+Eliminar ingreso:
+  button.btn-delete-income
+  └─ click → fetch('/delete_manual_income.php')
+     ├─ POST con income ID
+     └─ Reload en éxito
+
+═══════════════════════════════════════════════════════════════════════════════
+
+VALIDACIONES
+─────────────
+
+Entrada:
+  ✓ evento_id: entero positivo
+  ✓ concepto: texto no vacío
+  ✓ monto: número positivo
+  ✓ descripcion: texto (puede estar vacío)
+
+Permisos:
+  ✓ Solo admin_evento, super_admin
+  ✓ Login requerido
+  ✓ Evento ownership validado
+
+DB:
+  ✓ Prepared statements (previene SQL injection)
+  ✓ INT casting para IDs
+  ✓ Timestamps automáticos
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TESTING RÁPIDO
+───────────────
+
+Paso 1: Iniciar servidor
+  cd F:\GIT\newtickex\str
+  php -S 127.0.0.1:8080 -t .
+
+Paso 2: Verificar setup
+  http://127.0.0.1:8080/check_setup.php
+
+Paso 3: Abrir panel
+  http://127.0.0.1:8080/panel_evento.php?evento_id=1
+
+Paso 4: Probar
+  □ Ver tabla unificada (STR + TICKEX)
+  □ Agregar ingreso manual
+  □ Eliminar ingreso manual
+  □ Verificar total
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DEBUGGING
+──────────
+
+Si algo no funciona:
+
+1. Abre check_setup.php
+   └─ Te dirá qué está mal
+
+2. Abre console del navegador (F12)
+   └─ Busca errores JavaScript
+
+3. Revisa BD directamente
+   └─ ¿Existe tabla manual_income?
+   └─ ¿Hay datos?
+
+4. Lee documentación
+   └─ README_REFACTOR.md (técnico)
+   └─ CAMBIOS_RESUMEN.txt (simple)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FUNCIONES PRINCIPALES
+───────────────────────
+
+En inc/unified_tickets.php:
+
+  get_unified_entries(pdo, evento_id, filters)
+  └─ NÚCLEO: retorna entradas unificadas
+  └─ Entrada: (pdo, id evento, filtros)
+  └─ Salida: array [source, ticket_id, nombre, email, is_paid, ...]
+
+  count_unified_entries(entries)
+  └─ Calcula stats
+  └─ Entrada: array de entradas
+  └─ Salida: [total, checkins, paid, pendiente]
+
+En inc/manual_income.php:
+
+  add_manual_income(pdo, evento_id, concepto, monto, descripcion)
+  └─ Agrega ingreso
+  └─ Retorna: true/false
+
+  delete_manual_income(pdo, income_id)
+  └─ Elimina ingreso
+  └─ Retorna: true/false
+
+  get_manual_incomes(pdo, evento_id)
+  └─ Lista ingresos del evento
+  └─ Retorna: array de filas
+
+  get_total_manual_income(pdo, evento_id)
+  └─ Suma total
+  └─ Retorna: float
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ENDPOINTS API
+───────────────
+
+POST /add_manual_income.php
+  Input:
+    evento_id (int)
+    concepto (string, required)
+    monto (float, required, > 0)
+    descripcion (string, optional)
+  
+  Output (JSON):
+    { "success": true, "message": "..." }
+    o
+    { "error": "..." }
+
+POST /delete_manual_income.php
+  Input:
+    id (int)
+  
+  Output (JSON):
+    { "success": true }
+    o
+    { "error": "..." }
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PARÁMETROS URL
+───────────────
+
+panel_evento.php
+  ?evento_id=1        ← ID del evento (obligatorio para detalle)
+  &q=busqueda         ← Búsqueda por nombre/email/código
+  &tipo=VIP           ← Filtro por tipo de entrada
+  &estado=checkin_ok  ← Filtro: checkin_ok o pendiente
+
+Ej: panel_evento.php?evento_id=5&q=Juan&tipo=VIP
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ESTILOS CSS
+────────────
+
+Clases usadas (existentes):
+  .card       ← Contenedor de sección
+  .btn        ← Botón primario
+  .link       ← Link estilo botón
+  .muted      ← Texto gris (no destacado)
+  .table      ← Tabla con estilo
+
+Variables CSS usadas:
+  --ok        ← Verde (éxito)
+  --warn      ← Naranja (advertencia)
+  --info      ← Azul (información)
+  --muted     ← Gris
+  --panel-2   ← Color de fondo secundario
+
+═══════════════════════════════════════════════════════════════════════════════
+
+COMPATIBILIDAD
+───────────────
+
+BD:
+  ✓ SQLite 3+
+  ✓ Sin dependencias externas
+  ✓ Local only
+
+PHP:
+  ✓ PHP 7+
+  ✓ PDO + SQLite
+  ✓ Sin frameworks
+
+Frontend:
+  ✓ HTML5
+  ✓ CSS3 (grid, flex)
+  ✓ JavaScript vanilla (fetch API)
+  ✓ Todos los navegadores modernos
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PRÓXIMAS MEJORAS (OPCIONALES)
+──────────────────────────────
+
+Corto plazo:
+  • Auditoría de cambios en ingresos
+  • Reportes por concepto
+  • Validaciones adicionales
+
+Mediano plazo:
+  • Integración con contabilidad
+  • Exportación a Excel/CSV
+  • Permisos granulares
+
+Largo plazo:
+  • Dashboard de ingresos
+  • Gráficos por evento
+  • Predicciones
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DOCUMENTACIÓN DISPONIBLE
+──────────────────────────
+
+Para leer:
+  ✓ LEEME_PRIMERO.txt            ← Start here
+  ✓ CAMBIOS_RESUMEN.txt          ← Simple explicación
+  ✓ REFACTOR_PANEL_EVENTO.md     ← Features explicadas
+  ✓ README_REFACTOR.md           ← Técnico detallado
+  ✓ CAMBIOS_LINEA_POR_LINEA.txt  ← Diff exacto
+  ✓ CHECKLIST_IMPLEMENTACION.txt ← Qué se hizo
+  ✓ TEST_INSTRUCTIONS.sh         ← Testing paso a paso
+
+Para ejecutar:
+  ✓ check_setup.php              ← Verificación
+  ✓ panel_evento.php             ← Panel principal
+
+═══════════════════════════════════════════════════════════════════════════════
+
+RESUMEN DE FICHEROS
+────────────────────
+
+Creados (10):
+  ✓ inc/unified_tickets.php
+  ✓ inc/manual_income.php
+  ✓ add_manual_income.php
+  ✓ delete_manual_income.php
+  ✓ check_setup.php
+  ✓ LEEME_PRIMERO.txt
+  ✓ RESUMEN_EJECUTIVO.txt
+  ✓ README_REFACTOR.md
+  ✓ REFACTOR_PANEL_EVENTO.md
+  ✓ Documentación (6 .txt/.md/.sh)
+
+Modificados (1):
+  ✓ panel_evento.php (458→581 líneas)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+¿PREGUNTAS?
+───────────
+
+  1. ¿Dónde empiezo?
+     → LEEME_PRIMERO.txt
+
+  2. ¿Cómo hago testing?
+     → TEST_INSTRUCTIONS.sh
+
+  3. ¿Cómo verifico que funciona?
+     → check_setup.php
+
+  4. ¿Entiendo el código?
+     → README_REFACTOR.md
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ LISTO PARA USAR
+
+Última actualización: 2026-02-08
+Autor: GitHub Copilot
+Tecnología: PHP + SQLite + Vanilla JS
+Status: Producción local ✓
+
+═══════════════════════════════════════════════════════════════════════════════

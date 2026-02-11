@@ -29,6 +29,11 @@ if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('them
 <div class="topbar">
     <div class="wrap">
         <a class="logo" href="panel_admin.php">TICKEX</a>
+        <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
         <?php include __DIR__ . '/nav.php'; ?>
         <div class="userchip">
             <?php if (!empty($_SESSION['usuario'])): ?>
@@ -47,3 +52,19 @@ foreach ($flashes as $f) {
     echo "<div class='flash $t'>$m</div>";
 }
 ?>
+<script>
+  const hamburger = document.getElementById('hamburgerBtn');
+  const nav = document.querySelector('.nav');
+  if(hamburger && nav) {
+    hamburger.addEventListener('click', function() {
+      hamburger.classList.toggle('active');
+      nav.classList.toggle('active');
+    });
+    nav.addEventListener('click', function(e) {
+      if(e.target.tagName === 'A') {
+        hamburger.classList.remove('active');
+        nav.classList.remove('active');
+      }
+    });
+  }
+</script>

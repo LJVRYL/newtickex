@@ -1,5 +1,8 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/unified_tickets.php';
+require_once __DIR__.'/inc/manual_income.php';
+require_once __DIR__.'/inc/senforms.php';
 
 require_login();
 
@@ -62,63 +65,63 @@ if ($stmtTipos && $stmtTipos->fetch(PDO::FETCH_ASSOC)) {
 
 // Stats por evento
 function stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasCantTotal) {
-    $out = array('total'=>0,'checkins'=>0,'faltan'=>0,'disponibles'=>null,'stock_total'=>null);
+  $out = array('total'=>0,'checkins'=>0,'faltan'=>0,'disponibles'=>null,'stock_total'=>null);
 
-    $stmtT = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ?");
-    $stmtT->execute(array($eventoId));
-    $out['total'] = (int)$stmtT->fetchColumn();
+  $stmtT = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ?");
+  $stmtT->execute(array($eventoId));
+  $out['total'] = (int)$stmtT->fetchColumn();
 
-    $stmtC = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1");
-    $stmtC->execute(array($eventoId));
-    $out['checkins'] = (int)$stmtC->fetchColumn();
-    $out['faltan'] = max(0, $out['total'] - $out['checkins']);
+  $stmtC = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1");
+  $stmtC->execute(array($eventoId));
+  $out['checkins'] = (int)$stmtC->fetchColumn();
+  $out['faltan'] = max(0, $out['total'] - $out['checkins']);
 
-    if ($hasTipos) {
-        $cols = array();
-        if ($hasCantDisp) $cols[] = 'SUM(cantidad_disponible) AS disp';
-        if ($hasCantTotal) $cols[] = 'SUM(cantidad_total) AS tot';
-        if ($cols) {
-            $sql = "SELECT ".implode(',', $cols)." FROM tipos_entrada WHERE evento_id = ?";
-            $st = $pdo->prepare($sql);
-            $st->execute(array($eventoId));
-            $row = $st->fetch(PDO::FETCH_ASSOC);
-            if ($row) {
-                if ($hasCantDisp) $out['disponibles'] = isset($row['disp']) ? (int)$row['disp'] : null;
-                if ($hasCantTotal) $out['stock_total'] = isset($row['tot']) ? (int)$row['tot'] : null;
-            }
-        }
+  if ($hasTipos) {
+    $cols = array();
+    if ($hasCantDisp) $cols[] = 'SUM(cantidad_disponible) AS disp';
+    if ($hasCantTotal) $cols[] = 'SUM(cantidad_total) AS tot';
+    if ($cols) {
+      $sql = "SELECT ".implode(',', $cols)." FROM tipos_entrada WHERE evento_id = ?";
+      $st = $pdo->prepare($sql);
+      $st->execute(array($eventoId));
+      $row = $st->fetch(PDO::FETCH_ASSOC);
+      if ($row) {
+        if ($hasCantDisp) $out['disponibles'] = isset($row['disp']) ? (int)$row['disp'] : null;
+        if ($hasCantTotal) $out['stock_total'] = isset($row['tot']) ? (int)$row['tot'] : null;
+      }
     }
-    return $out;
+  }
+  return $out;
 }
 
 // Lista de eventos (vista general)
 $qList = ($eventoId <= 0 && isset($_GET['q'])) ? trim($_GET['q']) : '';
 
 if ($rol === 'super_admin' || $rol === 'superadmin') {
-    if ($qList === '') {
-        $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
-    } else {
-        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE nombre LIKE :q OR slug LIKE :q ORDER BY id DESC");
-        $stmtList->execute(array(':q' => '%'.$qList.'%'));
-    }
-    $eventos = $stmtList ? $stmtList->fetchAll(PDO::FETCH_ASSOC) : array();
+  if ($qList === '') {
+    $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
+  } else {
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE nombre LIKE :q OR slug LIKE :q ORDER BY id DESC");
+    $stmtList->execute(array(':q' => '%'.$qList.'%'));
+  }
+  $eventos = $stmtList ? $stmtList->fetchAll(PDO::FETCH_ASSOC) : array();
 } elseif ($hasCreadoPor) {
-    if ($qList === '') {
-        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE creado_por_admin_id = :aid ORDER BY id DESC");
-        $stmtList->execute(array(':aid' => $adminId));
-    } else {
-        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE creado_por_admin_id = :aid AND (nombre LIKE :q OR slug LIKE :q) ORDER BY id DESC");
-        $stmtList->execute(array(':aid' => $adminId, ':q' => '%'.$qList.'%'));
-    }
-    $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
+  if ($qList === '') {
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE creado_por_admin_id = :aid ORDER BY id DESC");
+    $stmtList->execute(array(':aid' => $adminId));
+  } else {
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE creado_por_admin_id = :aid AND (nombre LIKE :q OR slug LIKE :q) ORDER BY id DESC");
+    $stmtList->execute(array(':aid' => $adminId, ':q' => '%'.$qList.'%'));
+  }
+  $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 } else {
-    if ($qList === '') {
-        $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
-    } else {
-        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE nombre LIKE :q OR slug LIKE :q ORDER BY id DESC");
-        $stmtList->execute(array(':q' => '%'.$qList.'%'));
-    }
-    $eventos = $stmtList ? $stmtList->fetchAll(PDO::FETCH_ASSOC) : array();
+  if ($qList === '') {
+    $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
+  } else {
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE nombre LIKE :q OR slug LIKE :q ORDER BY id DESC");
+    $stmtList->execute(array(':q' => '%'.$qList.'%'));
+  }
+  $eventos = $stmtList ? $stmtList->fetchAll(PDO::FETCH_ASSOC) : array();
 }
 
 // contadores de eventos
@@ -171,15 +174,21 @@ if ($eventoId <= 0) {
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <div class="card" style="flex:1 1 200px;min-width:200px;">
           <div class="muted">Eventos creados</div>
-          <div style="font-size:24px;font-weight:700;"><?php echo (int)$eventosCreados; ?></div>
+          <div style="font-size:24px;font-weight:700;">
+            <?php echo (int)$eventosCreados; ?>
+          </div>
         </div>
         <div class="card" style="flex:1 1 200px;min-width:200px;">
           <div class="muted">Eventos activos</div>
-          <div style="font-size:24px;font-weight:700;"><?php echo (int)$eventosActivos; ?></div>
+          <div style="font-size:24px;font-weight:700;">
+            <?php echo (int)$eventosActivos; ?>
+          </div>
         </div>
         <div class="card" style="flex:1 1 200px;min-width:200px;">
           <div class="muted">Total eventos</div>
-          <div style="font-size:24px;font-weight:700;"><?php echo (int)$eventosTotal; ?></div>
+          <div style="font-size:24px;font-weight:700;">
+            <?php echo (int)$eventosTotal; ?>
+          </div>
         </div>
       </div>
     </div>
@@ -252,8 +261,6 @@ if ($eventoId <= 0) {
     include __DIR__.'/inc/layout_bottom.php';
     exit;
 }
-
-// obtener datos del evento (modo detalle)
 $stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id=:id");
 $stmtEv->execute(array(':id'=>$eventoId));
 $evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
@@ -279,86 +286,100 @@ $q       = isset($_GET['q'])      ? trim($_GET['q'])       : '';
 $fTipo   = isset($_GET['tipo'])   ? trim($_GET['tipo'])    : '';
 $fEstado = isset($_GET['estado']) ? trim($_GET['estado'])  : '';
 
-$where  = array("evento_id = :eid");
-$params = array(':eid'=>$eventoId);
-
-if ($q !== '') {
-    $where[] = "(nombre LIKE :q OR email LIKE :q OR codigo LIKE :q)";
-    $params[':q'] = '%'.$q.'%';
-}
-if ($fTipo !== '') {
-    $where[] = "tipo = :tipo";
-    $params[':tipo'] = $fTipo;
-}
-if ($fEstado === 'checkin_ok') {
-    $where[] = "$colCheck = 1";
-}
-if ($fEstado === 'pendiente') {
-    $where[] = "$colCheck = 0";
-}
-
-// ejecutar
-$sql = "
-SELECT *
-FROM entradas
-WHERE ".implode(" AND ",$where)."
-ORDER BY id DESC
-";
-$stmtRows = $pdo->prepare($sql);
-$stmtRows->execute($params);
-$rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
+// Obtener entradas unificadas (STR + TICKEX)
+$filters = array(
+    'q'      => $q,
+    'tipo'   => $fTipo,
+    'estado' => $fEstado,
+);
+$rows = get_unified_entries($pdo, $eventoId, $filters);
 
 // estadísticas
-$total     = count($rows);
-$checkins  = 0;
-foreach ($rows as $r) {
-  if (isset($r[$colCheck]) && (int)$r[$colCheck] === 1) $checkins++;
-}
-$faltan = $total - $checkins;
+$stats = count_unified_entries($rows);
+$total     = $stats['total'];
+$checkins  = $stats['checkins'];
+$faltan    = $stats['pendiente'];
+$paid      = $stats['paid'];
 
-// métricas globales del evento (no filtradas)
-$stEvento = stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasCantTotal);
+// métricas globales del evento (no filtradas) - UNIFICADAS (STR + TICKEX)
+$stEvento = get_unified_stats($pdo, $eventoId);
+$gratis = 0;
+if (!empty($rows)) {
+  foreach ($rows as $r) {
+    if (empty($r['is_paid'])) $gratis++;
+  }
+} else {
+  $gratis = max(0, (int)$stEvento['total'] - (int)$stEvento['paid']);
+}
 
 $title = "Panel del Evento – " . (isset($evento['nombre']) ? $evento['nombre'] : 'Evento');
 include __DIR__.'/inc/layout_top.php';
 ?>
 
 <div class="card">
-  <h2><?php echo e($evento['nombre']); ?></h2>
-  <div>Slug: <strong><?php echo e($evento['slug']); ?></strong></div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;">
+    <div style="flex:1 1 320px;min-width:260px;">
+      <div class="muted" style="letter-spacing:0.06em;font-size:12px;text-transform:uppercase;">Evento</div>
+      <h2 style="margin:4px 0 8px;"><?php echo e($evento['nombre']); ?></h2>
+      <?php
+        // Mostrar mapping actual hacia bridge (si existe)
+        $currentMap = get_mapped_bridge_slugs($pdo, $eventoId);
+      ?>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+        <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;">Slug: <strong><?php echo e($evento['slug']); ?></strong></span>
+        <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;display:inline-flex;gap:6px;align-items:center;">
+          <span>Bridge:</span>
+          <?php if (!empty($currentMap)): ?>
+            <strong><?php echo e(implode(', ', $currentMap)); ?></strong>
+          <?php else: ?>
+            <span class="muted">(no mapeado)</span>
+          <?php endif; ?>
+        </span>
+      </div>
+    </div>
 
-  <?php include __DIR__."/inc/tickex_bridge_panel_block.php"; ?>
-<!-- STR BUY BTN START -->
-  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <a class="btn" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">🎟 Adquirir entrada</a>
-    <a class="btn secondary" href="comprar_iframe.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Ver embebido</a>
   </div>
-  <!-- STR BUY BTN END -->
-  <div style="margin-top:10px;">
-    <a class="btn secondary" href="cargar_entrada.php?evento_id=<?php echo (int)$eventoId; ?>">➕ Cargar entrada</a>
+
+  <?php 
+    $btnStyle = 'min-width:160px;justify-content:center;background:var(--panel-2);color:var(--text);border:1px solid var(--line);box-shadow:none;font-size:13px;font-weight:600;padding:10px 12px;border-radius:10px;';
+    $btnPrimary = 'min-width:160px;justify-content:center;background:var(--ok);color:#fff;border:1px solid var(--ok);box-shadow:none;font-size:13px;font-weight:700;padding:10px 12px;border-radius:10px;';
+  ?>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;justify-content:flex-start;">
+    <button class="btn" style="<?php echo $btnPrimary; ?>" id="toggleQuickLoad">+ Cargar entrada</button>
+    <button id="btnEditBridgeMap" class="btn" style="<?php echo $btnStyle; ?>">Editar mapping</button>
+    <?php if (in_array($rol, array('super_admin','superadmin','admin_evento'), true) && !empty($currentMap)): ?>
+      <a class="btn" style="<?php echo $btnStyle; ?>" href="edit_tickex.php?evento_id=<?php echo (int)$eventoId; ?>">Editar evento Tickex</a>
+    <?php endif; ?>
+    <a class="btn" style="<?php echo $btnStyle; ?>" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Comprar</a>
+    <a class="btn" style="<?php echo $btnStyle; ?>" href="panel_evento.php">Volver a mis eventos</a>
   </div>
-  <div style="margin-top:10px;">
-    <a class="link" href="panel_evento.php">← Volver a mis eventos</a>
+
+  <div id="quickLoadPanel" style="display:none;margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="font-weight:700;">Carga rápida de entradas</div>
+      <a class="link" href="cargar_entrada.php?evento_id=<?php echo (int)$eventoId; ?>&embed=1" target="_blank" rel="noopener">Abrir en otra pestaña</a>
+    </div>
+    <iframe id="quickLoadFrame" title="Cargar entrada" src="" style="width:100%;min-height:540px;border:1px solid var(--line);border-radius:10px;background:#000;" loading="lazy"></iframe>
   </div>
 </div>
 
 <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;">
   <div class="card" style="flex:1 1 180px;min-width:180px;">
-    <div class="muted">Vendidas</div>
+    <div class="muted">Emitidas</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo (int)$stEvento['total']; ?>
     </div>
   </div>
   <div class="card" style="flex:1 1 180px;min-width:180px;">
-    <div class="muted">Check-ins</div>
+    <div class="muted">Pagadas</div>
     <div style="font-size:22px;font-weight:700;">
-      <?php echo (int)$stEvento['checkins']; ?>
+      <?php echo (int)$stEvento['paid']; ?>
     </div>
   </div>
   <div class="card" style="flex:1 1 180px;min-width:180px;">
-    <div class="muted">Faltan</div>
+    <div class="muted">Gratis</div>
     <div style="font-size:22px;font-weight:700;">
-      <?php echo (int)$stEvento['faltan']; ?>
+      <?php echo $gratis; ?>
     </div>
   </div>
   <div class="card" style="flex:1 1 180px;min-width:180px;">
@@ -368,16 +389,67 @@ include __DIR__.'/inc/layout_top.php';
     </div>
   </div>
   <div class="card" style="flex:1 1 180px;min-width:180px;">
-    <div class="muted">Stock total</div>
+    <div class="muted">Sin escanear</div>
+    <div style="font-size:22px;font-weight:700;">
+      <?php echo (int)$stEvento['pendiente']; ?>
+    </div>
+  </div>
+  <div class="card" style="flex:1 1 180px;min-width:180px;">
+    <div class="muted">Check-ins</div>
+    <div style="font-size:22px;font-weight:700;">
+      <?php echo (int)$stEvento['checkins']; ?>
+    </div>
+  </div>
+  <div class="card" style="flex:1 1 180px;min-width:180px;">
+    <div class="muted">Stock Total</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo ($stEvento['stock_total'] !== null ? (int)$stEvento['stock_total'] : '-'); ?>
     </div>
   </div>
 </div>
 
+<!-- === ESTADÍSTICAS ECONÓMICAS === -->
+<div class="card">
+  <h3>Economía del evento</h3>
+  
+  <?php 
+    // Obtener estadísticas económicas
+    $ecoStats = get_economic_stats($pdo, $eventoId);
+  ?>
+  
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Entradas vendidas</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;">
+        <?php echo (int)$ecoStats['entradas_vendidas']; ?>
+      </div>
+    </div>
+    
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Total recaudado</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">
+        $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
+      </div>
+    </div>
+    
+    <?php if ($ecoStats['manual_income'] > 0): ?>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Ingresos manuales</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--info);">
+        $<?php echo number_format($ecoStats['manual_income'], 2); ?>
+      </div>
+    </div>
+    <?php endif; ?>
+  </div>
+  
+  <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <a class="btn" href="economia_evento.php?evento_id=<?php echo (int)$eventoId; ?>" style="min-width:160px;justify-content:center;background:var(--panel-2);color:var(--text);border:1px solid var(--line);box-shadow:none;font-size:13px;font-weight:600;padding:10px 12px;border-radius:10px;">Desglose</a>
+    <span class="muted">(detalle por tipo en página separada)</span>
+  </div>
+</div>
+
 <div class="card">
   <h3>Entradas del evento</h3>
-
   <form method="get" style="margin-top:10px;">
     <input type="hidden" name="id" value="<?php echo $eventoId; ?>">
 
@@ -420,31 +492,58 @@ include __DIR__.'/inc/layout_top.php';
   <div style="overflow:auto;margin-top:10px;">
     <table class="table">
       <tr>
+        <th>Origen</th>
         <th>ID</th>
         <th>Nombre</th>
         <th>Email</th>
         <th>Tipo</th>
-        <th>Código</th>
+        <th>Código/Ref</th>
+        <th>Pago</th>
         <th>Estado</th>
         <th>Acciones</th>
       </tr>
 
 <?php foreach($rows as $r): ?>
       <tr>
-        <td><?php echo (int)$r['id']; ?></td>
+        <td style="font-size:11px;font-weight:700;color:<?php echo ($r['source']==='STR') ? 'var(--ok)' : 'var(--info)'; ?>;">
+          <?php echo e($r['source']); ?>
+        </td>
+        <td><?php echo (int)$r['ticket_id']; ?></td>
         <td><?php echo e($r['nombre']); ?></td>
         <td><?php echo e($r['email']); ?></td>
         <td><?php echo e($r['tipo']); ?></td>
-        <td><?php echo e($r['codigo']); ?></td>
         <td>
-          <?php if(isset($r[$colCheck]) && (int)$r[$colCheck]===1): ?>
+          <?php $ref = isset($r['ticket_ref']) ? trim((string)$r['ticket_ref']) : ''; ?>
+          <?php if ($ref === ''): ?>
+            <span class="muted">-</span>
+          <?php else: ?>
+            <div class="ref-wrap" style="display:flex;gap:8px;align-items:center;">
+              <button type="button" class="btn secondary btn-ref-toggle" style="padding:6px 10px;font-size:12px;line-height:1.2;">👁 Ver</button>
+              <span class="ref-value" style="display:none;font-family:monospace;"><?php echo e($ref); ?></span>
+            </div>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if($r['is_paid']): ?>
+            <span style="color:var(--ok);font-weight:700;">✓</span>
+          <?php else: ?>
+            <span style="color:var(--warn);font-weight:700;">✗</span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if($r['is_checked_in']): ?>
             <span style="color:var(--ok);font-weight:700;">OK</span>
           <?php else: ?>
             <span style="color:var(--warn);font-weight:700;">Pendiente</span>
           <?php endif; ?>
         </td>
-        <td>
-          <a class="link" href="ticket.php?c=<?php echo urlencode($r['codigo']); ?>">Ver ticket</a>
+        <td style="display:flex;gap:8px;align-items:center;">
+          <?php if($r['source'] === 'STR'): ?>
+            <a class="link" href="ticket.php?c=<?php echo urlencode($r['ticket_ref']); ?>">Ver ticket</a>
+            <a class="btn secondary btn-delete-entry" style="padding:6px 10px;font-size:12px;line-height:1.2;" data-id="<?php echo (int)$r['ticket_id']; ?>" title="Eliminar">🗑</a>
+          <?php else: ?>
+            <span class="muted" style="font-size:11px;">Ver en Tickex</span>
+          <?php endif; ?>
         </td>
       </tr>
       <?php endforeach; ?>
@@ -453,5 +552,197 @@ include __DIR__.'/inc/layout_top.php';
 
   <?php endif; ?>
 </div>
+
+<!-- === INGRESOS MANUALES === -->
+<div class="card">
+  <h3>Ingresos manuales</h3>
+  <p class="muted" style="font-size:13px;margin-bottom:12px;">Registra ventas puerta, consumos, ajustes u otros ingresos.</p>
+
+  <!-- Formulario para agregar ingreso -->
+  <form id="formManualIncome" style="margin-bottom:16px;">
+    <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
+    
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
+      <div>
+        <label>Concepto</label>
+        <input type="text" name="concepto" placeholder="ej: Venta puerta, Consumo bar..." required>
+      </div>
+      
+      <div>
+        <label>Monto ($)</label>
+        <input type="number" name="monto" placeholder="0.00" step="0.01" min="0" required>
+      </div>
+      
+      <div>
+        <label>Descripción (opcional)</label>
+        <input type="text" name="descripcion" placeholder="detalles">
+      </div>
+      
+      <div>
+        <button class="btn" type="submit">Agregar</button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Lista de ingresos -->
+  <?php 
+    ensure_manual_income_table($pdo);
+    $incomes = get_manual_incomes($pdo, $eventoId);
+    $totalIncome = get_total_manual_income($pdo, $eventoId);
+  ?>
+  
+  <?php if (!empty($incomes)): ?>
+    <div style="overflow:auto;margin-top:10px;">
+      <table class="table">
+        <tr>
+          <th>Concepto</th>
+          <th>Descripción</th>
+          <th>Monto</th>
+          <th>Fecha</th>
+          <th>Acción</th>
+        </tr>
+        <?php foreach ($incomes as $inc): ?>
+        <tr>
+          <td><?php echo e($inc['concepto']); ?></td>
+          <td><?php echo e($inc['descripcion']); ?></td>
+          <td style="text-align:right;font-weight:700;">$<?php echo number_format((float)$inc['monto'], 2); ?></td>
+          <td style="font-size:12px;" class="muted">
+            <?php 
+              $ts = strtotime($inc['created_at']);
+              echo $ts ? date('d/m/Y H:i', $ts) : $inc['created_at'];
+            ?>
+          </td>
+          <td>
+            <button class="btn-delete-income" data-id="<?php echo (int)$inc['id']; ?>" style="font-size:11px;" title="Eliminar">🗑</button>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </table>
+    </div>
+    
+    <div style="margin-top:12px;padding:10px;background:var(--panel-2);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-weight:700;">Total ingresos manuales:</span>
+      <span style="font-size:18px;font-weight:700;">$<?php echo number_format($totalIncome, 2); ?></span>
+    </div>
+  <?php else: ?>
+    <div style="padding:10px;background:var(--panel-2);border-radius:4px;color:var(--muted);">
+      No hay ingresos manuales registrados aún.
+    </div>
+  <?php endif; ?>
+</div>
+
+<script>
+const formIncome = document.getElementById('formManualIncome');
+if (formIncome) {
+  formIncome.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(this);
+      fetch('add_manual_income.php', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Ingreso agregado');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'desconocido'));
+            }
+        })
+        .catch(err => alert('Error: ' + err));
+  });
+}
+
+document.querySelectorAll('.btn-delete-income').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!confirm('¿Eliminar este ingreso?')) return;
+        const incomeId = this.dataset.id;
+        const formData = new FormData();
+        formData.append('id', incomeId);
+        fetch('delete_manual_income.php', { method: 'POST', body: formData })
+          .then(r => r.json())
+          .then(data => {
+              if (data.success) {
+                  alert('Ingreso eliminado');
+                  location.reload();
+              } else {
+                  alert('Error: ' + (data.error || 'desconocido'));
+              }
+          })
+          .catch(err => alert('Error: ' + err));
+    });
+});
+
+// editar mapping bridge
+const btnEditBridge = document.getElementById('btnEditBridgeMap');
+if (btnEditBridge) {
+  btnEditBridge.addEventListener('click', function(e) {
+      e.preventDefault();
+      const current = "<?php echo !empty($currentMap) ? htmlspecialchars(implode(',', $currentMap), ENT_QUOTES) : ''; ?>";
+      const suggested = current || "";
+      const slug = prompt('Ingrese bridge slug para este evento (ej: savetherave7-3)', suggested);
+      if (slug === null) return;
+      const s = slug.trim();
+      if (s === '') { alert('Slug vacío'); return; }
+
+      const fd = new FormData();
+      fd.append('evento_id', '<?php echo (int)$eventoId; ?>');
+      fd.append('bridge_slug', s);
+
+      fetch('set_bridge_mapping.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.success) {
+            alert('Mapping guardado');
+            location.reload();
+          } else {
+            alert('Error: ' + (data && data.error ? data.error : 'desconocido'));
+          }
+        })
+        .catch(err => alert('Error: ' + err));
+  });
+}
+
+// toggle ver código/ref
+document.querySelectorAll('.btn-ref-toggle').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const wrap = this.closest('.ref-wrap');
+    const value = wrap ? wrap.querySelector('.ref-value') : null;
+    if (!value) return;
+    const isShown = value.style.display !== 'none';
+    value.style.display = isShown ? 'none' : 'inline';
+    this.textContent = isShown ? '👁' : 'Ocultar';
+  });
+});
+
+// eliminar entrada STR
+document.querySelectorAll('.btn-delete-entry').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    const id = this.dataset.id;
+    if (!id) return;
+    if (!confirm('¿Eliminar esta entrada?')) return;
+    const eid = '<?php echo (int)$eventoId; ?>';
+    const target = 'delete.php?id=' + encodeURIComponent(id) + '&evento_id=' + encodeURIComponent(eid);
+    window.location.href = target;
+  });
+});
+
+// toggle cargar entrada embebido
+const quickBtn = document.getElementById('toggleQuickLoad');
+const quickPanel = document.getElementById('quickLoadPanel');
+const quickFrame = document.getElementById('quickLoadFrame');
+if (quickBtn && quickPanel) {
+  quickBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    const isOpen = quickPanel.style.display === 'block';
+    quickPanel.style.display = isOpen ? 'none' : 'block';
+    quickBtn.textContent = isOpen ? 'Cargar entrada' : 'Cerrar carga';
+    if (!isOpen && quickFrame && !quickFrame.dataset.loaded) {
+      quickFrame.src = 'cargar_entrada.php?evento_id=<?php echo (int)$eventoId; ?>&embed=1';
+      quickFrame.dataset.loaded = '1';
+    }
+  });
+}
+</script>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>

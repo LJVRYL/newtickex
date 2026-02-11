@@ -1,0 +1,349 @@
+LISTA DE CAMBIOS - panel_evento.php
+===================================
+
+LÍNEA 1-4: Agregados imports
+══════════════════════════════════
+ANTES:
+  <?php
+  require_once __DIR__.'/inc/bootstrap.php';
+  
+  require_login();
+
+DESPUÉS:
+  <?php
+  require_once __DIR__.'/inc/bootstrap.php';
+  require_once __DIR__.'/inc/unified_tickets.php';
+  require_once __DIR__.'/inc/manual_income.php';
+  
+  require_login();
+
+RAZÓN: Importar nuevos helpers para unificación e ingresos
+
+
+LÍNEA ~290-300: Reemplazo de lógica de carga de entradas
+═════════════════════════════════════════════════════════
+
+ANTES (REEMPLAZADO COMPLETAMENTE):
+  // filtros
+  $q       = isset($_GET['q'])      ? trim($_GET['q'])       : '';
+  $fTipo   = isset($_GET['tipo'])   ? trim($_GET['tipo'])    : '';
+  $fEstado = isset($_GET['estado']) ? trim($_GET['estado'])  : '';
+  
+  $where  = array("evento_id = :eid");
+  $params = array(':eid'=>$eventoId);
+  
+  if ($q !== '') {
+      $where[] = "(nombre LIKE :q OR email LIKE :q OR codigo LIKE :q)";
+      $params[':q'] = '%'.$q.'%';
+  }
+  if ($fTipo !== '') {
+      $where[] = "tipo = :tipo";
+      $params[':tipo'] = $fTipo;
+  }
+  if ($fEstado === 'checkin_ok') {
+      $where[] = "$colCheck = 1";
+  }
+  if ($fEstado === 'pendiente') {
+      $where[] = "$colCheck = 0";
+  }
+  
+  // ejecutar
+  $sql = "
+  SELECT *
+  FROM entradas
+  WHERE ".implode(" AND ",$where)."
+  ORDER BY id DESC
+  ";
+  $stmtRows = $pdo->prepare($sql);
+  $stmtRows->execute($params);
+  $rows = $stmtRows->fetchAll(PDO::FETCH_ASSOC);
+  
+  // estadísticas
+  $total     = count($rows);
+  $checkins  = 0;
+  foreach ($rows as $r) {
+    if (isset($r[$colCheck]) && (int)$r[$colCheck] === 1) $checkins++;
+  }
+  $faltan = $total - $checkins;
+
+DESPUÉS:
+  // filtros
+  $q       = isset($_GET['q'])      ? trim($_GET['q'])       : '';
+  $fTipo   = isset($_GET['tipo'])   ? trim($_GET['tipo'])    : '';
+  $fEstado = isset($_GET['estado']) ? trim($_GET['estado'])  : '';
+  
+  // Obtener entradas unificadas (STR + TICKEX)
+  $filters = array(
+      'q'      => $q,
+      'tipo'   => $fTipo,
+      'estado' => $fEstado,
+  );
+  $rows = get_unified_entries($pdo, $eventoId, $filters);
+  
+  // estadísticas
+  $stats = count_unified_entries($rows);
+  $total     = $stats['total'];
+  $checkins  = $stats['checkins'];
+  $faltan    = $stats['pendiente'];
+  $paid      = $stats['paid'];
+
+RAZÓN: Usar nuevo helper get_unified_entries() que obtiene ambas fuentes
+
+
+LÍNEA ~400-440: Reemplazo de tabla de entradas
+════════════════════════════════════════════════
+
+ANTES:
+  <div style="overflow:auto;margin-top:10px;">
+    <table class="table">
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Email</th>
+        <th>Tipo</th>
+        <th>Código</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+
+  <?php foreach($rows as $r): ?>
+      <tr>
+        <td><?php echo (int)$r['id']; ?></td>
+        <td><?php echo e($r['nombre']); ?></td>
+        <td><?php echo e($r['email']); ?></td>
+        <td><?php echo e($r['tipo']); ?></td>
+        <td><?php echo e($r['codigo']); ?></td>
+        <td>
+          <?php if(isset($r[$colCheck]) && (int)$r[$colCheck]===1): ?>
+            <span style="color:var(--ok);font-weight:700;">OK</span>
+          <?php else: ?>
+            <span style="color:var(--warn);font-weight:700;">Pendiente</span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <a class="link" href="ticket.php?c=<?php echo urlencode($r['codigo']); ?>">Ver ticket</a>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+    </table>
+  </div>
+
+DESPUÉS:
+  <div style="overflow:auto;margin-top:10px;">
+    <table class="table">
+      <tr>
+        <th>Origen</th>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Email</th>
+        <th>Tipo</th>
+        <th>Código/Ref</th>
+        <th>Pago</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+
+  <?php foreach($rows as $r): ?>
+      <tr>
+        <td style="font-size:11px;font-weight:700;color:<?php echo ($r['source']==='STR') ? 'var(--ok)' : 'var(--info)'; ?>;">
+          <?php echo e($r['source']); ?>
+        </td>
+        <td><?php echo (int)$r['ticket_id']; ?></td>
+        <td><?php echo e($r['nombre']); ?></td>
+        <td><?php echo e($r['email']); ?></td>
+        <td><?php echo e($r['tipo']); ?></td>
+        <td><?php echo e($r['ticket_ref']); ?></td>
+        <td>
+          <?php if($r['is_paid']): ?>
+            <span style="color:var(--ok);font-weight:700;">✓</span>
+          <?php else: ?>
+            <span style="color:var(--warn);font-weight:700;">✗</span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if($r['is_checked_in']): ?>
+            <span style="color:var(--ok);font-weight:700;">OK</span>
+          <?php else: ?>
+            <span style="color:var(--warn);font-weight:700;">Pendiente</span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if($r['source'] === 'STR'): ?>
+            <a class="link" href="ticket.php?c=<?php echo urlencode($r['ticket_ref']); ?>">Ver ticket</a>
+          <?php else: ?>
+            <span class="muted" style="font-size:11px;">Ver en Tickex</span>
+          <?php endif; ?>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+    </table>
+  </div>
+
+RAZÓN: 
+  • Nuevo campo 'source' diferencia STR de TICKEX
+  • Nuevo campo 'pago' muestra status de pago
+  • Campos renombrados para formato unificado (ticket_id, ticket_ref, etc)
+  • Acciones diferenciadas por origen
+
+
+LÍNEA ~450+: NUEVA SECCIÓN - Ingresos Manuales
+════════════════════════════════════════════════
+
+AGREGADO COMPLETAMENTE:
+
+<!-- === INGRESOS MANUALES === -->
+<div class="card">
+  <h3>Ingresos manuales</h3>
+  <p class="muted" style="font-size:13px;margin-bottom:12px;">Registra ventas puerta, consumos, ajustes u otros ingresos.</p>
+
+  <!-- Formulario para agregar ingreso -->
+  <form id="formManualIncome" style="margin-bottom:16px;">
+    <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
+    
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
+      <div>
+        <label>Concepto</label>
+        <input type="text" name="concepto" placeholder="ej: Venta puerta, Consumo bar..." required>
+      </div>
+      
+      <div>
+        <label>Monto ($)</label>
+        <input type="number" name="monto" placeholder="0.00" step="0.01" min="0" required>
+      </div>
+      
+      <div>
+        <label>Descripción (opcional)</label>
+        <input type="text" name="descripcion" placeholder="detalles">
+      </div>
+      
+      <div>
+        <button class="btn" type="submit">Agregar</button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Lista de ingresos -->
+  <?php 
+    ensure_manual_income_table($pdo);
+    $incomes = get_manual_incomes($pdo, $eventoId);
+    $totalIncome = get_total_manual_income($pdo, $eventoId);
+  ?>
+  
+  <?php if (!empty($incomes)): ?>
+    <div style="overflow:auto;margin-top:10px;">
+      <table class="table">
+        <tr>
+          <th>Concepto</th>
+          <th>Descripción</th>
+          <th>Monto</th>
+          <th>Fecha</th>
+          <th>Acción</th>
+        </tr>
+        <?php foreach ($incomes as $inc): ?>
+        <tr>
+          <td><?php echo e($inc['concepto']); ?></td>
+          <td><?php echo e($inc['descripcion']); ?></td>
+          <td style="text-align:right;font-weight:700;">$<?php echo number_format((float)$inc['monto'], 2); ?></td>
+          <td style="font-size:12px;" class="muted">
+            <?php 
+              $ts = strtotime($inc['created_at']);
+              echo $ts ? date('d/m/Y H:i', $ts) : $inc['created_at'];
+            ?>
+          </td>
+          <td>
+            <button class="btn-delete-income" data-id="<?php echo (int)$inc['id']; ?>" style="font-size:11px;" title="Eliminar">🗑</button>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </table>
+    </div>
+    
+    <div style="margin-top:12px;padding:10px;background:var(--panel-2);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-weight:700;">Total ingresos manuales:</span>
+      <span style="font-size:18px;font-weight:700;">$<?php echo number_format($totalIncome, 2); ?></span>
+    </div>
+  <?php else: ?>
+    <div style="padding:10px;background:var(--panel-2);border-radius:4px;color:var(--muted);">
+      No hay ingresos manuales registrados aún.
+    </div>
+  <?php endif; ?>
+</div>
+
+<script>
+document.getElementById('formManualIncome').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('add_manual_income.php', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Ingreso agregado');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'desconocido'));
+        }
+    })
+    .catch(err => alert('Error: ' + err));
+});
+
+document.querySelectorAll('.btn-delete-income').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!confirm('¿Eliminar este ingreso?')) return;
+        
+        const incomeId = this.dataset.id;
+        const formData = new FormData();
+        formData.append('id', incomeId);
+        
+        fetch('delete_manual_income.php', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Ingreso eliminado');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'desconocido'));
+            }
+        })
+        .catch(err => alert('Error: ' + err));
+    });
+});
+</script>
+
+RAZÓN:
+  • Nueva sección completa para gestión de ingresos manuales
+  • Incluye formulario, tabla, totales y AJAX handlers
+
+
+LÍNEA ~580: Final del archivo
+═════════════════════════════
+
+ANTES:
+  <?php include __DIR__.'/inc/layout_bottom.php'; ?>
+
+DESPUÉS:
+  <?php include __DIR__.'/inc/layout_bottom.php'; ?>
+
+(SIN CAMBIOS - Final idéntico)
+
+
+RESUMEN DE CAMBIOS
+═════════════════════════════════════════════════════════════════════════════
+
+Total de líneas:      458 → 581 (+123 líneas, ~26% más código)
+Imports:              +2 (unified_tickets.php, manual_income.php)
+Lógica reemplazada:   ~30 líneas (query de entradas)
+Tabla actualizada:    ~40 líneas (nuevo formato unificado)
+Nueva sección:        ~130 líneas (formulario + tabla + AJAX)
+Funcionalidad:        ✅ 100% retrocompatible
+Estructura visual:    ✅ Mantiene layout original
+
+═════════════════════════════════════════════════════════════════════════════

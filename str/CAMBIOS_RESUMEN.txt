@@ -1,0 +1,103 @@
+<!-- 
+RESUMEN DE CAMBIOS - panel_evento.php refactor
+===============================================
+
+Archivos modificados/creados:
+- panel_evento.php (REFACTORIZADO) - Ahora unifica entradas STR + Tickex
+- inc/unified_tickets.php (NUEVO) - Lógica de unificación de entradas
+- inc/manual_income.php (NUEVO) - Gestión de ingresos manuales
+- add_manual_income.php (NUEVO) - Endpoint para agregar ingresos
+- delete_manual_income.php (NUEVO) - Endpoint para eliminar ingresos
+
+CAMBIOS PRINCIPALES EN panel_evento.php
+========================================
+
+1. UNIFICACIÓN DE ENTRADAS
+   ✅ Ahora muestra entradas de AMBAS fuentes en UNA SOLA TABLA:
+      - STR (entradas generadas localmente)
+      - TICKEX/SenForms (entradas pagas del bridge)
+   
+   ✅ Nueva columna "Origen" diferencia STR vs TICKEX
+   ✅ Nueva columna "Pago" muestra status de pago (✓/✗)
+   ✅ Mantiene filtros existentes (búsqueda, tipo, estado)
+   ✅ Mantiene acciones (Ver ticket para STR)
+
+2. DETECCIÓN INTELIGENTE
+   ✅ Detecta automáticamente columnas disponibles
+   ✅ Fallbacks para nombres de columnas variables
+   ✅ Funciona aunque falten tablas/vistas (no rompe)
+
+3. INGRESOS MANUALES (NUEVA SECCIÓN)
+   ✅ Formulario para registrar:
+      - Ventas puerta
+      - Consumos
+      - Ajustes
+      - Otros ingresos
+   
+   ✅ Lista editable con:
+      - Tabla de ingresos registrados
+      - Eliminar individual
+      - Total acumulado
+   
+   ✅ Todo con AJAX (sin recargar página)
+
+ESTRUCTURA DE BD
+================
+
+Tabla nueva (creada automáticamente si no existe):
+  manual_income
+  ├─ id (PK)
+  ├─ evento_id (FK)
+  ├─ concepto (TEXT) - ej: "Venta puerta"
+  ├─ monto (REAL) - el monto en dinero
+  ├─ descripcion (TEXT) - opcional
+  ├─ creado_por (user_id)
+  ├─ created_at (timestamp)
+  └─ updated_at (timestamp)
+
+FLUJO DE USO
+============
+
+1. Admin abre: panel_evento.php?evento_id=12
+
+2. VE:
+   ✓ Estadísticas del evento (unificadas)
+   ✓ Tabla UNA sola con entradas STR + TICKEX
+   ✓ Columna "Origen" muestra fuente
+   ✓ Sección de ingresos manuales abajo
+
+3. PUEDE:
+   ✓ Filtrar por nombre/email/código (todas las fuentes)
+   ✓ Ver si cada entrada está checkeada
+   ✓ Ver si está paga
+   ✓ Agregar ingreso manual (botón + formulario)
+   ✓ Eliminar ingreso manual (🗑 en cada fila)
+   ✓ Ver total de ingresos manuales
+
+COMPATIBILIDAD
+==============
+✅ Mantiene exactamente la estética del panel
+✅ No toca permisos existentes
+✅ No requiere cambios en BD existente
+✅ Retrocompatible (funciona aunque falten nuevas tablas)
+✅ Sin dependencias externas (solo PHP + SQLite)
+
+TESTING LOCAL
+=============
+php -S 127.0.0.1:8080 -t str
+http://127.0.0.1:8080/panel_evento.php?evento_id=1
+
+→ Ver que ahora muestra entradas unificadas
+→ Probar agregar ingreso manual
+→ Probar eliminar ingreso manual
+→ Verificar totales se actualizan
+
+NOTAS IMPORTANTES
+=================
+- BD local (save_the_rave.sqlite) no se commitea
+- Todos los cambios son locales
+- Si falta tabla de bridge, panel sigue mostrando STR
+- Ingresos manuales son independientes de entradas
+- Todo usa __DIR__ para paths (compatible con entornos)
+
+-->

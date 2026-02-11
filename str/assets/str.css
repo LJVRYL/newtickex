@@ -13,6 +13,26 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,Seg
 .nav{display:flex;gap:8px;flex-wrap:wrap}
 .nav a{color:var(--ink);text-decoration:none;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2)}
 .nav a:hover{border-color:var(--acc)}
+
+.hamburger{display:flex;flex-direction:column;gap:4px;background:transparent;border:none;cursor:pointer;padding:8px;margin-right:auto;margin-left:8px}
+.hamburger span{width:24px;height:2px;background:var(--ink);border-radius:1px;transition:all 0.3s}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translateY(10px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translateY(-10px)}
+
+@media(min-width:769px){
+  .hamburger{display:none}
+}
+
+@media(max-width:768px){
+  .topbar .wrap{flex-wrap:wrap}
+  .nav{position:absolute;top:60px;left:0;right:0;flex-direction:column;background:var(--panel);border-bottom:1px solid var(--line);max-height:0;overflow:hidden;transition:max-height 0.3s;z-index:100}
+  .nav.active{max-height:500px;padding:12px 0}
+  .nav a{border-radius:0;border:none;border-bottom:1px solid var(--line);padding:12px 16px;margin:0;width:100%;background:transparent}
+  .nav a:hover{background:var(--panel-2);border-bottom-color:var(--acc)}
+  .userchip{flex-direction:row;margin-left:auto;gap:8px;border:none;padding:0;order:3;width:auto}
+  .userchip span{font-size:12px;max-width:28px;overflow:hidden;white-space:nowrap}
+}
 .userchip{margin-left:auto;display:flex;gap:10px;align-items:center;color:var(--muted)}
 .link{color:var(--acc);text-decoration:none}
 
@@ -33,11 +53,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0
 .btn{
   display:inline-flex;align-items:center;gap:8px;
   padding:9px 14px;border-radius:999px;border:1px solid transparent;
-  background:linear-gradient(135deg,#ffdd33,#ff8a00);color:#111;
+  background:linear-gradient(135deg,#ffdd33,#ff8a00);color:#fff;
   font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer
 }
+.btn:visited{color:#fff}
 .btn.secondary{background:var(--panel-2);color:var(--ink);border-color:var(--line)}
+.btn.secondary:visited{color:var(--ink)}
 .btn.danger{background:transparent;border-color:var(--err);color:var(--err)}
+.btn.danger:visited{color:var(--err)}
 
 .flash{padding:10px 12px;border-radius:10px;margin:10px 0;border:1px solid var(--line)}
 .flash.ok{border-color:var(--ok)}
