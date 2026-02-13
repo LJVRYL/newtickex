@@ -20,11 +20,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,Seg
 .hamburger.active span:nth-child(2){opacity:0}
 .hamburger.active span:nth-child(3){transform:rotate(-45deg) translateY(-10px)}
 
-@media(min-width:769px){
+@media(min-width:1025px){
   .hamburger{display:none}
 }
 
-@media(max-width:768px){
+@media(max-width:1024px){
   .topbar .wrap{flex-wrap:wrap}
   .nav{position:absolute;top:60px;left:0;right:0;flex-direction:column;background:var(--panel);border-bottom:1px solid var(--line);max-height:0;overflow:hidden;transition:max-height 0.3s;z-index:100}
   .nav.active{max-height:500px;padding:12px 0}
