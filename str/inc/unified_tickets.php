@@ -259,10 +259,14 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
                 $bWhere[] = "is_paid = 1";
             } elseif (isset($bridgeCols['payment_state'])) {
                 $bWhere[] = "UPPER(payment_state) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+            } elseif (isset($bridgeCols['payment_status'])) {
+                $bWhere[] = "UPPER(payment_status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
             } elseif (isset($bridgeCols['pago_status'])) {
-                $bWhere[] = "pago_status IN ('SUCCESS', 'APROBADO')";
+                $bWhere[] = "UPPER(pago_status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+            } elseif (isset($bridgeCols['pn_estado'])) {
+                $bWhere[] = "UPPER(pn_estado) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
             } elseif (isset($bridgeCols['status'])) {
-                $bWhere[] = "status IN ('SUCCESS', 'APROBADO')";
+                $bWhere[] = "UPPER(status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
             }
             
             // Filtrar por evento: preferir slugs mapeados -> event_slug
@@ -402,14 +406,51 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
 
                 // Pago / checkin
                 $isPaid = isset($row['is_paid']) ? ((int)$row['is_paid'] === 1) : false;
-                // fallback: payment_state SUCCESS -> paid
-                if (!$isPaid && isset($row['payment_state'])) {
-                    // no bloquear flujo si falla
+                // Fallbacks de pago: algunas vistas traen payment_state/status/pago_status/pn_estado
+                if (!$isPaid) {
+                    if (isset($row['payment_state'])) {
+                        $state = strtoupper(trim((string)$row['payment_state']));
+                        if (in_array($state, array('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID'), true)) {
+                            $isPaid = true;
+                        }
+                    } elseif (isset($row['payment_status'])) {
+                        $state = strtoupper(trim((string)$row['payment_status']));
+                        if (in_array($state, array('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID'), true)) {
+                            $isPaid = true;
+                        }
+                    } elseif (isset($row['pago_status'])) {
+                        $state = strtoupper(trim((string)$row['pago_status']));
+                        if (in_array($state, array('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID'), true)) {
+                            $isPaid = true;
+                        }
+                    } elseif (isset($row['pn_estado'])) {
+                        $state = strtoupper(trim((string)$row['pn_estado']));
+                        if (in_array($state, array('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID'), true)) {
+                            $isPaid = true;
+                        }
+                    } elseif (isset($row['status'])) {
+                        $state = strtoupper(trim((string)$row['status']));
+                        if (in_array($state, array('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID'), true)) {
+                            $isPaid = true;
+                        }
+                    }
                 }
 
-                // si no está pago, omitir la entrada
+                // si no está pago, omitir la entrada (solo Success/Aprobado)
                 if (!$isPaid) {
                     continue;
+                }
+
+                // Asegurar que el slug de ticket coincide con mapping actual
+                if (!empty($mappedSlugs) && isset($row['event_slug'])) {
+                    $slugRow = (string)$row['event_slug'];
+                    $match = false;
+                    foreach ($mappedSlugs as $s) {
+                        if ($slugRow === $s) { $match = true; break; }
+                    }
+                    if (!$match) {
+                        continue; // slug no mapea al evento
+                    }
                 }
 
                 $isCheckedIn = false;
@@ -570,6 +611,14 @@ function get_unified_stats($pdo, $evento_id) {
             $bWhere[] = "is_paid = 1";
         } elseif (isset($bridgeCols['payment_state'])) {
             $bWhere[] = "UPPER(payment_state) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+        } elseif (isset($bridgeCols['payment_status'])) {
+            $bWhere[] = "UPPER(payment_status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+        } elseif (isset($bridgeCols['pago_status'])) {
+            $bWhere[] = "UPPER(pago_status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+        } elseif (isset($bridgeCols['pn_estado'])) {
+            $bWhere[] = "UPPER(pn_estado) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+        } elseif (isset($bridgeCols['status'])) {
+            $bWhere[] = "UPPER(status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
         }
         
         // Filtrar por evento slug
