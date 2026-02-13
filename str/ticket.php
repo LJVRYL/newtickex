@@ -4,6 +4,11 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $pdo = db();
 
+$cu = current_user();
+$tipoGlobal = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
+$rol = isset($cu['rol']) ? $cu['rol'] : (isset($_SESSION['rol']) ? $_SESSION['rol'] : '');
+$canManage = !empty($cu) && in_array($tipoGlobal ?: $rol, array('super_admin','superadmin','admin_evento','admin'), true);
+
 $codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
 if ($codigo === '') {
     http_response_code(400);
@@ -46,6 +51,7 @@ $eventoNombre = '';
 $eventoSlug   = '';
 $eventoDesde  = '';
 $eventoHasta  = '';
+$eventoFechaLbl = '';
 
 if ($eventoId > 0) {
     $stmtEv = $pdo->prepare("SELECT nombre, slug, fecha_desde, fecha_hasta FROM eventos WHERE id=? LIMIT 1");
@@ -56,6 +62,11 @@ if ($eventoId > 0) {
         $eventoSlug   = isset($ev['slug']) ? $ev['slug'] : '';
         $eventoDesde  = isset($ev['fecha_desde']) ? $ev['fecha_desde'] : '';
         $eventoHasta  = isset($ev['fecha_hasta']) ? $ev['fecha_hasta'] : '';
+      if ($eventoDesde !== '' && $eventoHasta !== '') {
+        $eventoFechaLbl = $eventoDesde." → ".$eventoHasta;
+      } else {
+        $eventoFechaLbl = $eventoDesde.$eventoHasta;
+      }
     }
 }
 
@@ -64,6 +75,12 @@ $baseUrl    = 'https://str.tickex.com.ar';
 $checkinUrl = $baseUrl . '/checkin.php?c=' . urlencode($codigo);
 // QR externo por ahora (simple)
 $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urlencode($checkinUrl);
+
+$ticketLink = (isset($_SERVER['HTTP_HOST']) ? 'http://'.$_SERVER['HTTP_HOST'] : $baseUrl).'/ticket.php?c='.urlencode($codigo);
+$mensajeBase = "Hola, aqui tienes tu entrada:\nEvento: " . ($eventoNombre ?: 'TICKEX') . "\nNombre: " . $nombre . "\nTipo: " . $tipoDesc . "\nCódigo: " . $codigo . "\nVer ticket: " . $ticketLink;
+$waMensaje = $mensajeBase;
+$mailSubject = 'Tu entrada - ' . ($eventoNombre ?: 'TICKEX');
+$mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
 
 ?>
 <!DOCTYPE html>
@@ -109,10 +126,7 @@ $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urle
         <div class="subtitle"><?php echo e($eventoNombre); ?></div>
         <?php if($eventoDesde!=='' || $eventoHasta!==''): ?>
           <div class="subtitle" style="margin-top:4px;">
-            <?php
-              if($eventoDesde!=='' && $eventoHasta!=='') echo e($eventoDesde)." → ".e($eventoHasta);
-              else echo e($eventoDesde.$eventoHasta);
-            ?>
+            <?php echo e($eventoFechaLbl); ?>
           </div>
         <?php endif; ?>
       <?php else: ?>
@@ -138,7 +152,44 @@ $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urle
         Mostrá este QR en puerta para ingresar.<br>
         No lo compartas con terceros.
       </div>
+
+      <?php if ($canManage): ?>
+        <div style="margin-top:16px;text-align:left;">
+          <h3 style="margin:0 0 8px;">Acciones rápidas (solo admins)</h3>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <input type="email" id="resendEmail" placeholder="correo@ejemplo.com" style="min-width:220px;" value="<?php echo e(isset($entrada['email']) ? $entrada['email'] : ''); ?>">
+              <button class="btn" type="button" onclick="sendEmailTicket()">Reenviar ticket por email</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <input type="tel" id="waPhone" placeholder="54911XXXXXXXX" style="min-width:220px;">
+              <button class="btn secondary" type="button" onclick="sendWhatsAppTicket()">Reenviar ticket por WhatsApp</button>
+            </div>
+            <div class="muted" style="font-size:12px;">Estos enlaces no se muestran al usuario final.</div>
+          </div>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
+
+  <?php if ($canManage): ?>
+  <script>
+    function sendEmailTicket(){
+      var email = document.getElementById('resendEmail').value.trim();
+      if(!email){ alert('Ingresá un email destino'); return; }
+      var subject = <?php echo json_encode($mailSubject); ?>;
+      var body = <?php echo json_encode($mailBody); ?>;
+      var link = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+      window.location.href = link;
+    }
+    function sendWhatsAppTicket(){
+      var phone = document.getElementById('waPhone').value.trim();
+      if(!phone){ alert('Ingresá un número con prefijo (ej: 54911...)'); return; }
+      var text = <?php echo json_encode($waMensaje); ?>;
+      var link = 'https://wa.me/' + encodeURIComponent(phone) + '?text=' + encodeURIComponent(text);
+      window.open(link, '_blank');
+    }
+  </script>
+  <?php endif; ?>
 </body>
 </html>

@@ -121,7 +121,7 @@ include __DIR__.'/inc/layout_top.php';
 </div>
 
 <?php foreach ($events as $ev): ?>
-  <?php $tks = sf_get_ticket_types($ev['Id']); ?>
+  <?php $tks = sf_get_ticket_types_with_sales($ev['Id']); ?>
   <div class="card" style="margin-top:12px;">
     <h3 style="margin-top:0;">Evento #<?php echo (int)$ev['Id']; ?> — <?php echo e($ev['Name']); ?></h3>
     <div class="muted" style="font-size:12px;">SiteName: <?php echo e($ev['SiteName']); ?> | Límite: <?php echo (int)$ev['TicketAmountLimit']; ?> | Activo: <?php echo $ev['Active'] ? 'Sí' : 'No'; ?></div>
@@ -145,21 +145,26 @@ include __DIR__.'/inc/layout_top.php';
             <th>ID</th>
             <th>Nombre</th>
             <th>Precio</th>
-            <th>Acción</th>
+            <th>Ventas</th>
           </tr>
           <?php foreach ($tks as $tk): ?>
+            <?php $sales = isset($tk['sales_count']) ? (int)$tk['sales_count'] : 0; ?>
             <tr>
               <td><?php echo (int)$tk['Id']; ?></td>
               <td><?php echo e($tk['Name']); ?></td>
               <td>
-                <form method="post" style="display:flex;gap:6px;align-items:center;">
-                  <input type="hidden" name="action" value="update_price">
-                  <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
-                  <input type="number" step="0.01" min="0" name="price" value="<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?>" style="width:120px;">
-                  <button class="btn secondary" type="submit">Guardar</button>
-                </form>
+                <?php if ($sales > 0): ?>
+                  <div class="muted">$<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?> (bloqueado por ventas)</div>
+                <?php else: ?>
+                  <form method="post" style="display:flex;gap:6px;align-items:center;">
+                    <input type="hidden" name="action" value="update_price">
+                    <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
+                    <input type="number" step="0.01" min="0" name="price" value="<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?>" style="width:120px;">
+                    <button class="btn secondary" type="submit">Guardar</button>
+                  </form>
+                <?php endif; ?>
               </td>
-              <td></td>
+              <td><?php echo $sales; ?></td>
             </tr>
           <?php endforeach; ?>
         </table>

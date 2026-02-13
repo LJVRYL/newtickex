@@ -162,6 +162,7 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
             'nombre'      => isset($row['nombre']) ? $row['nombre'] : '',
             'email'       => isset($row['email']) ? $row['email'] : '',
             'tipo'        => $tipo,
+            'price'       => $monto,
             'is_paid'     => $isPaid,
             'is_checked_in' => isset($row[$colCheck]) ? (int)$row[$colCheck] === 1 : false,
             'checked_in_at' => isset($row['checked_in_at']) ? $row['checked_in_at'] : null,
@@ -341,6 +342,31 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
                     $multiplier = 2;
                 }
 
+                // Precio real cobrado (bridge.price)
+                $priceVal = 0.0; $priceDiv = 1;
+                $priceFields = array('price','Price','amount','total_price','total_amount','valor','price_cents');
+                foreach ($priceFields as $pf) {
+                    if (isset($row[$pf]) && is_numeric($row[$pf])) {
+                        $priceVal = (float)$row[$pf];
+                        if ($pf === 'price_cents') { $priceDiv = 100; }
+                        break;
+                    }
+                }
+                if ($priceDiv !== 1) {
+                    $priceVal = $priceVal / $priceDiv;
+                }
+
+                // Label limpio: quitar sufijo "- $xxxxx" y rearmar con precio real
+                $ttypeDisplay = $ttype;
+                if ($ttype !== '') {
+                    $ttypeClean = trim(preg_replace('/-\s*\$[0-9.,]+$/', '', $ttype));
+                    if ($priceVal > 0) {
+                        $ttypeDisplay = $ttypeClean !== '' ? ($ttypeClean . ' - $' . number_format($priceVal, 0, ',', '.')) : ('$' . number_format($priceVal, 0, ',', '.'));
+                    } else {
+                        $ttypeDisplay = $ttypeClean !== '' ? $ttypeClean : $ttype;
+                    }
+                }
+
                 // Detectar campos disponibles y normalizar para el bridge (v_senforms_bridge_status)
                 $ticketId = 0;
                 if (isset($row['id'])) $ticketId = (int)$row['id'];
@@ -378,8 +404,7 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
                 $isPaid = isset($row['is_paid']) ? ((int)$row['is_paid'] === 1) : false;
                 // fallback: payment_state SUCCESS -> paid
                 if (!$isPaid && isset($row['payment_state'])) {
-                    $ps = strtoupper(trim($row['payment_state']));
-                    if ($ps === 'SUCCESS' || $ps === 'APROBADO' || $ps === 'COMPLETED') $isPaid = true;
+                    // no bloquear flujo si falla
                 }
 
                 // si no está pago, omitir la entrada
@@ -406,7 +431,8 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
                         'ticket_ref'  => $multiplier > 1 ? ($ticketRef . '-'.($i+1)) : $ticketRef,
                         'nombre'      => $nombre,
                         'email'       => $email,
-                        'tipo'        => $ttype,
+                        'tipo'        => $ttypeDisplay,
+                        'price'       => $priceVal,
                         'is_paid'     => $isPaid,
                         'is_checked_in' => $isCheckedIn,
                         'checked_in_at' => $checkedInAt,
@@ -683,7 +709,7 @@ function get_economic_stats($pdo, $evento_id) {
             $stats['por_tipo'][$tipo]['monto'] += $monto;
         }
         
-        // ==== TICKEX: entradas pagadas (is_paid = 1) ====
+        // ==== TICKEX: entradas pagadas (is_paid = 1) con precio real del bridge ====
         try {
             // Detectar bridge (tabla o view)
             $candidates = array('v_senforms_bridge_status', 'senforms_bridge_tickets');
@@ -697,78 +723,113 @@ function get_economic_stats($pdo, $evento_id) {
                     }
                 } catch (Exception $_e) {}
             }
-            
+
             if ($source) {
                 $bridgeCols = detect_table_columns($pdo, $source);
                 $mappedSlugs = get_mapped_bridge_slugs($pdo, $evento_id);
 
-                if (!empty($mappedSlugs)) {
-                    // Construir WHERE para bridge (filtrar solo ventas pagadas)
-                    $bWhere = array();
-                    $bParams = array();
+                // detectar columna de evento para fallback
+                $eventCol = null;
+                if (isset($bridgeCols['evento_id'])) $eventCol = 'evento_id';
+                elseif (isset($bridgeCols['event_id'])) $eventCol = 'event_id';
+                elseif (isset($bridgeCols['id_evento'])) $eventCol = 'id_evento';
 
-                    if (isset($bridgeCols['is_paid'])) {
-                        $bWhere[] = "is_paid = 1";
-                    } elseif (isset($bridgeCols['payment_state']) || isset($bridgeCols['payment_status'])) {
-                        // handled later if needed
+                // si no hay forma de filtrar por evento, evitamos mezclar datos
+                if (empty($mappedSlugs) && !$eventCol) {
+                    throw new Exception('Sin filtro de evento para bridge');
+                }
+
+                // Construir WHERE para bridge (solo ventas pagadas del evento)
+                $bWhere = array();
+                $bParams = array();
+
+                if (isset($bridgeCols['is_paid'])) {
+                    $bWhere[] = "is_paid = 1";
+                } elseif (isset($bridgeCols['payment_state'])) {
+                    $bWhere[] = "UPPER(payment_state) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+                } elseif (isset($bridgeCols['payment_status'])) {
+                    $bWhere[] = "UPPER(payment_status) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+                }
+
+                if (!empty($mappedSlugs) && isset($bridgeCols['event_slug'])) {
+                    $placeholders = array();
+                    foreach ($mappedSlugs as $i => $s) {
+                        $ph = ':slug' . $i;
+                        $placeholders[] = $ph;
+                        $bParams[$ph] = $s;
                     }
-
-                    if (isset($bridgeCols['event_slug'])) {
-                        $placeholders = array();
-                        foreach ($mappedSlugs as $i => $s) {
-                            $ph = ':slug' . $i;
-                            $placeholders[] = $ph;
-                            $bParams[$ph] = $s;
-                        }
-                        if (!empty($placeholders)) {
-                            $bWhere[] = "event_slug IN (" . implode(',', $placeholders) . ")";
-                        }
+                    if (!empty($placeholders)) {
+                        $bWhere[] = "event_slug IN (" . implode(',', $placeholders) . ")";
                     }
+                } elseif ($eventCol) {
+                    $bWhere[] = "$eventCol = :eid";
+                    $bParams[':eid'] = $evento_id;
+                }
 
-                    // Detectar columna de precio disponible
-                    $priceCols = array('price','amount','total_price','total_amount','valor','price_cents');
-                    $priceCol = null; $priceDiv = 1;
-                    foreach ($priceCols as $pc) {
-                        if (isset($bridgeCols[$pc])) {
-                            $priceCol = $pc;
-                            if ($pc === 'price_cents') $priceDiv = 100;
-                            break;
-                        }
+                // Detectar columna de precio disponible
+                $priceCols = array('price','amount','total_price','total_amount','valor','price_cents');
+                $priceCol = null; $priceDiv = 1;
+                foreach ($priceCols as $pc) {
+                    if (isset($bridgeCols[$pc])) {
+                        $priceCol = $pc;
+                        if ($pc === 'price_cents') $priceDiv = 100;
+                        break;
                     }
+                }
 
-                    // Detectar columna para tipo/nombre de ticket
-                    $tipoCols = array('ticket_type','ticket_name','product_name','entry_type','event_name','ticket_class','category','nombre');
-                    $tipoCol = null;
-                    foreach ($tipoCols as $tc) {
-                        if (isset($bridgeCols[$tc])) { $tipoCol = $tc; break; }
+                // Detectar columna para tipo/nombre de ticket
+                $tipoCols = array('selected_type_name','selected_type','ticket_type','ticket_name','product_name','entry_type','event_name','ticket_class','category','nombre','name','tipo');
+                $tipoCol = null;
+                foreach ($tipoCols as $tc) {
+                    if (isset($bridgeCols[$tc])) { $tipoCol = $tc; break; }
+                }
+
+                // Factor por cantidad o 2x1
+                $qtyCols = array('quantity','cantidad','qty','num_entries');
+                $qtyExpr = null;
+                foreach ($qtyCols as $qc) {
+                    if (isset($bridgeCols[$qc])) { $qtyExpr = $qc; break; }
+                }
+                $normConds = array();
+                foreach ($tipoCols as $tc) {
+                    if (isset($bridgeCols[$tc])) {
+                        $normConds[] = "REPLACE(LOWER(".$tc."),' ','') LIKE '%2x1%'";
                     }
+                }
+                $factorExpr = '1';
+                if ($qtyExpr) {
+                    $textCond = !empty($normConds) ? ("(" . implode(' OR ', $normConds) . ")") : '0';
+                    $factorExpr = "CASE WHEN $qtyExpr >= 2 THEN $qtyExpr WHEN $textCond THEN 2 ELSE 1 END";
+                } elseif (!empty($normConds)) {
+                    $factorExpr = "CASE WHEN (" . implode(' OR ', $normConds) . ") THEN 2 ELSE 1 END";
+                }
 
-                    // Construir SQL dinámico: usar priceCol si existe, sino monto 0
-                    $montoExpr = $priceCol ? ("SUM(COALESCE(" . $priceCol . ",0))" . ($priceDiv !== 1 ? "/$priceDiv" : "")) : "SUM(0)";
-                    $tipoSelect = $tipoCol ? $tipoCol : "NULL";
+                // Construir SQL dinámico: usar priceCol * factor si existe, sino monto 0
+                $tipoSelect = $tipoCol ? $tipoCol : "NULL";
+                $montoExpr = $priceCol ? ("SUM((COALESCE(" . $priceCol . ",0)" . ($priceDiv !== 1 ? "/$priceDiv" : "") . ") * (".$factorExpr."))") : "SUM(0)";
+                $qtyExprSql = "SUM(".$factorExpr.") as qty";
 
-                    $sqlBridge = "SELECT COUNT(*) as qty, " . $montoExpr . " as monto, " . $tipoSelect . " as tipo FROM $source";
-                    if (!empty($bWhere)) $sqlBridge .= " WHERE " . implode(" AND ", $bWhere);
-                    $sqlBridge .= " GROUP BY " . ($tipoCol ? $tipoCol : '1') . " ORDER BY tipo";
+                $sqlBridge = "SELECT " . $qtyExprSql . ", " . $montoExpr . " as monto, " . $tipoSelect . " as tipo FROM $source";
+                if (!empty($bWhere)) $sqlBridge .= " WHERE " . implode(" AND ", $bWhere);
+                $sqlBridge .= " GROUP BY " . ($tipoCol ? $tipoCol : '1') . " ORDER BY tipo";
 
-                    $stmtBridge = $pdo->prepare($sqlBridge);
-                    $stmtBridge->execute($bParams);
+                $stmtBridge = $pdo->prepare($sqlBridge);
+                $stmtBridge->execute($bParams);
 
-                    while ($row = $stmtBridge->fetch(PDO::FETCH_ASSOC)) {
-                        $tipo = isset($row['tipo']) && $row['tipo'] ? trim((string)$row['tipo']) : 'Tickex';
-                        $qty = isset($row['qty']) ? (int)$row['qty'] : 0;
-                        $monto = isset($row['monto']) ? (float)$row['monto'] : 0;
+                while ($row = $stmtBridge->fetch(PDO::FETCH_ASSOC)) {
+                    $tipo = isset($row['tipo']) && $row['tipo'] ? trim((string)$row['tipo']) : 'Tickex';
+                    $qty = isset($row['qty']) ? (int)$row['qty'] : 0;
+                    $monto = isset($row['monto']) ? (float)$row['monto'] : 0;
 
-                        $stats['entradas_vendidas'] += $qty;
-                        $stats['total_recaudado'] += $monto;
+                    $stats['entradas_vendidas'] += $qty;
+                    $stats['total_recaudado'] += $monto;
 
-                        if (!isset($stats['por_tipo'][$tipo])) {
-                            $stats['por_tipo'][$tipo] = array('cantidad' => 0, 'monto' => 0, 'origen' => 'TICKEX');
-                        }
-                        $stats['por_tipo'][$tipo]['cantidad'] += $qty;
-                        $stats['por_tipo'][$tipo]['monto'] += $monto;
-                        $stats['por_tipo'][$tipo]['origen'] = 'TICKEX';
+                    if (!isset($stats['por_tipo'][$tipo])) {
+                        $stats['por_tipo'][$tipo] = array('cantidad' => 0, 'monto' => 0, 'origen' => 'TICKEX');
                     }
+                    $stats['por_tipo'][$tipo]['cantidad'] += $qty;
+                    $stats['por_tipo'][$tipo]['monto'] += $monto;
+                    $stats['por_tipo'][$tipo]['origen'] = 'TICKEX';
                 }
             }
         } catch (Exception $e) {

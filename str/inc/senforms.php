@@ -27,6 +27,40 @@ function sf_db(){
     return $pdo;
 }
 
+// Pago aprobado en SenForms/Tickex (estados conocidos)
+function sf_is_payment_state_paid($state){
+    $val = strtoupper(trim((string)$state));
+    if ($val === '') return false;
+    $paid = array('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID','FINISHED');
+    return in_array($val, $paid, true);
+}
+
+// Cantidad de tickets vendidos para un TicketType (SelectedType numérico)
+function sf_count_ticket_type_sales($ticketTypeId){
+    $pdo = sf_db();
+    $st = $pdo->prepare("SELECT COUNT(*) FROM Tickets WHERE CAST(SelectedType AS UNSIGNED) = ?");
+    $st->execute(array((int)$ticketTypeId));
+    return (int)$st->fetchColumn();
+}
+
+// TicketTypes de un evento con conteo de ventas
+function sf_get_ticket_types_with_sales($eventId){
+    $pdo = sf_db();
+    $sql = "SELECT tt.*, COALESCE(s.sales_count,0) AS sales_count
+            FROM TicketType tt
+            LEFT JOIN (
+              SELECT CAST(SelectedType AS UNSIGNED) AS tt_id, COUNT(*) AS sales_count
+              FROM Tickets
+              WHERE EventId = ?
+              GROUP BY tt_id
+            ) s ON s.tt_id = tt.Id
+            WHERE tt.EventId = ?
+            ORDER BY tt.Id ASC";
+    $st = $pdo->prepare($sql);
+    $st->execute(array((int)$eventId, (int)$eventId));
+    return $st->fetchAll();
+}
+
 function sf_get_events(){
     $pdo = sf_db();
     $st = $pdo->query("SELECT * FROM Events ORDER BY Id DESC");
@@ -49,6 +83,14 @@ function sf_create_ticket_type($eventId, $name, $price){
     $st = $pdo->prepare("INSERT INTO TicketType (Name, Price, EventId) VALUES (?, ?, ?)");
     $st->execute(array($n, $p, (int)$eventId));
     return (int)$pdo->lastInsertId();
+}
+
+function sf_rename_ticket_type($ticketTypeId, $name){
+    $pdo = sf_db();
+    $n = trim($name);
+    if ($n === '') throw new InvalidArgumentException('Nombre vacío');
+    $st = $pdo->prepare("UPDATE TicketType SET Name = ? WHERE Id = ?");
+    return $st->execute(array($n, (int)$ticketTypeId));
 }
 
 function sf_delete_ticket_type($ticketTypeId){
@@ -96,6 +138,10 @@ function sf_update_ticket_type_price($ticketTypeId, $price){
     $pdo = sf_db();
     $p = (float)$price;
     if ($p < 0) throw new InvalidArgumentException('Precio inválido');
+    $sales = sf_count_ticket_type_sales($ticketTypeId);
+    if ($sales > 0) {
+        throw new RuntimeException('Precio bloqueado: ya hay '.$sales.' ventas. Crea un TicketType nuevo.');
+    }
     $st = $pdo->prepare("UPDATE TicketType SET Price = ? WHERE Id = ?");
     return $st->execute(array($p, (int)$ticketTypeId));
 }
@@ -106,6 +152,27 @@ function sf_update_event_limit($eventId, $limit){
     if ($l < 0) throw new InvalidArgumentException('Límite inválido');
     $st = $pdo->prepare("UPDATE Events SET TicketAmountLimit = ?, LastUpdatedAt = NOW(6) WHERE Id = ?");
     return $st->execute(array($l, (int)$eventId));
+}
+
+// Reporte real de ventas por SelectedType usando Tickets.Price
+function sf_sales_report_by_type($eventId){
+        $pdo = sf_db();
+        $sql = "SELECT 
+                            COALESCE(NULLIF(t.SelectedType, ''), '0') AS selected_type,
+                            CAST(NULLIF(t.SelectedType, '') AS UNSIGNED) AS selected_type_id,
+                            COUNT(*) AS qty,
+                            SUM(t.Price) AS total_real,
+                            MAX(t.PaymentState) AS last_state,
+                            tt.Name AS ticket_type_name
+                        FROM Tickets t
+                        LEFT JOIN TicketType tt ON tt.Id = CAST(NULLIF(t.SelectedType, '') AS UNSIGNED)
+                        WHERE t.EventId = ?
+                            AND UPPER(COALESCE(t.PaymentState, '')) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID','FINISHED')
+                        GROUP BY selected_type, selected_type_id, tt.Name
+                        ORDER BY qty DESC";
+        $st = $pdo->prepare($sql);
+        $st->execute(array((int)$eventId));
+        return $st->fetchAll();
 }
 
 function sf_create_event($data){

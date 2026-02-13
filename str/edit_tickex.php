@@ -236,7 +236,7 @@ include __DIR__.'/inc/layout_top.php';
 </div>
 
 <?php if ($selectedEvent): ?>
-  <?php $types = sf_get_ticket_types($selectedEvent['Id']); ?>
+  <?php $types = sf_get_ticket_types_with_sales($selectedEvent['Id']); ?>
   <div class="card" style="margin-top:12px;">
     <h3 style="margin-top:0;">Evento cargado: <?php echo e($selectedEvent['Name']); ?> (Id <?php echo (int)$selectedEvent['Id']; ?>)</h3>
     <div class="muted" style="font-size:12px;">SiteName: <?php echo e($selectedEvent['SiteName']); ?> | Límite: <?php echo (int)$selectedEvent['TicketAmountLimit']; ?> | Activo: <?php echo $selectedEvent['Active'] ? 'Sí' : 'No'; ?></div>
@@ -263,19 +263,32 @@ include __DIR__.'/inc/layout_top.php';
     <?php if ($types): ?>
       <div style="margin-top:12px;overflow:auto;">
         <table class="table">
-          <tr><th>ID</th><th>Nombre</th><th>Precio</th><th>Guardar</th><th>Borrar</th></tr>
+          <tr><th>ID</th><th>Nombre</th><th>Precio</th><th>Ventas</th><th>Notas</th><th>Borrar</th></tr>
           <?php foreach ($types as $t): ?>
+            <?php $sales = isset($t['sales_count']) ? (int)$t['sales_count'] : 0; ?>
             <tr>
               <td><?php echo (int)$t['Id']; ?></td>
               <td><?php echo e($t['Name']); ?></td>
               <td>
-                <form method="post" style="display:flex;gap:6px;align-items:center;">
-                  <input type="hidden" name="action" value="update_price">
-                  <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
-                  <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
-                  <input type="number" step="0.01" min="0" name="price" value="<?php echo htmlspecialchars($t['Price'], ENT_QUOTES, 'UTF-8'); ?>" style="width:120px;">
-                  <button class="btn secondary" type="submit">Guardar</button>
-                </form>
+                <?php if ($sales > 0): ?>
+                  <div class="muted">$<?php echo htmlspecialchars($t['Price'], ENT_QUOTES, 'UTF-8'); ?> (bloqueado)</div>
+                <?php else: ?>
+                  <form method="post" style="display:flex;gap:6px;align-items:center;">
+                    <input type="hidden" name="action" value="update_price">
+                    <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
+                    <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
+                    <input type="number" step="0.01" min="0" name="price" value="<?php echo htmlspecialchars($t['Price'], ENT_QUOTES, 'UTF-8'); ?>" style="width:120px;">
+                    <button class="btn secondary" type="submit">Guardar</button>
+                  </form>
+                <?php endif; ?>
+              </td>
+              <td><?php echo $sales; ?></td>
+              <td>
+                <?php if ($sales === 0): ?>
+                  <div class="muted" style="font-size:12px;">Sin ventas, se puede editar.</div>
+                <?php else: ?>
+                  <div class="muted" style="font-size:12px;">Crea un tipo nuevo para cambiar precio.</div>
+                <?php endif; ?>
               </td>
               <td>
                 <form method="post" onsubmit="return confirm('¿Eliminar este tipo de entrada?');" style="margin:0;">

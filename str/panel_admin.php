@@ -2,6 +2,7 @@
 // Panel principal de administración STR / Tickex
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/unified_tickets.php';
 
 $title = 'Panel de administración';
 
@@ -57,21 +58,12 @@ if (isset($cu['display_name']) && trim($cu['display_name']) !== '') {
 
 $pdo = db();
 
-// Detectar columnas de entradas para check-in
-$colsEn = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
-$colCheck = 'checked_in';
-foreach ($colsEn as $c) {
-    if (isset($c['name']) && $c['name'] === 'checkin') {
-        $colCheck = 'checkin';
-        break;
-    }
-}
-
 // Contadores globales
-$totalEntradas = (int)$pdo->query("SELECT COUNT(*) FROM entradas")->fetchColumn();
-$sqlCheck = "SELECT COUNT(*) FROM entradas WHERE $colCheck = 1";
-$checkinsGlobal = (int)$pdo->query($sqlCheck)->fetchColumn();
-$faltanGlobal = max(0, $totalEntradas - $checkinsGlobal);
+$totalEntradas = 0;
+$checkinsGlobal = 0;
+$faltanGlobal = 0;
+$summaryEventId = isset($_GET['summary_event_id']) ? (int)$_GET['summary_event_id'] : 0;
+$summaryLabel = 'Todos los eventos';
 
 // Búsqueda
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
@@ -108,48 +100,35 @@ if ($q !== '' && !$eventIds) {
     }
 }
 
-// Detectar si existe tipos_entrada y sus columnas de stock
-$hasTipos = false; $hasCantDisp = false; $hasCantTotal = false;
-$stmtTipos = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='tipos_entrada' LIMIT 1");
-if ($stmtTipos && $stmtTipos->fetch(PDO::FETCH_ASSOC)) {
-    $hasTipos = true;
-    $colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($colsTE as $c) {
-        if (isset($c['name']) && $c['name'] === 'cantidad_disponible') $hasCantDisp = true;
-        if (isset($c['name']) && $c['name'] === 'cantidad_total') $hasCantTotal = true;
-    }
-}
-
-// Funciones de stats por evento
-function stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasCantTotal) {
-    $out = array('total'=>0,'checkins'=>0,'faltan'=>0,'disponibles'=>null,'stock_total'=>null);
-
-    // Entradas
-    $stmtT = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ?");
-    $stmtT->execute(array($eventoId));
-    $out['total'] = (int)$stmtT->fetchColumn();
-
-    $stmtC = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1");
-    $stmtC->execute(array($eventoId));
-    $out['checkins'] = (int)$stmtC->fetchColumn();
-    $out['faltan'] = max(0, $out['total'] - $out['checkins']);
-
-    if ($hasTipos) {
-        $cols = array();
-        if ($hasCantDisp) $cols[] = 'SUM(cantidad_disponible) AS disp';
-        if ($hasCantTotal) $cols[] = 'SUM(cantidad_total) AS tot';
-        if ($cols) {
-            $sql = "SELECT ".implode(',', $cols)." FROM tipos_entrada WHERE evento_id = ?";
-            $st = $pdo->prepare($sql);
-            $st->execute(array($eventoId));
-            $row = $st->fetch(PDO::FETCH_ASSOC);
-            if ($row) {
-                if ($hasCantDisp) $out['disponibles'] = isset($row['disp']) ? (int)$row['disp'] : null;
-                if ($hasCantTotal) $out['stock_total'] = isset($row['tot']) ? (int)$row['tot'] : null;
-            }
+// Recalcular contadores globales con stats unificados (STR + Tickex)
+if (!empty($eventos)) {
+  if ($summaryEventId > 0) {
+    foreach ($eventos as $evStats) {
+      if ((int)$evStats['id'] === $summaryEventId) {
+        try {
+          $stg = get_unified_stats($pdo, $summaryEventId);
+          $totalEntradas = (int)$stg['total'];
+          $checkinsGlobal = (int)$stg['checkins'];
+          $faltanGlobal = max(0, $totalEntradas - $checkinsGlobal);
+          $summaryLabel = isset($evStats['nombre']) ? $evStats['nombre'] : ('Evento #'.$summaryEventId);
+        } catch (Exception $e) {
+          // si falla, queda en 0 y label por defecto
         }
+        break;
+      }
     }
-    return $out;
+  } else {
+    foreach ($eventos as $evStats) {
+      try {
+        $stg = get_unified_stats($pdo, (int)$evStats['id']);
+        $totalEntradas += (int)$stg['total'];
+        $checkinsGlobal += (int)$stg['checkins'];
+      } catch (Exception $e) {
+        // si falla, seguir sin cortar panel
+      }
+    }
+    $faltanGlobal = max(0, $totalEntradas - $checkinsGlobal);
+  }
 }
 
 include __DIR__ . '/inc/layout_top.php';
@@ -158,6 +137,20 @@ include __DIR__ . '/inc/layout_top.php';
 <div class="card" style="max-width:1100px;margin:16px auto;">
   <h1 style="margin-top:0;">Panel de administración</h1>
   <p style="margin:8px 0;">Hola, <strong><?php echo e($nombreMostrar); ?></strong>.</p>
+  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+    <label class="muted" for="summary_event_id" style="margin:0;">Resumen:</label>
+    <select name="summary_event_id" id="summary_event_id" style="min-width:220px;">
+      <option value="0" <?php echo $summaryEventId === 0 ? 'selected' : ''; ?>>Todos los eventos</option>
+      <?php foreach ($eventos as $evOpt): ?>
+        <option value="<?php echo (int)$evOpt['id']; ?>" <?php echo $summaryEventId === (int)$evOpt['id'] ? 'selected' : ''; ?>>
+          <?php echo e($evOpt['nombre']); ?> (ID <?php echo (int)$evOpt['id']; ?>)
+        </option>
+      <?php endforeach; ?>
+    </select>
+    <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?php echo e($q); ?>"><?php endif; ?>
+    <button class="btn" type="submit">Ver</button>
+  </form>
+  <div class="muted" style="font-size:12px;margin-top:4px;">Mostrando: <?php echo e($summaryLabel); ?></div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
     <div class="card" style="flex:1 1 200px;min-width:200px;">
       <div class="muted">Entradas vendidas</div>
@@ -192,7 +185,7 @@ include __DIR__ . '/inc/layout_top.php';
   <?php else: ?>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
       <?php foreach ($eventos as $ev): ?>
-        <?php $st = stats_evento($pdo, (int)$ev['id'], $colCheck, $hasTipos, $hasCantDisp, $hasCantTotal); ?>
+        <?php $st = get_unified_stats($pdo, (int)$ev['id']); ?>
         <div class="card" style="margin:0;">
           <div style="display:flex;gap:12px;">
             <div style="width:80px;height:80px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center;">

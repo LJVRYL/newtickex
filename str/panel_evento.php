@@ -497,6 +497,7 @@ include __DIR__.'/inc/layout_top.php';
         <th>Nombre</th>
         <th>Email</th>
         <th>Tipo</th>
+        <th>Precio</th>
         <th>Código/Ref</th>
         <th>Pago</th>
         <th>Estado</th>
@@ -512,6 +513,14 @@ include __DIR__.'/inc/layout_top.php';
         <td><?php echo e($r['nombre']); ?></td>
         <td><?php echo e($r['email']); ?></td>
         <td><?php echo e($r['tipo']); ?></td>
+        <td>
+          <?php $p = isset($r['price']) ? (float)$r['price'] : 0; ?>
+          <?php if ($p > 0): ?>
+            $<?php echo number_format($p, 0, ',', '.'); ?>
+          <?php else: ?>
+            <span class="muted">-</span>
+          <?php endif; ?>
+        </td>
         <td>
           <?php $ref = isset($r['ticket_ref']) ? trim((string)$r['ticket_ref']) : ''; ?>
           <?php if ($ref === ''): ?>
