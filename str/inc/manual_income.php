@@ -1,7 +1,7 @@
 <?php
 /**
  * inc/manual_income.php
- * Funciones para gestionar ingresos manuales por evento
+ * Funciones para gestionar ingresos/egresos manuales por evento
  */
 
 /**
@@ -12,6 +12,14 @@ function ensure_manual_income_table($pdo) {
         // Verificar si existe
         $stmt = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='manual_income' LIMIT 1");
         if ($stmt && $stmt->fetch()) {
+            // Migraciones ligeras de columnas nuevas
+            $cols = $pdo->query("PRAGMA table_info(manual_income)")->fetchAll(PDO::FETCH_ASSOC);
+            $colNames = array();
+            foreach ($cols as $c) { $colNames[] = $c['name']; }
+
+            if (!in_array('tipo', $colNames, true)) {
+                $pdo->exec("ALTER TABLE manual_income ADD COLUMN tipo TEXT DEFAULT 'ingreso'");
+            }
             return true;  // tabla ya existe
         }
         
@@ -23,6 +31,7 @@ function ensure_manual_income_table($pdo) {
                 concepto TEXT NOT NULL,
                 monto REAL NOT NULL,
                 descripcion TEXT,
+                tipo TEXT DEFAULT 'ingreso',
                 creado_por INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -41,21 +50,29 @@ function ensure_manual_income_table($pdo) {
 /**
  * Registra un nuevo ingreso manual
  */
-function add_manual_income($pdo, $evento_id, $concepto, $monto, $descripcion = '', $user_id = null) {
+function add_manual_income($pdo, $evento_id, $concepto, $monto, $descripcion = '', $user_id = null, $tipo = 'ingreso') {
     try {
         ensure_manual_income_table($pdo);
+
+        $tipo = strtolower(trim($tipo));
+        if (!in_array($tipo, array('ingreso','egreso'), true)) {
+            $tipo = 'ingreso';
+        }
+        // Guardamos monto con signo según el tipo para mantener el neto coherente
+        $montoFirmado = $tipo === 'egreso' ? -abs((float)$monto) : abs((float)$monto);
         
         $stmt = $pdo->prepare("
-            INSERT INTO manual_income (evento_id, concepto, monto, descripcion, creado_por)
-            VALUES (:eid, :concepto, :monto, :desc, :user_id)
+            INSERT INTO manual_income (evento_id, concepto, monto, descripcion, creado_por, tipo)
+            VALUES (:eid, :concepto, :monto, :desc, :user_id, :tipo)
         ");
         
         $stmt->execute(array(
             ':eid'      => (int)$evento_id,
             ':concepto' => trim($concepto),
-            ':monto'    => (float)$monto,
+            ':monto'    => $montoFirmado,
             ':desc'     => trim($descripcion),
             ':user_id'  => $user_id ? (int)$user_id : null,
+            ':tipo'     => $tipo,
         ));
         
         return true;
@@ -102,6 +119,43 @@ function get_total_manual_income($pdo, $evento_id) {
     } catch (Exception $e) {
         return 0.0;
     }
+}
+
+/**
+ * Devuelve desglose de ingresos/egresos manuales: totales y cantidad de movimientos
+ */
+function get_manual_income_breakdown($pdo, $evento_id) {
+    $result = array(
+        'ingresos' => array('total' => 0.0, 'count' => 0),
+        'egresos'  => array('total' => 0.0, 'count' => 0),
+        'neto'     => 0.0,
+    );
+
+    try {
+        ensure_manual_income_table($pdo);
+        $stmt = $pdo->prepare("
+            SELECT
+                SUM(CASE WHEN monto >= 0 THEN monto ELSE 0 END) AS ingresos,
+                SUM(CASE WHEN monto < 0 THEN monto ELSE 0 END)  AS egresos,
+                SUM(CASE WHEN monto >= 0 THEN 1 ELSE 0 END)     AS cant_ingresos,
+                SUM(CASE WHEN monto < 0 THEN 1 ELSE 0 END)      AS cant_egresos
+            FROM manual_income
+            WHERE evento_id = :eid
+        ");
+        $stmt->execute(array(':eid' => (int)$evento_id));
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $result['ingresos']['total'] = $row['ingresos'] ? (float)$row['ingresos'] : 0.0;
+            $result['egresos']['total']  = $row['egresos'] ? (float)$row['egresos'] : 0.0; // ya viene en negativo
+            $result['ingresos']['count'] = $row['cant_ingresos'] ? (int)$row['cant_ingresos'] : 0;
+            $result['egresos']['count']  = $row['cant_egresos'] ? (int)$row['cant_egresos'] : 0;
+            $result['neto'] = $result['ingresos']['total'] + $result['egresos']['total'];
+        }
+    } catch (Exception $e) {
+        // Ignorar
+    }
+
+    return $result;
 }
 
 /**

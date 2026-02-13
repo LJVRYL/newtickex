@@ -2,6 +2,7 @@
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/unified_tickets.php';
 require_once __DIR__.'/inc/manual_income.php';
+require_once __DIR__.'/inc/produccion.php';
 
 require_login();
 
@@ -74,6 +75,23 @@ function add_econ_mov($pdo, $data) {
 }
 
 ensure_econ_table($pdo);
+
+// Costo acumulado de staff (toda la base)
+function get_staff_cost_total($pdo) {
+  try {
+    $cols = array();
+    $st = $pdo->query("PRAGMA table_info(usuarios_admin)");
+    if ($st) {
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $ci) { $cols[$ci['name']] = true; }
+    }
+    if (!isset($cols['costo_servicio'])) return 0;
+    $stmt = $pdo->query("SELECT SUM(COALESCE(costo_servicio,0)) FROM usuarios_admin WHERE tipo_global='staff_evento'");
+    $val = $stmt ? $stmt->fetchColumn() : 0;
+    return $val ? (float)$val : 0;
+  } catch (Exception $e) {
+    return 0;
+  }
+}
 
 // ------------------------------------------------------------------
 // POST: agregar movimiento
@@ -198,7 +216,9 @@ foreach ($eventIds as $eid) {
     );
 }
 
-$saldoProyecto = ($ingresosTotales + $totalPresu) - ($totalGastos + $totalInv);
+$staffCost = get_staff_cost_total($pdo);
+$artistCostTotal = get_artist_cost_total($pdo);
+$saldoProyecto = ($ingresosTotales + $totalPresu) - ($totalGastos + $totalInv + $staffCost + $artistCostTotal);
 
 $title = 'Economía General';
 include __DIR__.'/inc/layout_top.php';
@@ -227,11 +247,11 @@ include __DIR__.'/inc/layout_top.php';
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Ingresos totales</div>
     <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">$<?php echo number_format($ingresosTotales,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">Incluye ventas + ingresos manuales</div>
+    <div style="font-size:12px;color:var(--muted);">Incluye ventas + manuales (neto)</div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
-    <div class="muted" style="font-size:12px;">Ingresos manuales</div>
-    <div style="font-size:24px;font-weight:700;margin-top:4px;">$<?php echo number_format($ingresosManual,2); ?></div>
+    <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
+    <div style="font-size:24px;font-weight:700;margin-top:4px;color:<?php echo ($ingresosManual >= 0 ? 'var(--info)' : 'var(--warn)'); ?>;">$<?php echo number_format($ingresosManual,2); ?></div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Gastos registrados</div>
@@ -240,6 +260,14 @@ include __DIR__.'/inc/layout_top.php';
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Inversiones</div>
     <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">$<?php echo number_format($totalInv,2); ?></div>
+  </div>
+  <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="muted" style="font-size:12px;">Costo staff</div>
+    <div style="font-size:24px;font-weight:700;margin-top:4px;">$<?php echo number_format($staffCost,2); ?></div>
+  </div>
+  <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="muted" style="font-size:12px;">Artística</div>
+    <div style="font-size:24px;font-weight:700;margin-top:4px;">$<?php echo number_format($artistCostTotal,2); ?></div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Presupuesto disponible</div>

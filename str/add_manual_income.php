@@ -25,12 +25,17 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 $evento_id = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
 $concepto = isset($_POST['concepto']) ? trim($_POST['concepto']) : '';
 $monto = isset($_POST['monto']) ? (float)$_POST['monto'] : 0;
+$tipo  = isset($_POST['tipo']) ? trim($_POST['tipo']) : 'ingreso';
 $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
 
 if (!$evento_id || !$concepto || $monto <= 0) {
     http_response_code(400);
     echo json_encode(array('error' => 'Datos inválidos'));
     exit;
+}
+
+if (!in_array(strtolower($tipo), array('ingreso','egreso'), true)) {
+    $tipo = 'ingreso';
 }
 
 $pdo = db();
@@ -46,7 +51,7 @@ if (!$stmtEv->fetch()) {
 }
 
 // Agregar el ingreso
-if (add_manual_income($pdo, $evento_id, $concepto, $monto, $descripcion, $adminId)) {
+if (add_manual_income($pdo, $evento_id, $concepto, $monto, $descripcion, $adminId, $tipo)) {
     echo json_encode(array(
         'success' => true,
         'message' => 'Ingreso agregado correctamente',

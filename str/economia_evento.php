@@ -52,10 +52,10 @@ include __DIR__.'/inc/layout_top.php';
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
       </div>
     </div>
-    <?php if ($ecoStats['manual_income'] > 0): ?>
+    <?php if ($ecoStats['manual_income'] != 0): ?>
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Ingresos manuales</div>
-      <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--info);">
+      <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($ecoStats['manual_income'] >= 0 ? 'var(--info)' : 'var(--warn)'); ?>;">
         $<?php echo number_format($ecoStats['manual_income'], 2); ?>
       </div>
     </div>
@@ -73,17 +73,19 @@ include __DIR__.'/inc/layout_top.php';
         <th style="text-align:right;">Total</th>
         <th style="text-align:center;">Origen</th>
       </tr>
-      <?php foreach ($ecoStats['por_tipo'] as $tipo => $datos):
-        $cantidad = (int)$datos['cantidad'];
-        $monto_total = (float)$datos['monto'];
+      <?php foreach ($ecoStats['por_tipo'] as $datos):
+        $cantidad = isset($datos['cantidad']) ? (int)$datos['cantidad'] : 0;
+        $monto_total = isset($datos['monto']) ? (float)$datos['monto'] : 0;
         $monto_unit = $cantidad>0 ? $monto_total/$cantidad : 0;
         $origen = $datos['origen'] ?? 'Desconocido';
+        $tipoLabel = $datos['tipo'] ?? 'Sin tipo';
+        $isNegative = $monto_total < 0;
       ?>
       <tr>
-        <td style="font-weight:700;"><?php echo e($tipo); ?></td>
+        <td style="font-weight:700;"><?php echo e($tipoLabel); ?></td>
         <td style="text-align:center;"><?php echo $cantidad; ?></td>
         <td style="text-align:right;">$<?php echo number_format($monto_unit,2); ?></td>
-        <td style="text-align:right;font-weight:700;">$<?php echo number_format($monto_total,2); ?></td>
+        <td style="text-align:right;font-weight:700;color:<?php echo $isNegative ? 'var(--warn)' : 'inherit'; ?>;">$<?php echo number_format($monto_total,2); ?></td>
         <td style="text-align:center;font-size:11px;color:<?php echo ($origen==='TICKEX'?'var(--info)':'var(--ok)'); ?>;"><?php echo e($origen); ?></td>
       </tr>
       <?php endforeach; ?>

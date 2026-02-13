@@ -23,6 +23,25 @@ if ($adminId <= 0) {
 
 $pdo = db();
 
+// Asegurar columna de costo de servicio para staff
+function ensure_staff_cost_column($pdo) {
+  try {
+    $cols = array();
+    $st = $pdo->query("PRAGMA table_info(usuarios_admin)");
+    if ($st) {
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+        $cols[$ci['name']] = true;
+      }
+    }
+    if (!isset($cols['costo_servicio'])) {
+      $pdo->exec("ALTER TABLE usuarios_admin ADD COLUMN costo_servicio REAL DEFAULT 0");
+    }
+  } catch (Exception $e) {
+    // continuar sin bloquear
+  }
+}
+ensure_staff_cost_column($pdo);
+
 // ===== Detectar columnas opcionales =====
 $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
 $hasCreadoPorEv = false;
@@ -93,6 +112,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 /* =========================================================
+   ACTUALIZAR COSTO SERVICIO (POST)
+   ========================================================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_costo') {
+  $staffId = isset($_POST['staff_id']) ? (int)$_POST['staff_id'] : 0;
+  $costoServ = isset($_POST['costo_servicio']) ? (float)$_POST['costo_servicio'] : 0;
+
+  if ($staffId <= 0) {
+    flash('warn', 'ID de staff inválido.');
+  } else {
+    $stQ = $pdo->prepare("SELECT * FROM usuarios_admin WHERE id=? LIMIT 1");
+    $stQ->execute(array($staffId));
+    $staff = $stQ->fetch(PDO::FETCH_ASSOC);
+
+    if (!$staff || $staff['tipo_global'] !== 'staff_evento') {
+      flash('err', 'Staff no encontrado.');
+    } else {
+      $permitido = false;
+      if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
+        $permitido = true;
+      } elseif ($hasCreadoPorU) {
+        $creadorStaff = isset($staff['creado_por_admin_id']) ? (int)$staff['creado_por_admin_id'] : 0;
+        if ($creadorStaff === $adminId) $permitido = true;
+      }
+
+      if (!$permitido) {
+        flash('err','No tenés permiso para modificar este staff.');
+      } else {
+        try {
+          $up = $pdo->prepare("UPDATE usuarios_admin SET costo_servicio = :c WHERE id = :id");
+          $up->execute(array(':c' => $costoServ, ':id' => $staffId));
+          flash('ok','Costo actualizado.');
+        } catch (Exception $e) {
+          flash('err','Error al actualizar: '.$e->getMessage());
+        }
+      }
+    }
+  }
+}
+
+/* =========================================================
    CREAR STAFF (POST)
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST['action'] !== 'delete_staff')) {
@@ -100,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
     $password  = (string)(isset($_POST['password']) ? $_POST['password'] : '');
     $plantilla = trim(isset($_POST['plantilla']) ? $_POST['plantilla'] : 'puerta');
     $eventoId  = (int)(isset($_POST['evento_id']) ? $_POST['evento_id'] : 0);
+    $costoServ = isset($_POST['costo_servicio']) ? (float)$_POST['costo_servicio'] : 0;
 
     if ($username === '' || $password === '') {
         flash('warn', "Usuario y contraseña son obligatorios.");
@@ -113,9 +173,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
             if ($hasCreadoPorU) {
                 $stmt = $pdo->prepare("
                     INSERT INTO usuarios_admin
-                        (username, password, rol, tipo_global, rol_evento, evento_id, activo, creado_por_admin_id)
+                        (username, password, rol, tipo_global, rol_evento, evento_id, activo, creado_por_admin_id, costo_servicio)
                     VALUES
-                        (:u, :p, :rol, :tg, :re, :eid, 1, :creador)
+                        (:u, :p, :rol, :tg, :re, :eid, 1, :creador, :costo)
                 ");
                 $stmt->execute(array(
                     ':u'       => $username,
@@ -124,14 +184,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
                     ':tg'      => $tipoGlobalNuevo,
                     ':re'      => $rolEvento,
                     ':eid'     => $eventoId,
-                    ':creador' => $adminId,
+                      ':creador' => $adminId,
+                      ':costo'   => $costoServ,
                 ));
             } else {
                 $stmt = $pdo->prepare("
                     INSERT INTO usuarios_admin
-                        (username, password, rol, tipo_global, rol_evento, evento_id, activo)
+                        (username, password, rol, tipo_global, rol_evento, evento_id, activo, costo_servicio)
                     VALUES
-                        (:u, :p, :rol, :tg, :re, :eid, 1)
+                        (:u, :p, :rol, :tg, :re, :eid, 1, :costo)
                 ");
                 $stmt->execute(array(
                     ':u'   => $username,
@@ -139,7 +200,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
                     ':rol' => $rolEvento,
                     ':tg'  => $tipoGlobalNuevo,
                     ':re'  => $rolEvento,
-                    ':eid' => $eventoId,
+                      ':eid' => $eventoId,
+                      ':costo' => $costoServ,
                 ));
             }
 
@@ -172,46 +234,46 @@ if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
 
 // ===== Staff visible =====
 if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
-    $stmtStaff = $pdo->query("
-        SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo,
-               e.nombre AS evento_nombre, e.slug AS evento_slug
+  $stmtStaff = $pdo->query("
+    SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo, u.costo_servicio,
+         e.nombre AS evento_nombre, e.slug AS evento_slug
+    FROM usuarios_admin u
+    LEFT JOIN eventos e ON e.id = u.evento_id
+    WHERE u.tipo_global='staff_evento'
+    ORDER BY u.id DESC
+  ");
+  $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
+} else {
+  if ($hasCreadoPorU) {
+    $stmtStaff = $pdo->prepare("
+      SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo, u.costo_servicio,
+           e.nombre AS evento_nombre, e.slug AS evento_slug
+      FROM usuarios_admin u
+      LEFT JOIN eventos e ON e.id = u.evento_id
+      WHERE u.tipo_global='staff_evento'
+        AND u.creado_por_admin_id = :aid
+      ORDER BY u.id DESC
+    ");
+    $stmtStaff->execute(array(':aid'=>$adminId));
+    $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
+  } else {
+    $adminEventoId = isset($_SESSION['evento_id']) ? (int)$_SESSION['evento_id'] : 0;
+    if ($adminEventoId > 0) {
+      $stmtStaff = $pdo->prepare("
+        SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo, u.costo_servicio,
+             e.nombre AS evento_nombre, e.slug AS evento_slug
         FROM usuarios_admin u
         LEFT JOIN eventos e ON e.id = u.evento_id
         WHERE u.tipo_global='staff_evento'
+          AND u.evento_id = :eid
         ORDER BY u.id DESC
-    ");
-    $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
-} else {
-    if ($hasCreadoPorU) {
-        $stmtStaff = $pdo->prepare("
-            SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo,
-                   e.nombre AS evento_nombre, e.slug AS evento_slug
-            FROM usuarios_admin u
-            LEFT JOIN eventos e ON e.id = u.evento_id
-            WHERE u.tipo_global='staff_evento'
-              AND u.creado_por_admin_id = :aid
-            ORDER BY u.id DESC
-        ");
-        $stmtStaff->execute(array(':aid'=>$adminId));
-        $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
+      ");
+      $stmtStaff->execute(array(':eid'=>$adminEventoId));
+      $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $adminEventoId = isset($_SESSION['evento_id']) ? (int)$_SESSION['evento_id'] : 0;
-        if ($adminEventoId > 0) {
-            $stmtStaff = $pdo->prepare("
-                SELECT u.id, u.username, u.rol_evento, u.evento_id, u.activo,
-                       e.nombre AS 
-                FROM usuarios_admin u
-                LEFT JOIN eventos e ON e.id = u.evento_id
-                WHERE u.tipo_global='staff_evento'
-                  AND u.evento_id = :eid
-                ORDER BY u.id DESC
-            ");
-            $stmtStaff->execute(array(':eid'=>$adminEventoId));
-            $staffRows = $stmtStaff->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            $staffRows = array();
-        }
+      $staffRows = array();
     }
+  }
 }
 
 include __DIR__.'/inc/layout_top.php';
@@ -255,6 +317,9 @@ include __DIR__.'/inc/layout_top.php';
       <?php endforeach; ?>
     </select>
 
+    <label>Costo de servicio ($)</label>
+    <input type="number" step="0.01" min="0" name="costo_servicio" placeholder="0" value="0">
+
     <button class="btn" type="submit">Crear staff</button>
   </form>
 </div>
@@ -273,6 +338,7 @@ include __DIR__.'/inc/layout_top.php';
             <th>Usuario</th>
             <th>Rol</th>
             <th>Evento</th>
+            <th>Costo ($)</th>
             <th>Estado</th>
             <th></th>
           </tr>
@@ -290,6 +356,15 @@ include __DIR__.'/inc/layout_top.php';
                 if ($en !== '') echo e($en) . " (" . e($es) . ")";
                 else echo "#".(int)$s['evento_id'];
               ?>
+            </td>
+            <td>
+              <?php $costo = isset($s['costo_servicio']) ? (float)$s['costo_servicio'] : 0; ?>
+              <form method="post" style="display:flex;gap:6px;align-items:center;white-space:nowrap;">
+                <input type="hidden" name="action" value="update_costo">
+                <input type="hidden" name="staff_id" value="<?php echo (int)$s['id']; ?>">
+                <input type="number" step="0.01" min="0" name="costo_servicio" value="<?php echo number_format($costo,2,'.',''); ?>" style="width:110px;">
+                <button class="btn secondary" type="submit" style="padding:4px 8px;font-size:12px;">Guardar</button>
+              </form>
             </td>
             <td>
               <?php if((int)$s['activo']===1): ?>

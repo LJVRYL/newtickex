@@ -2,6 +2,7 @@
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/unified_tickets.php';
 require_once __DIR__.'/inc/manual_income.php';
+require_once __DIR__.'/inc/produccion.php';
 require_once __DIR__.'/inc/senforms.php';
 
 require_login();
@@ -92,6 +93,23 @@ function stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasC
     }
   }
   return $out;
+}
+
+function get_staff_cost_by_event($pdo, $eventoId) {
+  try {
+    $cols = array();
+    $st = $pdo->query("PRAGMA table_info(usuarios_admin)");
+    if ($st) {
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $ci) { $cols[$ci['name']] = true; }
+    }
+    if (!isset($cols['costo_servicio'])) return 0;
+    $stmt = $pdo->prepare("SELECT SUM(COALESCE(costo_servicio,0)) FROM usuarios_admin WHERE tipo_global='staff_evento' AND evento_id = :eid");
+    $stmt->execute(array(':eid'=>$eventoId));
+    $val = $stmt->fetchColumn();
+    return $val ? (float)$val : 0;
+  } catch (Exception $e) {
+    return 0;
+  }
 }
 
 // Lista de eventos (vista general)
@@ -294,6 +312,34 @@ $filters = array(
 );
 $rows = get_unified_entries($pdo, $eventoId, $filters);
 
+// Producción: asignaciones
+$produArtistas = get_produccion_artistas($pdo);
+$produAssigns = get_produccion_assignments($pdo, $eventoId);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_artist_assign') {
+  $artistaId = isset($_POST['artista_id']) ? (int)$_POST['artista_id'] : 0;
+  $precio    = isset($_POST['precio']) && $_POST['precio'] !== '' ? (float)$_POST['precio'] : null;
+  $notasA    = trim(isset($_POST['notas_asignacion']) ? $_POST['notas_asignacion'] : '');
+  if ($artistaId <= 0) {
+    flash('warn','Elegí un artista.');
+  } else {
+    $ok = add_produccion_assignment($pdo, $eventoId, $artistaId, $precio, $notasA);
+    flash($ok ? 'ok' : 'err', $ok ? 'Artista asignado al evento.' : 'No se pudo asignar artista.');
+    header('Location: panel_evento.php?evento_id='.(int)$eventoId);
+    exit;
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'del_artist_assign') {
+  $assignId = isset($_POST['assign_id']) ? (int)$_POST['assign_id'] : 0;
+  if ($assignId > 0) {
+    $ok = delete_produccion_assignment($pdo, $assignId, $eventoId);
+    flash($ok ? 'ok' : 'err', $ok ? 'Artista removido del evento.' : 'No se pudo eliminar.');
+  }
+  header('Location: panel_evento.php?evento_id='.(int)$eventoId);
+  exit;
+}
+
 // estadísticas
 $stats = count_unified_entries($rows);
 $total     = $stats['total'];
@@ -303,6 +349,8 @@ $paid      = $stats['paid'];
 
 // métricas globales del evento (no filtradas) - UNIFICADAS (STR + TICKEX)
 $stEvento = get_unified_stats($pdo, $eventoId);
+$staffCostEvent = get_staff_cost_by_event($pdo, $eventoId);
+$artistCostEvent = get_artist_cost_by_event($pdo, $eventoId);
 $gratis = 0;
 if (!empty($rows)) {
   foreach ($rows as $r) {
@@ -431,11 +479,25 @@ include __DIR__.'/inc/layout_top.php';
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
       </div>
     </div>
-    
-    <?php if ($ecoStats['manual_income'] > 0): ?>
+
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Ingresos manuales</div>
-      <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--info);">
+      <div class="muted" style="font-size:12px;">Costo staff asignado</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
+        $<?php echo number_format($staffCostEvent, 2); ?>
+      </div>
+    </div>
+
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Artística asignada</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
+        $<?php echo number_format($artistCostEvent, 2); ?>
+      </div>
+    </div>
+    
+    <?php if ($ecoStats['manual_income'] != 0): ?>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($ecoStats['manual_income'] >= 0 ? 'var(--info)' : 'var(--warn)'); ?>;">
         $<?php echo number_format($ecoStats['manual_income'], 2); ?>
       </div>
     </div>
@@ -445,6 +507,74 @@ include __DIR__.'/inc/layout_top.php';
   <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <a class="btn" href="economia_evento.php?evento_id=<?php echo (int)$eventoId; ?>" style="min-width:160px;justify-content:center;background:var(--panel-2);color:var(--text);border:1px solid var(--line);box-shadow:none;font-size:13px;font-weight:600;padding:10px 12px;border-radius:10px;">Desglose</a>
     <span class="muted">(detalle por tipo en página separada)</span>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px;">
+  <h3>Artística</h3>
+  <div class="muted" style="margin-bottom:8px;">Asigná DJs/Productores al evento y registra su costo.</div>
+
+  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
+    <input type="hidden" name="action" value="add_artist_assign">
+    <div>
+      <label>Artista</label>
+      <select name="artista_id" required>
+        <option value="">Elegí artista...</option>
+        <?php foreach ($produArtistas as $a): ?>
+          <option value="<?php echo (int)$a['id']; ?>">
+            <?php echo e($a['nombre']); ?> — <?php echo e($a['tipo']); ?> — $<?php echo number_format((float)$a['precio'],0,',','.'); ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div>
+      <label>Precio ($) override</label>
+      <input type="number" step="0.01" min="0" name="precio" placeholder="usa precio del artista">
+    </div>
+    <div style="grid-column:1 / -1;">
+      <label>Notas</label>
+      <textarea name="notas_asignacion" rows="2" placeholder="Horario, requerimientos, etc."></textarea>
+    </div>
+    <div>
+      <button class="btn" type="submit">Asignar artística</button>
+    </div>
+  </form>
+
+  <div style="margin-top:12px;overflow:auto;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Artista</th>
+          <th>Tipo/Categoría</th>
+          <th>Precio</th>
+          <th>Notas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if (empty($produAssigns)): ?>
+          <tr><td colspan="6" class="muted">Sin artística asignada.</td></tr>
+        <?php else: ?>
+          <?php foreach ($produAssigns as $as): ?>
+            <tr>
+              <td><?php echo (int)$as['id']; ?></td>
+              <td><?php echo e(isset($as['nombre']) ? $as['nombre'] : ('#'.$as['artista_id'])); ?></td>
+              <td><?php echo e((isset($as['tipo']) ? $as['tipo'] : '') . ' ' . (isset($as['categoria']) ? $as['categoria'] : '')); ?></td>
+              <td>$<?php echo number_format((float)$as['precio'], 0, ',', '.'); ?></td>
+              <td><?php echo nl2br(e(isset($as['notas']) ? $as['notas'] : '')); ?></td>
+              <td>
+                <form method="post" onsubmit="return confirm('¿Quitar artista del evento?');" style="display:inline;">
+                  <input type="hidden" name="action" value="del_artist_assign">
+                  <input type="hidden" name="assign_id" value="<?php echo (int)$as['id']; ?>">
+                  <button class="btn danger" type="submit">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -562,19 +692,26 @@ include __DIR__.'/inc/layout_top.php';
   <?php endif; ?>
 </div>
 
-<!-- === INGRESOS MANUALES === -->
+<!-- === INGRESOS / EGRESOS MANUALES === -->
 <div class="card">
-  <h3>Ingresos manuales</h3>
-  <p class="muted" style="font-size:13px;margin-bottom:12px;">Registra ventas puerta, consumos, ajustes u otros ingresos.</p>
+  <h3>Ingresos/Egresos manuales (Otros/Varios)</h3>
+  <p class="muted" style="font-size:13px;margin-bottom:12px;">Registra ventas puerta, consumos, ajustes u otros movimientos. Pueden ser ingresos o egresos.</p>
 
   <!-- Formulario para agregar ingreso -->
   <form id="formManualIncome" style="margin-bottom:16px;">
     <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
     
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
+      <div>
+        <label>Tipo</label>
+        <select name="tipo">
+          <option value="ingreso">Ingreso</option>
+          <option value="egreso">Egreso</option>
+        </select>
+      </div>
       <div>
         <label>Concepto</label>
-        <input type="text" name="concepto" placeholder="ej: Venta puerta, Consumo bar..." required>
+        <input type="text" name="concepto" value="Otros / Varios" placeholder="ej: Venta puerta, Consumo bar..." required>
       </div>
       
       <div>
@@ -597,7 +734,8 @@ include __DIR__.'/inc/layout_top.php';
   <?php 
     ensure_manual_income_table($pdo);
     $incomes = get_manual_incomes($pdo, $eventoId);
-    $totalIncome = get_total_manual_income($pdo, $eventoId);
+    $manualBreakdown = get_manual_income_breakdown($pdo, $eventoId);
+    $totalIncome = $manualBreakdown['neto'];
   ?>
   
   <?php if (!empty($incomes)): ?>
@@ -605,16 +743,25 @@ include __DIR__.'/inc/layout_top.php';
       <table class="table">
         <tr>
           <th>Concepto</th>
+          <th>Tipo</th>
           <th>Descripción</th>
           <th>Monto</th>
           <th>Fecha</th>
           <th>Acción</th>
         </tr>
         <?php foreach ($incomes as $inc): ?>
+        <?php $isEgreso = (isset($inc['tipo']) && $inc['tipo'] === 'egreso') || (isset($inc['monto']) && (float)$inc['monto'] < 0); ?>
         <tr>
           <td><?php echo e($inc['concepto']); ?></td>
+          <td>
+            <span class="pill" style="background:<?php echo $isEgreso ? 'var(--panel-3)' : 'var(--panel-2)'; ?>;color:<?php echo $isEgreso ? 'var(--warn)' : 'var(--ok)'; ?>;font-weight:700;font-size:11px;">
+              <?php echo $isEgreso ? 'Egreso' : 'Ingreso'; ?>
+            </span>
+          </td>
           <td><?php echo e($inc['descripcion']); ?></td>
-          <td style="text-align:right;font-weight:700;">$<?php echo number_format((float)$inc['monto'], 2); ?></td>
+          <td style="text-align:right;font-weight:700;color:<?php echo $isEgreso ? 'var(--warn)' : 'var(--ok)'; ?>;">
+            $<?php echo number_format((float)$inc['monto'], 2); ?>
+          </td>
           <td style="font-size:12px;" class="muted">
             <?php 
               $ts = strtotime($inc['created_at']);
@@ -629,13 +776,19 @@ include __DIR__.'/inc/layout_top.php';
       </table>
     </div>
     
-    <div style="margin-top:12px;padding:10px;background:var(--panel-2);border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-weight:700;">Total ingresos manuales:</span>
-      <span style="font-size:18px;font-weight:700;">$<?php echo number_format($totalIncome, 2); ?></span>
+    <?php 
+      $totalIngresos = $manualBreakdown['ingresos']['total'];
+      $totalEgresos = $manualBreakdown['egresos']['total'];
+      $neto = $manualBreakdown['neto'];
+    ?>
+    <div style="margin-top:12px;padding:10px;background:var(--panel-2);border-radius:4px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;align-items:center;">
+      <div><strong>Ingresos manuales:</strong> $<?php echo number_format($totalIngresos, 2); ?></div>
+      <div><strong>Egresos manuales:</strong> $<?php echo number_format(abs($totalEgresos), 2); ?></div>
+      <div><strong>Balance neto:</strong> <span style="color:<?php echo $neto >= 0 ? 'var(--ok)' : 'var(--warn)'; ?>;">$<?php echo number_format($neto, 2); ?></span></div>
     </div>
   <?php else: ?>
     <div style="padding:10px;background:var(--panel-2);border-radius:4px;color:var(--muted);">
-      No hay ingresos manuales registrados aún.
+      No hay ingresos/egresos manuales registrados aún.
     </div>
   <?php endif; ?>
 </div>
@@ -650,7 +803,7 @@ if (formIncome) {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                alert('Ingreso agregado');
+            alert('Movimiento guardado');
                 location.reload();
             } else {
                 alert('Error: ' + (data.error || 'desconocido'));
@@ -663,7 +816,7 @@ if (formIncome) {
 document.querySelectorAll('.btn-delete-income').forEach(btn => {
     btn.addEventListener('click', function(e) {
         e.preventDefault();
-        if (!confirm('¿Eliminar este ingreso?')) return;
+        if (!confirm('¿Eliminar este movimiento?')) return;
         const incomeId = this.dataset.id;
         const formData = new FormData();
         formData.append('id', incomeId);

@@ -681,7 +681,9 @@ function get_economic_stats($pdo, $evento_id) {
         'entradas_vendidas' => 0,
         'total_recaudado' => 0,
         'por_tipo' => array(), // array( tipo => array('cantidad' => X, 'monto' => Y), ... )
-        'manual_income' => 0
+        'manual_income' => 0,
+        'manual_income_ingresos' => 0,
+        'manual_income_egresos' => 0,
     );
     
     try {
@@ -836,10 +838,35 @@ function get_economic_stats($pdo, $evento_id) {
             // Ignorar error bridge
         }
         
-        // ==== Ingresos manuales ====
+        // ==== Ingresos/Egresos manuales (otros/varios) ====
         try {
             ensure_manual_income_table($pdo);
-            $stats['manual_income'] = get_total_manual_income($pdo, $evento_id);
+            if (function_exists('get_manual_income_breakdown')) {
+                $manual = get_manual_income_breakdown($pdo, $evento_id);
+                $stats['manual_income'] = $manual['neto'];
+                $stats['manual_income_ingresos'] = $manual['ingresos']['total'];
+                $stats['manual_income_egresos'] = $manual['egresos']['total'];
+
+                if ($manual['ingresos']['total'] > 0) {
+                    $stats['por_tipo'][] = array(
+                        'tipo'     => 'Otros / Varios (ingreso)',
+                        'cantidad' => $manual['ingresos']['count'],
+                        'monto'    => $manual['ingresos']['total'],
+                        'origen'   => 'MANUAL',
+                    );
+                }
+                if ($manual['egresos']['total'] < 0) {
+                    $stats['por_tipo'][] = array(
+                        'tipo'     => 'Otros / Varios (egreso)',
+                        'cantidad' => $manual['egresos']['count'],
+                        'monto'    => $manual['egresos']['total'],
+                        'origen'   => 'MANUAL',
+                    );
+                }
+            } else {
+                $stats['manual_income'] = get_total_manual_income($pdo, $evento_id);
+            }
+
             $stats['total_recaudado'] += $stats['manual_income'];
         } catch (Exception $e) {
             // Ignorar error ingresos manuales
@@ -851,9 +878,19 @@ function get_economic_stats($pdo, $evento_id) {
     
     // Ordenar por_tipo por cantidad descendente
     if (!empty($stats['por_tipo'])) {
-        usort($stats['por_tipo'], function($a, $b) {
-            return $b['cantidad'] - $a['cantidad'];
+        $normalized = array();
+        foreach ($stats['por_tipo'] as $tipoKey => $datos) {
+            if (!is_array($datos)) continue;
+            $row = $datos;
+            if (!isset($row['tipo'])) {
+                $row['tipo'] = is_string($tipoKey) ? $tipoKey : 'Sin tipo';
+            }
+            $normalized[] = $row;
+        }
+        usort($normalized, function($a, $b) {
+            return ($b['monto'] <=> $a['monto']);
         });
+        $stats['por_tipo'] = $normalized;
     }
     
     return $stats;
