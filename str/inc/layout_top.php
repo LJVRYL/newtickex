@@ -29,7 +29,7 @@ if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('them
 <div class="topbar">
     <div class="wrap">
         <a class="logo" href="panel_admin.php">TICKEX</a>
-        <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú">
+        <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
             <span></span>
             <span></span>
             <span></span>
@@ -43,6 +43,7 @@ if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('them
         </div>
     </div>
 </div>
+<div id="navOverlay" class="nav-overlay"></div>
 <div class="wrap">
 <?php
 $flashes = function_exists('flash_get_all') ? flash_get_all() : array();
@@ -55,16 +56,27 @@ foreach ($flashes as $f) {
 <script>
   const hamburger = document.getElementById('hamburgerBtn');
   const nav = document.querySelector('.nav');
+  const overlay = document.getElementById('navOverlay');
+  function closeNav() {
+    hamburger.classList.remove('active');
+    hamburger.setAttribute('aria-expanded','false');
+    if (nav) nav.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
+  }
   if(hamburger && nav) {
     hamburger.addEventListener('click', function() {
-      hamburger.classList.toggle('active');
-      nav.classList.toggle('active');
+      const isOpen = nav.classList.toggle('active');
+      hamburger.classList.toggle('active', isOpen);
+      hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      if (overlay) overlay.classList.toggle('active', isOpen);
     });
     nav.addEventListener('click', function(e) {
       if(e.target.tagName === 'A') {
-        hamburger.classList.remove('active');
-        nav.classList.remove('active');
+        closeNav();
       }
     });
+  }
+  if (overlay) {
+    overlay.addEventListener('click', closeNav);
   }
 </script>
