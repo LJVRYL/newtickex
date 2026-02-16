@@ -30,9 +30,42 @@ if (isset($_GET['evento_id'])) {
 } elseif (isset($_SESSION['evento_id'])) {
     $eventoId = (int)$_SESSION['evento_id'];
 }
-if ($eventoId <= 0) abort_404("ID de evento inválido.");
-
 $pdo = db();
+
+// Obtener asignaciones de staff (multi-evento)
+function get_staff_events($pdo, $staffId) {
+    $stmt = $pdo->prepare("SELECT e.id, e.nombre, e.slug FROM staff_eventos se JOIN eventos e ON e.id = se.evento_id WHERE se.staff_id = :sid ORDER BY e.id DESC");
+    $stmt->execute(array(':sid'=>$staffId));
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Resolver evento cuando el staff tiene múltiples asignaciones
+if ($tipoGlobal === 'staff_evento' && $eventoId <= 0) {
+    $staffEvents = get_staff_events($pdo, (int)$_SESSION['user_id']);
+    if (count($staffEvents) === 1) {
+        $eventoId = (int)$staffEvents[0]['id'];
+        $_SESSION['evento_id'] = $eventoId;
+    } elseif (count($staffEvents) > 1) {
+        include __DIR__.'/inc/layout_top.php';
+        ?>
+        <div class="card" style="max-width:520px;margin:30px auto;">
+          <h2>Elegí un evento</h2>
+          <p class="muted">Tu usuario tiene acceso a varios eventos. Seleccioná uno para continuar con Puerta.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <?php foreach ($staffEvents as $ev): ?>
+              <a class="btn" href="puerta.php?evento_id=<?php echo (int)$ev['id']; ?>">
+                #<?php echo (int)$ev['id']; ?> — <?php echo e($ev['nombre']); ?> (<?php echo e($ev['slug']); ?>)
+              </a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <?php
+        include __DIR__.'/inc/layout_bottom.php';
+        exit;
+    }
+}
+
+if ($eventoId <= 0) abort_404("ID de evento inválido.");
 
 // Datos del evento
 $eventoNombre = '';

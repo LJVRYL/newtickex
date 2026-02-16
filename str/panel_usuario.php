@@ -5,32 +5,72 @@ error_reporting(E_ALL);
 
 session_start();
 
-// Si no hay usuario logueado, redirigir al login
+$flashOk = '';
+$flashError = '';
+
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-    header('Location: login.php');
-    exit;
+  header('Location: login.php');
+  exit;
 }
 
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
 
 try {
-    $pdo = new PDO('sqlite:' . $dbFile);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+  $pdo = new PDO('sqlite:' . $dbFile);
+  $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (Exception $e) {
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "Error al conectar a la base de datos: " . $e->getMessage();
-    exit;
+  header('Content-Type: text/plain; charset=utf-8');
+  echo "Error al conectar a la base de datos: " . $e->getMessage();
+  exit;
 }
+
+// Garantizar tabla de registros pendientes (fuente de datos de clientes)
+$pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  token TEXT NOT NULL,
+  nombre TEXT,
+  apellido TEXT,
+  apodo TEXT,
+  dni TEXT,
+  genero TEXT,
+  foto_path TEXT,
+  next_url TEXT,
+  creado_en TEXT,
+  completado_en TEXT,
+  password_hash TEXT
+)");
+
+// Backfill columna password_hash si falta
+try {
+  $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
+  $hasPass = false;
+  foreach ($cols as $c) {
+    if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
+  }
+  if (!$hasPass) {
+    $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
+  }
+} catch (Exception $e) {
+  // ignore
+}
+
+$pdo->exec("CREATE TABLE IF NOT EXISTS entradas_ocultas_usuario (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entrada_id INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  creado_en TEXT
+)");
 
 $usuarioId = (int)$_SESSION['usuario_id'];
 
 try {
-    // Datos del usuario
+    // Datos del usuario desde registro_pendientes (clientes)
     $stmt = $pdo->prepare("
-        SELECT id, nombre, apellido, email, dni, rol, email_confirmado, creado_en
-        FROM usuarios
-        WHERE id = :id
-        LIMIT 1
+      SELECT id, nombre, apellido, email, dni, 'cliente' AS rol, 1 AS email_confirmado, creado_en, completado_en, apodo, genero, password_hash
+      FROM registro_pendientes
+      WHERE id = :id
+      LIMIT 1
     ");
     $stmt->execute(array(':id' => $usuarioId));
     $u = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -48,20 +88,103 @@ try {
     $rol             = $u['rol'];
     $emailUsuario    = $u['email'];
 
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'hide_ticket') {
+      $ticketId = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
+      if ($ticketId > 0) {
+        $stmtChk = $pdo->prepare("SELECT id FROM entradas WHERE id = :id AND email = :email LIMIT 1");
+        $stmtChk->execute(array(':id' => $ticketId, ':email' => $emailUsuario));
+        if ($stmtChk->fetch(PDO::FETCH_ASSOC)) {
+          $stmtHide = $pdo->prepare("INSERT INTO entradas_ocultas_usuario (entrada_id, email, creado_en) VALUES (:id, :email, datetime('now'))");
+          $stmtHide->execute(array(':id' => $ticketId, ':email' => $emailUsuario));
+        }
+      }
+      header('Location: panel_usuario.php');
+      exit;
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'change_password') {
+      $passActual = isset($_POST['pass_actual']) ? trim($_POST['pass_actual']) : '';
+      $passNueva  = isset($_POST['pass_nueva']) ? trim($_POST['pass_nueva']) : '';
+      $passRepite = isset($_POST['pass_repite']) ? trim($_POST['pass_repite']) : '';
+
+      if ($passNueva === '' || $passRepite === '') {
+        $flashError = 'La nueva contraseña es obligatoria.';
+      } elseif (strlen($passNueva) < 6) {
+        $flashError = 'La nueva contraseña debe tener al menos 6 caracteres.';
+      } elseif ($passNueva !== $passRepite) {
+        $flashError = 'La nueva contraseña y su repeticion no coinciden.';
+      } else {
+        $hashActual = isset($u['password_hash']) ? (string)$u['password_hash'] : '';
+        $needsOld   = ($hashActual !== '');
+
+        // Validar contraseña actual solo si ya había una definida
+        if ($needsOld) {
+          $okOld = false;
+          if (function_exists('password_verify') && strpos($hashActual, '$2') === 0) {
+            $okOld = password_verify($passActual, $hashActual);
+          }
+          if (!$okOld && strlen($hashActual) === 32 && ctype_xdigit($hashActual)) {
+            $okOld = (md5($passActual) === strtolower($hashActual));
+          }
+          if (!$okOld && $hashActual !== '') {
+            $okOld = ($passActual !== '' && $passActual === $hashActual);
+          }
+
+          if (!$okOld) {
+            $flashError = 'La contraseña actual no es correcta.';
+          }
+        }
+
+        if ($flashError === '') {
+          $newHash = function_exists('password_hash') ? password_hash($passNueva, PASSWORD_DEFAULT) : md5($passNueva);
+          $stmtPwd = $pdo->prepare("UPDATE registro_pendientes SET password_hash = :h WHERE id = :id");
+          $stmtPwd->execute(array(':h' => $newHash, ':id' => (int)$u['id']));
+          $u['password_hash'] = $newHash;
+          $flashOk = 'Contraseña actualizada. Usala para iniciar sesión desde ahora.';
+        }
+      }
+    }
+
     // Últimas entradas asociadas a su email
-    $stmtT = $pdo->prepare("
-        SELECT
-            e.id,
-            e.codigo,
-            e.evento_id,
-            e.fecha_registro,
-            e.tipo,
-            e.monto_pagado
-        FROM entradas e
-        WHERE e.email = :email
-        ORDER BY e.fecha_registro DESC, e.id DESC
-        LIMIT 20
-    ");
+    $showAll = isset($_GET['ver_todas']) && $_GET['ver_todas'] === '1';
+
+    // Detectar columnas disponibles en eventos
+    $evCols = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
+    $colMap = array();
+    foreach ($evCols as $c) { $colMap[$c['name']] = true; }
+    $hasFlyer = isset($colMap['flyer']);
+    $hasFlyerFile = isset($colMap['flyer_filename']);
+    $hasFechaDesde = isset($colMap['fecha_desde']);
+    $hasLugar = isset($colMap['lugar']);
+    $hasUbic = isset($colMap['ubicacion']);
+
+    $selectEv = array('ev.nombre AS evento_nombre');
+    if ($hasFlyerFile) $selectEv[] = 'ev.flyer_filename';
+    if ($hasFlyer) $selectEv[] = 'ev.flyer';
+    if ($hasFechaDesde) $selectEv[] = 'ev.fecha_desde';
+    if ($hasLugar) $selectEv[] = 'ev.lugar';
+    if ($hasUbic) $selectEv[] = 'ev.ubicacion';
+    $selStr = implode(",\n            ", $selectEv);
+
+    $sqlT = "
+      SELECT
+        e.id,
+        e.codigo,
+        e.evento_id,
+        e.fecha_registro,
+        e.tipo,
+        e.monto_pagado,
+        e.checked_in,
+        $selStr
+      FROM entradas e
+      LEFT JOIN eventos ev ON ev.id = e.evento_id
+      LEFT JOIN entradas_ocultas_usuario eo ON eo.entrada_id = e.id AND eo.email = :email
+      WHERE e.email = :email
+        " . ($showAll ? "" : "AND (e.checked_in IS NULL OR e.checked_in = 0) AND eo.id IS NULL") . "
+      ORDER BY e.fecha_registro DESC, e.id DESC
+      LIMIT 50
+    ";
+    $stmtT = $pdo->prepare($sqlT);
     $stmtT->execute(array(':email' => $emailUsuario));
     $tickets = $stmtT->fetchAll(PDO::FETCH_ASSOC);
 
@@ -109,11 +232,20 @@ include __DIR__ . '/inc/layout_top.php';
         </span>
       </div>
     </div>
-    <div style="margin-left:auto;">
-      <a class="btn secondary" href="logout_usuario.php">Cerrar sesión</a>
-    </div>
   </div>
 </div>
+
+<?php if ($flashOk !== ''): ?>
+  <div class="card" style="max-width:900px;margin:0 auto 12px auto;">
+    <div class="flash ok"><?php echo e($flashOk); ?></div>
+  </div>
+<?php endif; ?>
+
+<?php if ($flashError !== ''): ?>
+  <div class="card" style="max-width:900px;margin:0 auto 12px auto;">
+    <div class="flash err"><?php echo e($flashError); ?></div>
+  </div>
+<?php endif; ?>
 
 <div style="max-width:900px;margin:0 auto;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.4fr);gap:16px;flex-wrap:wrap;">
   <!-- Columna izquierda -->
@@ -126,8 +258,14 @@ include __DIR__ . '/inc/layout_top.php';
         <div style="color:var(--muted);">Nombre</div>
         <div><?php echo htmlspecialchars($u['nombre'], ENT_QUOTES, 'UTF-8'); ?></div>
 
-        <div style="color:var(--muted)
+        <div style="color:var(--muted);">Apellido</div>
         <div><?php echo htmlspecialchars($u['apellido'], ENT_QUOTES, 'UTF-8'); ?></div>
+
+        <div style="color:var(--muted);">Apodo</div>
+        <div><?php echo htmlspecialchars($u['apodo'], ENT_QUOTES, 'UTF-8'); ?></div>
+
+        <div style="color:var(--muted);">Género</div>
+        <div><?php echo htmlspecialchars($u['genero'], ENT_QUOTES, 'UTF-8'); ?></div>
 
         <div style="color:var(--muted);">Email</div>
         <div><?php echo htmlspecialchars($emailUsuario, ENT_QUOTES, 'UTF-8'); ?></div>
@@ -140,49 +278,102 @@ include __DIR__ . '/inc/layout_top.php';
       </div>
 
       <div style="margin-top:12px;font-size:13px;color:var(--muted);">
-        Más adelante vas a poder editar tus datos personales y preferencias de comunicación desde acá.
+        Podés actualizar tu perfil desde "Mi perfil".
       </div>
+    </div>
+
+    <!-- Seguridad / contraseña -->
+    <?php $hasPwd = !empty($u['password_hash']); ?>
+    <div class="card">
+      <h3>Seguridad</h3>
+      <p style="margin-top:0;color:var(--muted);font-size:14px;">
+        <?php echo $hasPwd ? 'Podés cambiar tu contraseña ingresando la actual.' : 'Aún no configuraste contraseña; elegí una nueva para poder iniciar sesión con email y contraseña.'; ?>
+      </p>
+      <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+        <input type="hidden" name="action" value="change_password">
+        <?php if ($hasPwd): ?>
+          <div>
+            <label for="pass_actual">Contraseña actual</label>
+            <input type="password" id="pass_actual" name="pass_actual" autocomplete="current-password" required>
+          </div>
+        <?php endif; ?>
+        <div>
+          <label for="pass_nueva">Nueva contraseña (mín 6)</label>
+          <input type="password" id="pass_nueva" name="pass_nueva" autocomplete="new-password" required>
+        </div>
+        <div>
+          <label for="pass_repite">Repetir nueva</label>
+          <input type="password" id="pass_repite" name="pass_repite" autocomplete="new-password" required>
+        </div>
+        <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button type="submit" class="btn">Guardar contraseña</button>
+          <span style="font-size:12px;color:var(--muted);">Se guarda cifrada; no podemos leerla.</span>
+        </div>
+      </form>
     </div>
 
     <!-- Mis últimos Tickex -->
     <div class="card">
-      <h3>Mis últimos Tickex</h3>
-      <?php if (!empty($tickets)): ?>
-        <div style="overflow-x:auto;margin-top:8px;">
-          <table class="tabla" style="width:100%;font-size:13px;">
-            <thead>
-              <tr>
-                <th>#ID</th>
-                <th>Código</th>
-                <th>Evento</th>
-                <th>Tipo</th>
-                <th>Monto</th>
-                <th>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($tickets as $t): ?>
-                <tr>
-                  <td><?php echo (int)$t['id']; ?></td>
-                  <td><?php echo htmlspecialchars($t['codigo'], ENT_QUOTES, 'UTF-8'); ?></td>
-                  <td><?php echo (int)$t['evento_id']; ?></td>
-                  <td><?php echo htmlspecialchars($t['tipo'], ENT_QUOTES, 'UTF-8'); ?></td>
-                  <td>
-                    <?php
-                      $m = (int)$t['monto_pagado'];
-                      echo $m > 0
-                        ? '$' . number_format($m / 100, 2, ',', '.')
-                        : '—';
-                    ?>
-                  </td>
-                  <td><?php echo htmlspecialchars($t['fecha_registro'], ENT_QUOTES, 'UTF-8'); ?></td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Mis Tickex <span class="pill" style="background:var(--panel-2);border:1px solid var(--line);">Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?></span></h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a class="btn secondary" href="panel_usuario.php?ver_todas=1">Ver todas</a>
+          <a class="btn secondary" href="panel_usuario.php">Solo pendientes</a>
         </div>
-        <div style="margin-top:8px;font-size:13px;color:var(--muted);">
-          Próximamente vas a poder ver el detalle completo y descargar tus entradas desde acá.
+      </div>
+      <?php if (!empty($tickets)): ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:10px;">
+          <?php foreach ($tickets as $t): ?>
+            <?php
+              $flyer = null;
+              if (isset($t['flyer_filename']) && $t['flyer_filename'] && file_exists(__DIR__.'/'.$t['flyer_filename'])) {
+                $flyer = $t['flyer_filename'];
+              } elseif (isset($t['flyer']) && $t['flyer']) {
+                $flyer = $t['flyer'];
+              }
+              $eventName = isset($t['evento_nombre']) && $t['evento_nombre'] ? $t['evento_nombre'] : ('Evento #'.$t['evento_id']);
+              $loc = '';
+              if (isset($t['lugar']) && $t['lugar']) $loc = $t['lugar'];
+              elseif (isset($t['ubicacion']) && $t['ubicacion']) $loc = $t['ubicacion'];
+              $ticketUrl = 'entrada.php?c=' . urlencode($t['codigo']);
+            ?>
+            <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;gap:12px;align-items:stretch;">
+              <div style="width:120px;min-width:120px;max-width:120px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                <?php if ($flyer): ?>
+                  <img src="<?php echo e($flyer); ?>" alt="Flyer" style="width:100%;height:100%;object-fit:cover;display:block;">
+                <?php else: ?>
+                  <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">Sin flyer</div>
+                <?php endif; ?>
+              </div>
+              <div style="padding:12px;display:flex;flex-direction:column;gap:6px;flex:1;">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <span style="font-weight:700;"><?php echo e($eventName); ?></span>
+                  <span class="pill" style="border:1px solid var(--line);">Entrada <?php echo e($t['tipo']); ?></span>
+                </div>
+                <div style="font-size:13px;color:var(--muted);display:grid;grid-template-columns:1fr;gap:4px;">
+                  <?php if (!empty($t['fecha_desde'])): ?><span>📅 <?php echo e($t['fecha_desde']); ?></span><?php endif; ?>
+                  <?php if ($loc): ?><span>📍 <?php echo e($loc); ?></span><?php endif; ?>
+                  <span>Emitida: <?php echo e($t['fecha_registro']); ?></span>
+                </div>
+                <div style="font-size:18px;font-weight:700;">
+                  <?php
+                    $m = (int)$t['monto_pagado'];
+                    echo $m > 0 ? '$'.number_format($m/100,2,',','.') : 'Cortesía';
+                  ?>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                  <a class="btn secondary" href="<?php echo e($ticketUrl); ?>" target="_blank" rel="noopener">Ver Tickex</a>
+                  <?php if (!$showAll): ?>
+                    <form method="post" style="margin:0;" onsubmit="return confirm('¿Ocultar este Tickex de tu lista?');">
+                      <input type="hidden" name="action" value="hide_ticket">
+                      <input type="hidden" name="ticket_id" value="<?php echo (int)$t['id']; ?>">
+                      <button class="btn danger" type="submit" title="Ocultar"><span aria-hidden="true">🗑</span></button>
+                    </form>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
         </div>
       <?php else: ?>
         <p style="margin-top:8px;font-size:14px;">

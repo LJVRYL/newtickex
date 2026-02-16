@@ -8,39 +8,54 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,Segoe UI,Roboto,Arial}
 .wrap{max-width:1100px;margin:0 auto;padding:18px}
 .topbar{position:sticky;top:0;background:rgba(11,16,32,.95);border-bottom:1px solid var(--line);z-index:201}
-.topbar .wrap{display:flex;align-items:center;gap:12px}
+.topbar .wrap{display:flex;align-items:center;gap:12px;position:relative}
 .logo{font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);text-decoration:none}
+.quick-links{display:flex;gap:8px;flex-wrap:wrap}
+.quick-links a{color:var(--ink);text-decoration:none;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.quick-links a:hover{border-color:var(--acc)}
 .nav{
-  position:fixed;top:0;right:0;height:100vh;width:280px;
+  position:fixed;top:0;left:0;height:100vh;width:260px;
   display:flex;flex-direction:column;gap:8px;
-  background:var(--panel);border-left:1px solid var(--line);
-  padding:72px 16px 16px;
-  transform:translateX(100%);
+  background:var(--panel);border-right:1px solid var(--line);
+  padding:72px 14px 16px;
+  transform:translateX(-100%);
   transition:transform .3s ease;
-  box-shadow:-8px 0 18px rgba(0,0,0,.3);
+  box-shadow:8px 0 18px rgba(0,0,0,.3);
   z-index:200;
   overflow-y:auto;
 }
 .nav.active{transform:translateX(0)}
-.nav a{color:var(--ink);text-decoration:none;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);width:100%;display:block;font-weight:600}
+.nav a{color:var(--ink);text-decoration:none;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);width:100%;display:block;font-weight:600;font-size:14px;text-align:left;min-height:38px;display:flex;align-items:center}
 .nav a:hover{border-color:var(--acc)}
 
 .nav-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .3s;z-index:150}
 .nav-overlay.active{opacity:1;pointer-events:auto}
 
-.hamburger{display:flex;flex-direction:column;gap:4px;background:transparent;border:none;cursor:pointer;padding:8px;margin-left:auto}
+.hamburger{display:flex;flex-direction:column;gap:4px;background:transparent;border:none;cursor:pointer;padding:8px;margin-left:8px}
 .hamburger span{width:24px;height:2px;background:var(--ink);border-radius:1px;transition:all 0.3s}
 .hamburger.active span:nth-child(1){transform:rotate(45deg) translateY(10px)}
 .hamburger.active span:nth-child(2){opacity:0}
 .hamburger.active span:nth-child(3){transform:rotate(-45deg) translateY(-10px)}
-
-@media(min-width:1100px){
-  .nav{width:320px}
-}
+.hamburger .chevron{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--ink);margin-top:4px;align-self:center;transition:transform .3s}
+.hamburger.active .chevron{transform:rotate(180deg)}
 
 @media(max-width:640px){
   .nav{width:240px}
   .nav a{padding:10px 12px}
+  .quick-links{width:100%}
+}
+
+@media(min-width:1024px){
+  body:not(.no-nav){padding-left:260px}
+  body:not(.no-nav) .nav{
+    position:fixed;top:0;left:0;height:100vh;width:260px;
+    transform:none;transition:none;
+    padding:72px 14px 16px;
+    box-shadow:8px 0 18px rgba(0,0,0,.25);
+  }
+  body:not(.no-nav) .nav.active{transform:none}
+  body:not(.no-nav) .nav-overlay{display:none}
+  body:not(.no-nav) .hamburger{display:none}
 }
 .userchip{margin-left:auto;display:flex;gap:10px;align-items:center;color:var(--muted)}
 .link{color:var(--acc);text-decoration:none}

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// Compra pública: redirige a Tickex usando el mapeo en SQLite (tickex_event_map)
+// Compra pública: ahora redirige al checkout interno TotalCoin de Tickex, precargando datos del evento.
 // URL: /comprar.php?id=12  (id = eventos.id de STR)
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -29,38 +29,15 @@ try {
     }
   }
 
-  $st = $pdo->prepare("SELECT event_public_id, event_slug FROM tickex_event_map WHERE str_event_id = :id LIMIT 1");
-  $st->execute([':id' => $id]);
-  $row = $st->fetch();
-
-  $publicId = ($row && !empty($row['event_public_id'])) ? trim((string)$row['event_public_id']) : '';
-
-  $targetSlug = '4aniversario';
-  $targetPublicId = '08462152-64ed-4444-89ff-37c01d5b56c0';
-
-  if ($eventSlug === $targetSlug && $publicId !== $targetPublicId) {
-    $sql = $row
-      ? "UPDATE tickex_event_map SET event_slug = :slug, event_public_id = :pub WHERE str_event_id = :id"
-      : "INSERT INTO tickex_event_map (str_event_id, event_slug, event_public_id) VALUES (:id, :slug, :pub)";
-
-    $stUp = $pdo->prepare($sql);
-    $stUp->execute([
-      ':id'   => $id,
-      ':slug' => $targetSlug,
-      ':pub'  => $targetPublicId,
-    ]);
-
-    $publicId = $targetPublicId;
-  }
-
-  if ($publicId === '') {
-    http_response_code(404);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "No existe mapeo Tickex para este evento STR (id=$id).\n";
-    exit;
-  }
-  $url = "https://tickex.com.ar/Ticket/PublicTicket?EventPublicId=" . rawurlencode($publicId);
-
+  // Redirigimos al checkout interno TotalCoin con datos precargados
+  $concept = $eventSlug !== '' ? $eventSlug : ('Evento-' . $id);
+  $ref = 'str-' . ($eventSlug !== '' ? $eventSlug : $id) . '-' . time();
+  $qs = http_build_query(array(
+    'event'   => $id,
+    'concept' => $concept,
+    'ref'     => $ref,
+  ));
+  $url = 'checkout_totalcoin.php?' . $qs;
   header("Location: $url", true, 302);
   exit;
 

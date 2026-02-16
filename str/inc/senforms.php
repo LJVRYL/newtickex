@@ -22,7 +22,8 @@ function sf_db(){
     try {
         $pdo = new PDO($dsn, $user, $pass, $opts);
     } catch (Exception $ex) {
-        die('Error al conectar SenForms: '.htmlspecialchars($ex->getMessage(), ENT_QUOTES, 'UTF-8'));
+        // No abortar todo: propagar la excepción para que el caller decida (permite fallback en UI)
+        throw $ex;
     }
     return $pdo;
 }

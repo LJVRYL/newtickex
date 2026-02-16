@@ -6,6 +6,14 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $pdo = db();
 
+// Obtener asignaciones de staff (multi-evento)
+function get_staff_event_ids($pdo, $staffId) {
+  $stmt = $pdo->prepare("SELECT evento_id FROM staff_eventos WHERE staff_id = :sid");
+  $stmt->execute(array(':sid'=>$staffId));
+  $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+  return $rows ? array_map('intval', $rows) : array();
+}
+
 $codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
 $eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 
@@ -60,7 +68,19 @@ if ($isLogged) {
 $eventoOk = false;
 if ($entrada) {
     $eidEntrada = (int)$entrada['evento_id'];
-    if ($eventoId > 0 && $eidEntrada === $eventoId) $eventoOk = true;
+  if ($eventoId > 0 && $eidEntrada === $eventoId) {
+    $eventoOk = true;
+  } elseif ($isLogged && $tipoGlobal === 'staff_evento') {
+    $staffIds = get_staff_event_ids($pdo, (int)$_SESSION['user_id']);
+    if (in_array($eidEntrada, $staffIds, true)) {
+      $eventoOk = true;
+      // fijar evento si venía vacío
+      if ($eventoId <= 0) {
+        $eventoId = $eidEntrada;
+        $_SESSION['evento_id'] = $eventoId;
+      }
+    }
+  }
 }
 
 // Ejecutar check-in SOLO si corresponde

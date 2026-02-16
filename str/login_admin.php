@@ -69,11 +69,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         // Staff de puerta
                         if ($admin['tipo_global'] === 'staff_evento') {
-                            if (!empty($admin['evento_id'])) {
+                            // buscar asignaciones múltiples
+                            $pdoMap = new PDO('sqlite:' . __DIR__ . '/save_the_rave.sqlite');
+                            $pdoMap->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                            $stmtEvStaff = $pdoMap->prepare("SELECT evento_id FROM staff_eventos WHERE staff_id = :sid");
+                            $stmtEvStaff->execute(array(':sid'=>(int)$admin['id']));
+                            $evList = $stmtEvStaff->fetchAll(PDO::FETCH_COLUMN);
+                            $evList = $evList ? array_map('intval', $evList) : array();
+
+                            if (count($evList) === 1) {
+                                $_SESSION['evento_id'] = $evList[0];
+                                header('Location: puerta.php?evento_id=' . $evList[0]);
+                                exit;
+                            } elseif (count($evList) > 1) {
+                                // sin elegir aún, puerta mostrará selector
+                                $_SESSION['evento_id'] = 0;
+                                header('Location: puerta.php');
+                                exit;
+                            } elseif (!empty($admin['evento_id'])) {
                                 $_SESSION['evento_id'] = (int)$admin['evento_id'];
                                 header('Location: puerta.php?evento_id=' . (int)$admin['evento_id']);
                                 exit;
                             } else {
+                                $_SESSION['evento_id'] = 0;
                                 header('Location: puerta.php');
                                 exit;
                             }

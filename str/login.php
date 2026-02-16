@@ -61,32 +61,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errores)) {
         try {
-            $stmt = $pdo->prepare("
-                SELECT
-                  id,
-                  nombre,
-                  apellido,
-                  email,
-                  password_hash,
-                  password AS legacy_password,
-                  rol,
-                  email_confirmado,
-                  tipo_global
-                FROM usuarios
-                WHERE email = :email
-                LIMIT 1
-            ");
+            // Detectar columnas disponibles en la vista/tabla usuarios
+            $hasPwdHash = false;
+            $hasLegacy  = false;
+            try {
+              $cols = $pdo->query("PRAGMA table_info(usuarios)")->fetchAll(PDO::FETCH_ASSOC);
+              foreach ($cols as $c) {
+                if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPwdHash = true; }
+                if (isset($c['name']) && $c['name'] === 'password') { $hasLegacy = true; }
+              }
+            } catch (Exception $e) {
+              // si falla pragma, asumimos que no hay columnas de password
+            }
+
+            $selectPwdHash = $hasPwdHash ? 'password_hash' : "'' AS password_hash";
+            $selectLegacy  = $hasLegacy  ? 'password AS legacy_password' : "'' AS legacy_password";
+
+            $stmt = $pdo->prepare("SELECT id, nombre, apellido, email, $selectPwdHash, $selectLegacy, rol, email_confirmado, tipo_global FROM usuarios WHERE email = :email LIMIT 1");
             $stmt->execute(array(':email' => $email));
             $u = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$u) {
-                $errores[] = 'Email o contraseña incorrectos.';
-            } else {
+            $okPass = false;
+            $hasUserPassword = false;
+
+            if ($u) {
                 $passwordHash = $u['password_hash'];
                 $legacyPass   = isset($u['legacy_password']) ? $u['legacy_password'] : '';
+                $hasUserPassword = ($passwordHash !== '' && $passwordHash !== null) || ($legacyPass !== '' && $legacyPass !== null);
 
                 // Compatibilidad: prueba bcrypt/verify, luego md5, luego texto plano del campo legacy
-                $okPass = false;
                 if ($passwordHash !== '' && $passwordHash !== null) {
                   if (function_exists('password_verify') && strpos($passwordHash, '$2y$') === 0) {
                     $okPass = password_verify($pass, $passwordHash);
@@ -106,12 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   }
                 }
 
-                if (!$okPass) {
-                    $errores[] = 'Email o contraseña incorrectos.';
-                } else {
-                    // Si querés forzar que tenga email confirmado:
-                    // if ((int)$u['email_confirmado'] !== 1) { ... }
-
+                if ($okPass) {
                     // Datos base del usuario (vista usuarios)
                     $_SESSION['usuario_id']     = (int)$u['id'];
                     $_SESSION['usuario_email']  = $u['email'];
@@ -176,6 +174,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     exit;
                 }
             }
+
+            // Si el usuario existe y tenía contraseña pero no validó, no seguimos a clientes
+            if ($u && $hasUserPassword && !$okPass) {
+              $errores[] = 'Email o contraseña incorrectos.';
+            }
+
+            // Fallback: autenticar como cliente (registro_pendientes) si no hay usuario en vista o no tenía pass
+            $shouldTryCliente = (!$u) || !$hasUserPassword;
+
+            if ($shouldTryCliente && empty($errores)) {
+              // Detectar/crear columna password_hash en registro_pendientes
+              $cliHasPwd = false;
+              try {
+                $colsCli = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($colsCli as $c) {
+                  if (isset($c['name']) && $c['name'] === 'password_hash') { $cliHasPwd = true; break; }
+                }
+                if (!$cliHasPwd) {
+                  $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
+                  $cliHasPwd = true;
+                }
+              } catch (Exception $e) {
+                // ignoramos; si falla alter, usamos select placeholder
+              }
+
+              $selectCliPwd = $cliHasPwd ? 'password_hash' : "'' AS password_hash";
+
+              $stmtCli = $pdo->prepare("
+                SELECT id, email, nombre, apellido, apodo, dni, genero, $selectCliPwd, completado_en
+                FROM registro_pendientes
+                WHERE email = :email
+                LIMIT 1
+              ");
+                $stmtCli->execute(array(':email' => $email));
+                $cli = $stmtCli->fetch(PDO::FETCH_ASSOC);
+
+                $okCli = false;
+              $firstSet = false;
+                if ($cli && !empty($cli['password_hash'])) {
+                    $hashCli = (string)$cli['password_hash'];
+                    if (function_exists('password_verify') && strpos($hashCli, '$2') === 0) {
+                        $okCli = password_verify($pass, $hashCli);
+                    }
+                    if (!$okCli && strlen($hashCli) === 32 && ctype_xdigit($hashCli)) {
+                        $okCli = (md5($pass) === strtolower($hashCli));
+                    }
+                    if (!$okCli && $hashCli !== '') {
+                        $okCli = ($pass === $hashCli);
+                    }
+              } elseif ($cli && (string)$cli['password_hash'] === '') {
+                // Primer seteo de contraseña: si no tenía, tomamos la enviada y la guardamos (mín 6 chars)
+                if (strlen($pass) >= 6) {
+                  $firstSet = true;
+                  $newHash = function_exists('password_hash') ? password_hash($pass, PASSWORD_DEFAULT) : md5($pass);
+                  $upd = $pdo->prepare("UPDATE registro_pendientes SET password_hash = :h WHERE id = :id");
+                  $upd->execute(array(':h' => $newHash, ':id' => (int)$cli['id']));
+                  $cli['password_hash'] = $newHash;
+                  $okCli = true;
+                }
+              }
+
+                if ($cli && $okCli) {
+                    $_SESSION['usuario_id']     = (int)$cli['id'];
+                    $_SESSION['usuario_email']  = $cli['email'];
+                    $_SESSION['usuario_nombre'] = trim(($cli['nombre'] ?? '') . ' ' . ($cli['apellido'] ?? ''));
+                    $_SESSION['usuario_rol']    = 'cliente';
+                    $_SESSION['rol']            = 'cliente';
+                    $_SESSION['usuario']        = $cli['email'];
+                    $_SESSION['nombre']         = $_SESSION['usuario_nombre'];
+                    $_SESSION['email']          = $cli['email'];
+                    $_SESSION['tipo_global']    = '';
+
+                    header('Location: panel_usuario.php');
+                    exit;
+                }
+
+                $errores[] = 'Email o contraseña incorrectos.';
+            }
         } catch (Exception $e) {
             $errores[] = 'Error al verificar el usuario: ' . $e->getMessage();
         }
@@ -237,7 +313,7 @@ include __DIR__ . '/inc/layout_top.php';
 
   <div style="margin-top:8px;font-size:14px;color:var(--muted);">
     ¿Te olvidaste la contraseña?
-    <span style="opacity:0.6;">(más adelante: recuperación por email)</span>
+    <a href="forgot_password.php">Recuperala acá</a>.
   </div>
 </div>
 

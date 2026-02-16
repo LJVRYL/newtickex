@@ -32,21 +32,31 @@ try {
     exit;
 }
 
+// Detectar si existe la columna apellido (por compatibilidad de DB)
+$hasApellido = false;
+try {
+  $colsInfo = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($colsInfo as $ci) {
+    if (isset($ci['name']) && $ci['name'] === 'apellido') { $hasApellido = true; break; }
+  }
+} catch (Exception $e) {
+  // si falla pragma, asumimos que puede no estar
+}
+
 // Cargar usuario
 $user = null;
 try {
-    $stmt = $pdo->prepare(
-        'SELECT id, username, nombre, email, dni, cbu
-         FROM usuarios_admin
-         WHERE id = :id
-         LIMIT 1'
-    );
-    $stmt->execute(array(':id' => $userId));
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+  $selectCols = 'id, username, nombre, email, dni, cbu';
+  if ($hasApellido) $selectCols .= ', apellido';
+  $stmt = $pdo->prepare(
+    "SELECT $selectCols FROM usuarios_admin WHERE id = :id LIMIT 1"
+  );
+  $stmt->execute(array(':id' => $userId));
+  $user = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    http_response_code(500);
-    echo 'Error cargando usuario.';
-    exit;
+  http_response_code(500);
+  echo 'Error cargando usuario.';
+  exit;
 }
 
 if (!$user) {
@@ -98,40 +108,76 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
     }
   }
 
-    $nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
-    $email  = isset($_POST['email'])  ? trim($_POST['email'])  : '';
-    $dni    = isset($_POST['dni'])    ? trim($_POST['dni'])    : '';
-    $cbu    = isset($_POST['cbu'])    ? trim($_POST['cbu'])    : '';
+    $nombre   = isset($_POST['nombre'])   ? trim($_POST['nombre'])   : '';
+    $apellido = isset($_POST['apellido']) ? trim($_POST['apellido']) : '';
+    $email    = isset($_POST['email'])    ? trim($_POST['email'])    : '';
+    $dni      = isset($_POST['dni'])      ? trim($_POST['dni'])      : '';
+    $cbu      = isset($_POST['cbu'])      ? trim($_POST['cbu'])      : '';
 
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'El email no tiene un formato valido.';
+      $error = 'El email no tiene un formato valido.';
+    }
+
+    if ($error === '' && $dni === '') {
+      $error = 'El DNI es obligatorio para generar pagos.';
+    }
+    if ($error === '' && $hasApellido && $apellido === '') {
+      $error = 'El apellido es obligatorio para generar pagos.';
     }
 
     if ($error === '' && !$deleteAvatar) {
         try {
-            $stmtUpd = $pdo->prepare(
+            if ($hasApellido) {
+              $stmtUpd = $pdo->prepare(
                 'UPDATE usuarios_admin
                  SET nombre = :nombre,
-                     email  = :email,
-                     dni    = :dni,
-                     cbu    = :cbu
+                   apellido = :apellido,
+                   email  = :email,
+                   dni    = :dni,
+                   cbu    = :cbu
                  WHERE id = :id'
-            );
-            $stmtUpd->execute(array(
-                ':nombre' => ($nombre !== '' ? $nombre : null),
-                ':email'  => ($email  !== '' ? $email  : null),
-                ':dni'    => ($dni    !== '' ? $dni    : null),
-                ':cbu'    => ($cbu    !== '' ? $cbu    : null),
-                ':id'     => (int)$user['id'],
-            ));
+              );
+              $stmtUpd->execute(array(
+                ':nombre'   => ($nombre   !== '' ? $nombre   : null),
+                ':apellido' => ($apellido !== '' ? $apellido : null),
+                ':email'    => ($email    !== '' ? $email    : null),
+                ':dni'      => ($dni      !== '' ? $dni      : null),
+                ':cbu'      => ($cbu      !== '' ? $cbu      : null),
+                ':id'       => (int)$user['id'],
+              ));
+            } else {
+              $stmtUpd = $pdo->prepare(
+                'UPDATE usuarios_admin
+                 SET nombre = :nombre,
+                   email  = :email,
+                   dni    = :dni,
+                   cbu    = :cbu
+                 WHERE id = :id'
+              );
+              $stmtUpd->execute(array(
+                ':nombre'   => ($nombre   !== '' ? $nombre   : null),
+                ':email'    => ($email    !== '' ? $email    : null),
+                ':dni'      => ($dni      !== '' ? $dni      : null),
+                ':cbu'      => ($cbu      !== '' ? $cbu      : null),
+                ':id'       => (int)$user['id'],
+              ));
+            }
 
             $okMsg = 'Perfil actualizado correctamente.';
 
             // Refrescar datos en memoria
-            $user['nombre'] = $nombre;
-            $user['email']  = $email;
-            $user['dni']    = $dni;
-            $user['cbu']    = $cbu;
+            $user['nombre']   = $nombre;
+            if ($hasApellido) $user['apellido'] = $apellido;
+            $user['email']    = $email;
+            $user['dni']      = $dni;
+            $user['cbu']      = $cbu;
+
+            // Refrescar sesión para prefills de checkout
+            $_SESSION['dni'] = $dni;
+            if ($hasApellido) {
+              $_SESSION['last_name'] = $apellido;
+              $_SESSION['apellido']  = $apellido;
+            }
 
             // Procesar avatar si se subió
             if (isset($_FILES['avatar']) && isset($_FILES['avatar']['tmp_name']) && is_uploaded_file($_FILES['avatar']['tmp_name'])) {
@@ -228,15 +274,21 @@ require __DIR__ . '/inc/layout_top.php';
     </div>
 
     <div style="margin-bottom:10px;">
+      <label for="apellido">Apellido (requerido para pagos)</label>
+      <input type="text" id="apellido" name="apellido" required
+             value="<?php echo e(isset($user['apellido']) ? $user['apellido'] : ''); ?>" placeholder="Ej: Pérez">
+    </div>
+
+    <div style="margin-bottom:10px;">
       <label for="email">Email</label>
       <input type="email" id="email" name="email"
              value="<?php echo e($user['email']); ?>">
     </div>
 
     <div style="margin-bottom:10px;">
-      <label for="dni">DNI / Documento</label>
-      <input type="text" id="dni" name="dni"
-             value="<?php echo e($user['dni']); ?>">
+      <label for="dni">DNI / Documento (requerido para pagos)</label>
+      <input type="text" id="dni" name="dni" required
+             value="<?php echo e($user['dni']); ?>" placeholder="Ej: 12345678">
     </div>
 
     <div style="margin-bottom:10px;">

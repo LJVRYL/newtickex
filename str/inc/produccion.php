@@ -13,6 +13,9 @@ function ensure_produccion_table($pdo) {
             precio REAL DEFAULT 0,
             origen TEXT,
             pide_viaticos INTEGER DEFAULT 0,
+            viaticos_monto REAL DEFAULT 0,
+            telefono TEXT,
+            email TEXT,
             notas TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -31,6 +34,15 @@ function ensure_produccion_table($pdo) {
         if (!isset($cols['precio'])) {
             $pdo->exec("ALTER TABLE produccion_artistas ADD COLUMN precio REAL DEFAULT 0");
         }
+        if (!isset($cols['viaticos_monto'])) {
+            $pdo->exec("ALTER TABLE produccion_artistas ADD COLUMN viaticos_monto REAL DEFAULT 0");
+        }
+        if (!isset($cols['telefono'])) {
+            $pdo->exec("ALTER TABLE produccion_artistas ADD COLUMN telefono TEXT");
+        }
+        if (!isset($cols['email'])) {
+            $pdo->exec("ALTER TABLE produccion_artistas ADD COLUMN email TEXT");
+        }
     } catch (Exception $e) {
         // ignorar
     }
@@ -48,6 +60,7 @@ function ensure_produccion_assignment_table($pdo) {
         )");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_prodev_evento ON produccion_evento(evento_id)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_prodev_artista ON produccion_evento(artista_id)");
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prodev_unique ON produccion_evento(evento_id, artista_id)");
     } catch (Exception $e) {
         // ignorar
     }
@@ -69,11 +82,14 @@ function add_produccion_assignment($pdo, $eventoId, $artistaId, $precio = null, 
     if ($eventoId <= 0 || $artistaId <= 0) return false;
     try {
         if ($precio === null) {
-            $ps = $pdo->prepare("SELECT precio FROM produccion_artistas WHERE id = :id");
+            $ps = $pdo->prepare("SELECT precio, viaticos_monto FROM produccion_artistas WHERE id = :id");
             $ps->execute(array(':id'=>$artistaId));
-            $precio = (float)$ps->fetchColumn();
+            $row = $ps->fetch(PDO::FETCH_ASSOC);
+            $base = $row && isset($row['precio']) ? (float)$row['precio'] : 0;
+            $via  = $row && isset($row['viaticos_monto']) ? (float)$row['viaticos_monto'] : 0;
+            $precio = $base + $via;
         }
-        $stmt = $pdo->prepare("INSERT INTO produccion_evento (evento_id, artista_id, precio, notas) VALUES (:e,:a,:p,:n)");
+        $stmt = $pdo->prepare("INSERT OR IGNORE INTO produccion_evento (evento_id, artista_id, precio, notas) VALUES (:e,:a,:p,:n)");
         $stmt->execute(array(
             ':e' => $eventoId,
             ':a' => $artistaId,
@@ -84,6 +100,44 @@ function add_produccion_assignment($pdo, $eventoId, $artistaId, $precio = null, 
     } catch (Exception $e) {
         return false;
     }
+}
+
+function add_produccion_assignment_multi($pdo, $artistaId, array $eventoIds, $precio = null, $notas = '') {
+    ensure_produccion_assignment_table($pdo);
+    ensure_produccion_table($pdo);
+    if ($artistaId <= 0 || empty($eventoIds)) return false;
+    try {
+        if ($precio === null) {
+            $ps = $pdo->prepare("SELECT precio, viaticos_monto FROM produccion_artistas WHERE id = :id");
+            $ps->execute(array(':id'=>$artistaId));
+            $row = $ps->fetch(PDO::FETCH_ASSOC);
+            $base = $row && isset($row['precio']) ? (float)$row['precio'] : 0;
+            $via  = $row && isset($row['viaticos_monto']) ? (float)$row['viaticos_monto'] : 0;
+            $precio = $base + $via;
+        }
+        $stmt = $pdo->prepare("INSERT OR IGNORE INTO produccion_evento (evento_id, artista_id, precio, notas) VALUES (:e,:a,:p,:n)");
+        foreach ($eventoIds as $evId) {
+            $ev = (int)$evId;
+            if ($ev <= 0) continue;
+            $stmt->execute(array(
+                ':e' => $ev,
+                ':a' => $artistaId,
+                ':p' => $precio,
+                ':n' => $notas,
+            ));
+        }
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+function get_artist_event_ids($pdo, $artistaId) {
+    ensure_produccion_assignment_table($pdo);
+    $stmt = $pdo->prepare("SELECT evento_id FROM produccion_evento WHERE artista_id = :id");
+    $stmt->execute(array(':id'=>$artistaId));
+    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    return $rows ? array_map('intval', $rows) : array();
 }
 
 function delete_produccion_assignment($pdo, $assignmentId, $eventoId) {

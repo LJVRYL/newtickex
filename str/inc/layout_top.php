@@ -10,8 +10,13 @@ if (!isset($title)) {
 
 $themeClass = 'theme-dark';
 if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('theme-light', 'theme-dark'), true)) {
-    $themeClass = $_SESSION['ui_theme'];
+  $themeClass = $_SESSION['ui_theme'];
 }
+$isLogged = !empty($_SESSION['usuario']);
+$bodyClass = trim($themeClass . ($isLogged ? '' : ' no-nav'));
+$role = isset($_SESSION['rol']) ? $_SESSION['rol'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
+$isClient = ($role === 'cliente');
+$bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -25,16 +30,31 @@ if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('them
     <link rel="stylesheet" href="assets/str.css">
     <link rel="stylesheet" href="assets/str-theme.css">
 </head>
-<body class="<?php echo htmlspecialchars($themeClass, ENT_QUOTES, 'UTF-8'); ?>">
+<body class="<?php echo htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8'); ?>">
 <div class="topbar">
     <div class="wrap">
-        <a class="logo" href="panel_admin.php">TICKEX</a>
-        <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
-            <span></span>
-            <span></span>
-            <span></span>
-        </button>
-        <?php include __DIR__ . '/nav.php'; ?>
+        <a class="logo" href="<?php echo $isClient ? 'panel_usuario.php' : 'panel_admin.php'; ?>">TICKEX</a>
+        <?php if ($isLogged): ?>
+            <?php if (!$isClient): ?>
+              <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span class="chevron" aria-hidden="true"></span>
+              </button>
+
+              <div class="quick-links" aria-label="Accesos rápidos">
+                <a href="panel_admin.php">Panel</a>
+                <a href="crear_evento.php">Crear evento</a>
+              </div>
+              <?php include __DIR__ . '/nav.php'; ?>
+            <?php else: ?>
+              <div class="quick-links" aria-label="Accesos rápidos">
+                <a href="panel_usuario.php">Mis Tickex</a>
+                <a href="completar_registro.php">Mi perfil</a>
+              </div>
+            <?php endif; ?>
+        <?php endif; ?>
         <div class="userchip">
             <?php if (!empty($_SESSION['usuario'])): ?>
                 <span><?php echo e($_SESSION['usuario']); ?></span>
@@ -43,7 +63,9 @@ if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('them
         </div>
     </div>
 </div>
+<?php if ($isLogged && !$isClient): ?>
 <div id="navOverlay" class="nav-overlay"></div>
+<?php endif; ?>
 <div class="wrap">
 <?php
 $flashes = function_exists('flash_get_all') ? flash_get_all() : array();
@@ -53,13 +75,16 @@ foreach ($flashes as $f) {
     echo "<div class='flash $t'>$m</div>";
 }
 ?>
+<?php if (!$isClient): ?>
 <script>
   const hamburger = document.getElementById('hamburgerBtn');
   const nav = document.querySelector('.nav');
   const overlay = document.getElementById('navOverlay');
   function closeNav() {
-    hamburger.classList.remove('active');
-    hamburger.setAttribute('aria-expanded','false');
+    if (hamburger) {
+      hamburger.classList.remove('active');
+      hamburger.setAttribute('aria-expanded','false');
+    }
     if (nav) nav.classList.remove('active');
     if (overlay) overlay.classList.remove('active');
   }
@@ -80,3 +105,4 @@ foreach ($flashes as $f) {
     overlay.addEventListener('click', closeNav);
   }
 </script>
+<?php endif; ?>

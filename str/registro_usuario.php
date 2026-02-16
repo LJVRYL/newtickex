@@ -2,11 +2,53 @@
 // registro_usuario.php – Paso 1: pedir solo email y enviar link con token
 
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/db.php';
+
+function ensure_registro_pendientes($pdo)
+{
+  $pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    token TEXT NOT NULL,
+    nombre TEXT,
+    apellido TEXT,
+    apodo TEXT,
+    dni TEXT,
+    genero TEXT,
+    foto_path TEXT,
+    next_url TEXT,
+    creado_en TEXT,
+    completado_en TEXT,
+    password_hash TEXT
+  )");
+  $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_token ON registro_pendientes(token)");
+  $pdo->exec("CREATE INDEX IF NOT EXISTS idx_regpend_email ON registro_pendientes(email)");
+
+  // Backfill para instancias que ya existan sin la columna de password
+  try {
+    $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
+    $hasPass = false;
+    foreach ($cols as $c) {
+      if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
+    }
+    if (!$hasPass) {
+      $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
+    }
+  } catch (Exception $e) {
+    // ignorar fallos de alter
+  }
+}
 
 $title     = 'Registro – Paso 1';
 $errores   = array();
 $mensajeOk = '';
+$linkDirecto = '';
 $email     = '';
+$nextUrl   = isset($_GET['next']) ? $_GET['next'] : '';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['email'])) {
+  $email = trim($_GET['email']);
+}
 
 // ---------- función para enviar el mail con el link ----------
 function enviar_mail_confirmacion_step1($email, $token)
@@ -42,81 +84,123 @@ function enviar_mail_confirmacion_step1($email, $token)
 
 // ---------- POST: procesar email ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = isset($_POST['email']) ? trim($_POST['email']) : '';
+  $email = isset($_POST['email']) ? trim($_POST['email']) : '';
+  $nextUrl = isset($_POST['next']) ? $_POST['next'] : $nextUrl;
 
-    if ($email === '') {
-        $errores[] = 'El email es obligatorio.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errores[] = 'El email no tiene un formato válido.';
-    }
+  if ($email === '') {
+    $errores[] = 'El email es obligatorio.';
+  } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $errores[] = 'El email no tiene un formato válido.';
+  }
 
-    if (empty($errores)) {
+  if (empty($errores)) {
+    try {
+      $pdo = db();
+      $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      ensure_registro_pendientes($pdo);
+
+      // ¿Ya existe un pending para ese email?
+      $st = $pdo->prepare("SELECT * FROM registro_pendientes WHERE email = :email ORDER BY id DESC LIMIT 1");
+      $st->execute(array(':email' => $email));
+      $u = $st->fetch(PDO::FETCH_ASSOC);
+
+      // Generar token
+      if (function_exists('random_bytes')) {
+        $token = bin2hex(random_bytes(16));
+      } else {
+        $token = sha1(uniqid(mt_rand(), true));
+      }
+
+      $ahora = date('Y-m-d H:i:s');
+
+      if ($u) {
+        $stmtUp = $pdo->prepare("
+          UPDATE registro_pendientes
+          SET token = :token,
+            completado_en = NULL,
+            next_url = :next_url,
+            creado_en = :creado_en
+          WHERE id = :id
+        ");
+        $stmtUp->execute(array(
+          ':token'     => $token,
+          ':next_url'  => $nextUrl,
+          ':creado_en' => $ahora,
+          ':id'        => (int)$u['id'],
+        ));
+      } else {
+        $stmtIns = $pdo->prepare("
+          INSERT INTO registro_pendientes
+            (email, token, next_url, creado_en)
+          VALUES
+            (:email, :token, :next_url, :creado_en)
+        ");
+        $stmtIns->execute(array(
+          ':email'     => $email,
+          ':token'     => $token,
+          ':next_url'  => $nextUrl,
+          ':creado_en' => $ahora,
+        ));
+      }
+
+      $mailOk = enviar_mail_confirmacion_step1($email, $token);
+      $linkDirecto = 'https://str.tickex.com.ar/completar_registro.php?token=' . urlencode($token);
+
+      $mensajeOk  = 'Te enviamos un mensaje a ';
+      $mensajeOk .= htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+
+      if (!$mailOk) {
+        $mensajeOk .= ' (Aviso: mail() devolvió false, revisar configuración de correo.)';
+      }
+
+      // Limpiar el campo para que no quede el email en el form
+      $email = '';
+    } catch (Exception $e) {
+      $msg = $e->getMessage();
+      // Fallback cuando la instancia tenga 'usuarios' como vista y no permita INSERT/UPDATE
+      if (stripos($msg, 'cannot modify usuarios') !== false) {
         try {
-            $pdo = db();
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+          $pdo = db();
+          $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+          ensure_registro_pendientes($pdo);
 
-            // ¿Ya existe ese email?
-            $st = $pdo->prepare("SELECT * FROM usuarios WHERE email = :email LIMIT 1");
-            $st->execute(array(':email' => $email));
-            $u = $st->fetch(PDO::FETCH_ASSOC);
+          if (function_exists('random_bytes')) {
+            $token = bin2hex(random_bytes(16));
+          } else {
+            $token = sha1(uniqid(mt_rand(), true));
+          }
 
-            if ($u && isset($u['email_confirmado']) && (int)$u['email_confirmado'] === 1) {
-                // Ya confirmado
-                $mensajeOk = 'Ese email ya está registrado y confirmado. Podés usarlo para iniciar sesión.';
-            } else {
-                // Generar token
-                if (function_exists('random_bytes')) {
-                    $token = bin2hex(random_bytes(16));
-                } else {
-                    $token = sha1(uniqid(mt_rand(), true));
-                }
+          $ahora = date('Y-m-d H:i:s');
+          $stmtIns = $pdo->prepare("
+              INSERT INTO registro_pendientes
+                (email, token, next_url, creado_en)
+              VALUES
+                (:email, :token, :next_url, :creado_en)
+          ");
+          $stmtIns->execute(array(
+              ':email'     => $email,
+              ':token'     => $token,
+              ':next_url'  => $nextUrl,
+              ':creado_en' => $ahora,
+          ));
 
-                $ahora = date('Y-m-d H:i:s');
+          $mailOk = enviar_mail_confirmacion_step1($email, $token);
+          $linkDirecto = 'https://str.tickex.com.ar/completar_registro.php?token=' . urlencode($token);
 
-                if ($u) {
-                    // Usuario existente sin confirmar: actualizar token
-                    $stmtUp = $pdo->prepare("
-                        UPDATE usuarios
-                        SET token_confirmacion = :token,
-                            email_confirmado   = 0
-                        WHERE id = :id
-                    ");
-                    $stmtUp->execute(array(
-                        ':token' => $token,
-                        ':id'    => (int)$u['id'],
-                    ));
-                } else {
-                    // Usuario nuevo: crear registro mínimo
-                    $stmtIns = $pdo->prepare("
-                        INSERT INTO usuarios
-                            (nombre, apellido, email, dni, password_hash, rol, email_confirmado, token_confirmacion, creado_en)
-                        VALUES
-                            ('', '', :email, '', '', 'cliente', 0, :token, :creado_en)
-                    ");
-                    $stmtIns->execute(array(
-                        ':email'     => $email,
-                        ':token'     => $token,
-                        ':creado_en' => $ahora,
-                    ));
-                }
-
-                $mailOk = enviar_mail_confirmacion_step1($email, $token);
-
-                $mensajeOk  = 'Te enviamos un mensaje a ';
-                $mensajeOk .= htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
-  
-
-                if (!$mailOk) {
-                    $mensajeOk .= ' (Aviso: mail() devolvió false, revisar configuración de correo.)';
-                }
-
-                // Limpiar el campo para que no quede el email en el form
-                $email = '';
-            }
-        } catch (Exception $e) {
-            $errores[] = 'Error al procesar el registro: ' . $e->getMessage();
+          $mensajeOk  = 'Te enviamos un mensaje a ';
+          $mensajeOk .= htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+          if (!$mailOk) {
+            $mensajeOk .= ' (Aviso: mail() devolvió false, revisar configuración de correo.)';
+          }
+          $email = '';
+        } catch (Exception $e2) {
+          $errores[] = 'Error al procesar el registro: ' . $msg . ' / Fallback: ' . $e2->getMessage();
         }
+      } else {
+        $errores[] = 'Error al procesar el registro: ' . $msg;
+      }
     }
+  }
 }
 
 include __DIR__.'/inc/layout_top.php';
@@ -151,12 +235,21 @@ include __DIR__.'/inc/layout_top.php';
       <strong>Revisá tu email</strong><br><br>
       <?php echo $mensajeOk; ?><br><br>
       Si no ves el mail en unos minutos, revisá la carpeta de spam / correo no deseado.
+      <?php if ($linkDirecto !== ''): ?>
+        <div style="margin-top:10px;">
+          Enlace directo (dev):
+          <a class="link" href="<?php echo htmlspecialchars($linkDirecto, ENT_QUOTES, 'UTF-8'); ?>">
+            <?php echo htmlspecialchars($linkDirecto, ENT_QUOTES, 'UTF-8'); ?>
+          </a>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 <?php endif; ?>
 
 <div class="card" style="max-width:480px;margin:0 auto 32px auto;">
   <form method="post" autocomplete="off">
+    <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <label for="email" style="margin-top:8px;display:block;">Email</label>
     <input type="email" id="email" name="email" required
            value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
