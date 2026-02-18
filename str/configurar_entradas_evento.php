@@ -51,11 +51,15 @@ $colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_A
 $hasCategoria  = false;
 $hasTipoVenta  = false;
 $hasHoraLimite = false;
+$visCol = null;
 foreach ($colsTE as $c) {
   if (isset($c['name'])) {
     if ($c['name'] === 'categoria') $hasCategoria = true;
     if ($c['name'] === 'tipo_venta') $hasTipoVenta = true;
     if ($c['name'] === 'hora_limite') $hasHoraLimite = true;
+    if (in_array($c['name'], array('visible_publico','publico','venta_publico'), true)) {
+      $visCol = $c['name'];
+    }
   }
 }
 
@@ -92,6 +96,20 @@ if (isset($_GET['del_te'])) {
     } else {
         $error = "Tipo de entrada inexistente para este evento.";
     }
+}
+
+// =======================
+// TOGGLE DE VISIBILIDAD DESDE EL SWITCH
+// =======================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_vis' && $visCol) {
+    $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+    $val  = isset($_POST['val']) ? (int)$_POST['val'] : 0;
+    if ($teId > 0) {
+        $upd = $pdo->prepare("UPDATE tipos_entrada SET $visCol = :v WHERE id = :id AND evento_id = :eid");
+        $upd->execute(array(':v' => $val, ':id' => $teId, ':eid' => $eventoId));
+    }
+    header("Location: configurar_entradas_evento.php?id=" . $eventoId);
+    exit;
 }
 
 // =======================
@@ -305,6 +323,7 @@ include __DIR__.'/inc/layout_top.php';
           <th>Total</th>
           <th>Disponible</th>
           <th>Hora límite</th>
+          <?php if ($visCol): ?><th>Visible</th><?php endif; ?>
           <th>Acciones</th>
         </tr>
       </thead>
@@ -322,6 +341,21 @@ include __DIR__.'/inc/layout_top.php';
             <td><?php echo (int)$te['cantidad_total']; ?></td>
             <td><?php echo (int)$te['cantidad_disponible']; ?></td>
             <td><?php echo e($hl); ?></td>
+            <?php if ($visCol): ?>
+            <td>
+              <?php $visOn = isset($te[$visCol]) ? (int)$te[$visCol] === 1 : true; ?>
+              <form method="post" style="margin:0;display:inline;">
+                <input type="hidden" name="action" value="toggle_vis">
+                <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
+                <input type="hidden" name="val" value="<?php echo $visOn ? 0 : 1; ?>">
+                <label class="switch" style="font-size:12px;">
+                  <input type="checkbox" <?php echo $visOn ? 'checked' : ''; ?> onchange="this.form.submit();">
+                  <span class="switch-track"><span class="switch-thumb"></span></span>
+                  <span><?php echo $visOn ? 'Visible' : 'Oculta'; ?></span>
+                </label>
+              </form>
+            </td>
+            <?php endif; ?>
             <td>
               <a class="btn secondary"
                  href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>&del_te=<?php echo (int)$te['id']; ?>"

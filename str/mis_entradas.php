@@ -454,9 +454,11 @@ require __DIR__ . '/inc/layout_top.php';
             $visDefaultFromPrice = ($priceFormVal !== '' && is_numeric($priceFormVal) && (float)$priceFormVal > 0) ? 1 : 0;
             $visActual = (int)val_field($editRow, 'visible_publico', $visDefaultFromPrice);
           ?>
-          <label style="display:flex;align-items:center;gap:8px;margin:6px 0 4px;">
-       <input type="checkbox" name="visible_publico" value="1" <?php echo ($visActual ? 'checked' : ''); ?>>
-       <span>Visible al público (gratis queda oculto por defecto hasta que lo marques visible)</span>
+          <label class="switch" style="margin:6px 0 4px;">
+            <input type="hidden" name="visible_publico" value="0">
+            <input type="checkbox" name="visible_publico" value="1" <?php echo ($visActual ? 'checked' : ''); ?> >
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span style="font-size:12px;color:var(--muted);">Visible al público (gratis queda oculto por defecto hasta que lo marques visible)</span>
           </label>
         <?php endif; ?>
 
@@ -545,9 +547,11 @@ require __DIR__ . '/inc/layout_top.php';
                     <?php if ($hasVentaHasta): ?><input type="hidden" name="venta_hasta" value="<?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?>"><?php endif; ?>
                     <?php if (!empty($p['activo'])): ?><input type="hidden" name="activo" value="1"><?php endif; ?>
                     <input type="hidden" name="visible_publico" value="0">
-                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
-                      <input type="checkbox" name="visible_publico" value="1" <?php echo !empty($p['visible_publico']) ? 'checked' : ''; ?> onchange="this.form.submit();">
-                      <span><?php echo !empty($p['visible_publico']) ? 'Visible' : 'Oculto'; ?></span>
+                    <?php $visOn = !empty($p['visible_publico']); ?>
+                    <label class="switch" style="font-size:12px;">
+                      <input type="checkbox" name="visible_publico" value="1" <?php echo $visOn ? 'checked' : ''; ?> onchange="this.form.submit();">
+                      <span class="switch-track"><span class="switch-thumb"></span></span>
+                      <span><?php echo $visOn ? 'Visible' : 'Oculto'; ?></span>
                     </label>
                   </form>
                 </td>

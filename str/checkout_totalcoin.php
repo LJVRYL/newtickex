@@ -97,8 +97,8 @@ if ($eventId > 0) {
             continue; // vencida
           }
         }
-        if ($colPublic && isset($r['publico']) && (int)$r['publico'] !== 1) {
-          continue;
+        if ($colPublic && isset($r[$colPublic]) && (int)$r[$colPublic] !== 1) {
+          continue; // ocultas para el público
         }
         $ticketTypes[] = array(
           'Id'    => $r['id'],
@@ -106,6 +106,15 @@ if ($eventId > 0) {
           'Price' => isset($r['precio']) ? (float)$r['precio'] : 0,
           'Available' => isset($r['cantidad_disponible']) ? (int)$r['cantidad_disponible'] : (isset($r['cantidad_total']) ? (int)$r['cantidad_total'] : null),
         );
+
+        // Ocultar agotadas para que no aparezcan en el checkout
+        $lastIdx = count($ticketTypes) - 1;
+        if ($lastIdx >= 0) {
+          $availVal = $ticketTypes[$lastIdx]['Available'];
+          if ($availVal !== null && $availVal <= 0) {
+            array_pop($ticketTypes);
+          }
+        }
       }
     }
 
@@ -123,7 +132,7 @@ if ($eventId > 0) {
 }
 
 $nextUrl = $_SERVER['REQUEST_URI'];
-$registrationBase = 'https://str.tickex.com.ar/registro_usuario.php';
+$loginBase = 'https://str.tickex.com.ar/login.php';
 
 // Opciones de entradas: si no hay, usar fallback
 $entryOptions = array();
@@ -181,10 +190,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  // Si faltan datos de usuario, forzar flujo de registro
-  $needsRegistration = ($dni === '' || $last === '' || $first === '' || $email === '' || strpos($email, '@') === false);
-  if ($needsRegistration) {
-    $redir = $registrationBase . '?email=' . urlencode($email) . '&next=' . urlencode($nextUrl);
+  // Si faltan datos de usuario, forzar flujo de login (desde ahí podrá registrarse)
+  $needsAuth = ($dni === '' || $last === '' || $first === '' || $email === '' || strpos($email, '@') === false);
+  if ($needsAuth) {
+    $redir = $loginBase . '?next=' . urlencode($nextUrl);
+    if ($email !== '') {
+      $redir .= '&email=' . urlencode($email);
+    }
     header('Location: ' . $redir);
     exit;
   }
@@ -252,9 +264,9 @@ include __DIR__.'/inc/layout_top.php';
     <div class="flash" style="background:var(--panel-2);border:1px solid var(--line);color:var(--muted);">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
         <div>
-          <strong>¿Primera vez comprando?</strong> Registrate para guardar tus datos y agilizar el ingreso.
+          <strong>¿Ya tenés cuenta?</strong> Iniciá sesión para completar tus datos y seguir con el checkout.
         </div>
-        <a class="btn secondary" href="<?php echo $registrationBase.'?email='.urlencode($defaults['email']).'&next='.urlencode($nextUrl); ?>">Registrarme</a>
+        <a class="btn secondary" href="<?php echo $loginBase.'?next='.urlencode($nextUrl); ?>">Iniciar sesión</a>
       </div>
     </div>
   <?php endif; ?>

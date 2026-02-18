@@ -98,8 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
 
                         // Super admin / admin de eventos
-                        header('Location: panel_admin.php');
-                        exit;
+                        if ($admin['tipo_global'] === 'super_admin') {
+                            header('Location: panel_superadmin.php');
+                            exit;
+                        } else {
+                            header('Location: panel_admin.php');
+                            exit;
+                        }
                     }
                 }
             }
