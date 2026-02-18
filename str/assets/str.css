@@ -92,3 +92,13 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0
 .flash.warn{border-color:var(--warn)}
 
 .footer{color:var(--muted);border-top:1px solid var(--line)}
+
+/* Toggle switch */
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch-track{position:relative;width:44px;height:24px;border-radius:999px;background:var(--line);transition:background .2s ease;border:1px solid var(--line)}
+.switch-thumb{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#d1d5db;transition:transform .2s ease,background .2s ease}
+.switch input:checked + .switch-track{background:linear-gradient(135deg,#16a34a,#22c55e);border-color:#16a34a}
+.switch input:checked + .switch-track .switch-thumb{transform:translateX(20px);background:white}
+.switch input:not(:checked) + .switch-track{background:linear-gradient(135deg,#b91c1c,#ef4444);border-color:#b91c1c}
+.switch input:not(:checked) + .switch-track .switch-thumb{background:white}

@@ -36,18 +36,20 @@ $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
         <a class="logo" href="<?php echo $isClient ? 'panel_usuario.php' : 'panel_admin.php'; ?>">TICKEX</a>
         <?php if ($isLogged): ?>
             <?php if (!$isClient): ?>
-              <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span class="chevron" aria-hidden="true"></span>
-              </button>
+              <?php if (empty($hideNav)): ?>
+                <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span class="chevron" aria-hidden="true"></span>
+                </button>
 
-              <div class="quick-links" aria-label="Accesos rápidos">
-                <a href="panel_admin.php">Panel</a>
-                <a href="crear_evento.php">Crear evento</a>
-              </div>
-              <?php include __DIR__ . '/nav.php'; ?>
+                <div class="quick-links" aria-label="Accesos rápidos">
+                  <a href="panel_admin.php">Panel</a>
+                  <a href="crear_evento.php">Crear evento</a>
+                </div>
+                <?php include __DIR__ . '/nav.php'; ?>
+              <?php endif; ?>
             <?php else: ?>
               <div class="quick-links" aria-label="Accesos rápidos">
                 <a href="panel_usuario.php">Mis Tickex</a>
@@ -63,7 +65,7 @@ $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
         </div>
     </div>
 </div>
-<?php if ($isLogged && !$isClient): ?>
+<?php if (empty($hideNav) && $isLogged && !$isClient): ?>
 <div id="navOverlay" class="nav-overlay"></div>
 <?php endif; ?>
 <div class="wrap">
@@ -75,7 +77,7 @@ foreach ($flashes as $f) {
     echo "<div class='flash $t'>$m</div>";
 }
 ?>
-<?php if (!$isClient): ?>
+<?php if (empty($hideNav) && !$isClient): ?>
 <script>
   const hamburger = document.getElementById('hamburgerBtn');
   const nav = document.querySelector('.nav');

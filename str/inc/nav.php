@@ -11,6 +11,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="panel_evento.php">Mis Eventos</a>
     <a href="mis_entradas.php">Mis Entradas</a>
     <a href="mis_clientes.php">Mis Clientes</a>
+    <a href="economia_general.php">Economía</a>
     <a href="inventario.php">Inventario</a>
     <a href="produccion.php">Producción</a>
     <a href="secundarios.php">Staff</a>
