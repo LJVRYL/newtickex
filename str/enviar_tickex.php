@@ -104,8 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email = $rowU['email'];
           if ($tickexId <= 0) { $tickexId = (int)$rowU['id']; }
                 if ($nombre === '') {
-                    $full = trim(($rowU['nombre'] ?? '') . ' ' . ($rowU['apellido'] ?? ''));
-                    $nombre = $full !== '' ? $full : ($rowU['apodo'] ?? '');
+                    $full = trim((isset($rowU['nombre']) ? $rowU['nombre'] : '') . ' ' . (isset($rowU['apellido']) ? $rowU['apellido'] : ''));
+                    $nombre = $full !== '' ? $full : (isset($rowU['apodo']) ? $rowU['apodo'] : '');
                 }
             } else {
           $errors[] = 'No se encontró el usuario Tickex con ese ID/apodo.';
