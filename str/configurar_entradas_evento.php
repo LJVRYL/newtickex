@@ -372,6 +372,7 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;">
   <a class="btn" href="publicar_evento.php?id=<?php echo (int)$eventoId; ?>">✅ Publicar evento</a>
+  <a class="btn secondary" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Ver CheckOut</a>
 </div>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>

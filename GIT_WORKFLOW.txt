@@ -1,0 +1,16 @@
+# Instructivo rápido: git pull y push
+
+1. Guardá tus cambios locales:
+   git status
+   git add .
+   git commit -m "Tu mensaje de commit"
+
+2. Traé los cambios remotos antes de subir:
+   git pull
+
+3. Subí tus cambios al remoto:
+   git push
+
+Si hay conflictos, resolvelos y repetí el commit/push.
+
+Este instructivo sirve para mantener sincronizado el código entre local y remoto.
