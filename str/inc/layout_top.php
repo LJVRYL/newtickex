@@ -59,8 +59,18 @@ $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
         <?php endif; ?>
         <div class="userchip">
             <?php if (!empty($_SESSION['usuario'])): ?>
-                <span><?php echo e($_SESSION['usuario']); ?></span>
-                <a class="link" href="logout_usuario.php">Salir</a>
+              <?php
+              $userMail = $_SESSION['usuario'];
+              // Mostrar solo primeras letras del email (ej: jua...@dominio.com)
+              if (strpos($userMail, '@') !== false) {
+                list($userName, $userDomain) = explode('@', $userMail, 2);
+                $shortUser = mb_substr($userName, 0, 3) . '...@' . $userDomain;
+              } else {
+                $shortUser = mb_substr($userMail, 0, 3) . '...';
+              }
+              ?>
+              <span title="<?php echo e($userMail); ?>"><?php echo e($shortUser); ?></span>
+              <a class="link" href="logout_usuario.php">Salir</a>
             <?php endif; ?>
         </div>
     </div>

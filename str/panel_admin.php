@@ -217,7 +217,7 @@ include __DIR__ . '/inc/layout_top.php';
           <div style="margin-top:10px;font-size:13px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
             <div><span class="muted">Vendidas</span><br><strong><?php echo (int)$st['total']; ?></strong></div>
             <div><span class="muted">Check-ins</span><br><strong><?php echo (int)$st['checkins']; ?></strong></div>
-            <div><span class="muted">Faltan</span><br><strong><?php echo (int)$st['faltan']; ?></strong></div>
+            <div><span class="muted">Faltan</span><br><strong><?php echo isset($st['faltan']) ? (int)$st['faltan'] : ((isset($st['pendiente'])) ? (int)$st['pendiente'] : 0); ?></strong></div>
             <div><span class="muted">Disponibles</span><br><strong><?php echo ($st['disponibles'] !== null ? (int)$st['disponibles'] : '-'); ?></strong></div>
             <div><span class="muted">Stock total</span><br><strong><?php echo ($st['stock_total'] !== null ? (int)$st['stock_total'] : '-'); ?></strong></div>
           </div>

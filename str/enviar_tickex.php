@@ -118,20 +118,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha  = date('Y-m-d H:i:s');
         $nombreIns = $nombre !== '' ? $nombre : $email;
         try {
-            $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
-            $stmt->execute(array(
-                ':n'  => $nombreIns,
-                ':e'  => $email,
-                ':f'  => $fecha,
-                ':c'  => $codigo,
-                ':t'  => $tipoId,
-                ':ev' => $eventoId,
-            ));
-            $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+          $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
+          $stmt->execute(array(
+            ':n'  => $nombreIns,
+            ':e'  => $email,
+            ':f'  => $fecha,
+            ':c'  => $codigo,
+            ':t'  => $tipoId,
+            ':ev' => $eventoId,
+          ));
+          $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+
+          // Envío automático de email
+          $asunto = "¡Recibiste una entrada de cortesía!";
+          $mensaje = "Hola $nombreIns,\n\nTe han asignado una entrada de cortesía para el evento.\n\n";
+          $mensaje .= "Código de entrada: $codigo\n";
+          $mensaje .= "Tipo: $tipoId\n";
+          $mensaje .= "Fecha de registro: $fecha\n";
+          $mensaje .= "\nMostrá este código en la puerta del evento para ingresar.\n\n";
+          $mensaje .= "Si tenés dudas, respondé este email.\n\n";
+          $mensaje .= "¡Nos vemos!\nEquipo Tickex";
+          $headers = "From: info@tickex.com.ar\r\nReply-To: info@tickex.com.ar\r\n";
+          // mail() puede fallar silenciosamente, así que no interrumpe el flujo
+          @mail($email, $asunto, $mensaje, $headers);
         } catch (Exception $e) {
-            $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
+          $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
         }
-    }
+      }
 }
 
 $title = 'Enviar Tickex';
