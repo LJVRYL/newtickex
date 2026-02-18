@@ -1,0 +1,241 @@
+<!-- ko with: protectedfoldersVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Restriccion de accesos',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Restriccion de accesos',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+            <a class="btn pull-right mr5 visible-desktop visible-tablet" target="_blank" href="/externals/filemanager/index.html?lang=<?php echo $accountInfo['Language']['Locale']; ?>&server=<?php echo $accountInfo['Server']['OpSystem']; ?>" >
+                <i class="icon-file-alt"></i> <?php echo $this->get('translator')->trans('Administrador de archivos',array(),'templates'); ?>
+            </a>
+            <a class="btn pull-right mr5 visible-phone" target="_blank" href="/externals/filemanager/index.html?lang=<?php echo $accountInfo['Language']['Locale']; ?>&server=<?php echo $accountInfo['Server']['OpSystem']; ?>" onclick="FerozoHosting.sendAnalytics('event', 'protectedfolders', 'button', 'AdminArchivos');">
+                <i class="icon-file-alt"></i>
+            </a>
+        </div>
+    </header>
+    <section class="protectedfolders">
+        <ul class="breadcrumb">
+            <li><i class="icon-folder-open"></i></li>
+            <!-- ko foreach: currentArray -->
+                <li>
+                    <a data-bind="text: $data, click: $parent.gotoDir.bind($data, $index())"></a>
+                    <span class="divider">/</span>
+                </li>
+            <!-- /ko -->
+            <li>
+                <!-- ko if: inprocess() == 1 || actualFolder() === "/public_html" -->
+                    <button disabled="disabled" class="btn btn-small"><i class="icon-arrow-up"></i></button>
+                <!-- /ko -->
+                <!-- ko if: inprocess() == 0 &&  actualFolder() !== "/public_html"  -->
+                    <button class="btn btn-small" data-bind="click: upDir"><i class="icon-arrow-up"></i></button>
+                <!-- /ko -->
+            </li>
+        </ul>
+        
+        <div class="fz-input-prepend clearfix">
+            <div class="email-filter">
+                <span class="add-on"><i class="icon-search"></i></span>
+                <input class="pull-left" placeholder="<?php echo $this->get('translator')->trans('Buscar',array(),'templates');?> …" type="text" data-bind="value: query, valueUpdate: 'afterkeydown'" autocomplete="off">
+                <a class="clear-search animated fast fadeIn pull-left" data-bind="visible: query, click: function() { query(''); search(); }"><i class="icon-remove"></i></a>
+            </div>
+        </div>
+        
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th><?php echo $this->get('translator')->trans('Nombre de carpeta',array(),'templates'); ?> </th>
+                    <th><?php echo $this->get('translator')->trans('Estado',array(),'templates'); ?> </th>
+                    <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko foreach: data() -->
+                <tr class="info" data-bind="visible: $data.visible()">
+                    <td>
+                        <a  data-bind="click: $parent.selectThis">
+                            <i class="icon icon-folder-close"></i>
+                            <span data-bind="text: $data.name"></span>
+                        </a>
+                    </td>
+                    <td>
+                        <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                            <!-- ko if: $data.extras.protectedfolders.enabled -->
+                                <b><span><?php echo $this->get('translator')->trans('Protegida',array(),'templates'); ?> (<span data-bind="text: $data.extras.protectedfolders.users().length"></span> <?php echo $this->get('translator')->trans('usuarios',array(),'templates'); ?>)</span></b>
+                            <!-- /ko -->
+                            <!-- ko ifnot: $data.extras.protectedfolders.enabled -->
+                                <span><?php echo $this->get('translator')->trans('No protegida',array(),'templates'); ?> (<span data-bind="text: $data.extras.protectedfolders.users().length"></span> <?php echo $this->get('translator')->trans('usuarios',array(),'templates'); ?>)</span>
+                            <!-- /ko -->
+                        <?php } else { ?>
+                            <!-- ko if: $data.extras.protectedfolders.enabled -->
+                                <b><span><?php echo $this->get('translator')->trans('Protegida',array(),'templates'); ?></span></b>
+                            <!-- /ko -->
+                            <!-- ko ifnot: $data.extras.protectedfolders.enabled -->
+                                <span><?php echo $this->get('translator')->trans('No protegida',array(),'templates'); ?></span>
+                            <!-- /ko -->
+                        <?php } ?>
+                    </td>
+                    <td class="right">
+                        <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                            <a class="btn small pull-right right" data-bind="click: $parent.openModal" onclick="FerozoHosting.sendAnalytics('event', 'protectedfolders', 'button', 'AdminCarpeta');"><i class="icon-lock"></i> <?php echo $this->get('translator')->trans('Administrar',array(),'templates'); ?></a>
+                        <?php } else { ?>
+                            <!-- ko if: $data.extras.protectedfolders.regStatus() == 1 -->
+                                <a class="btn small pull-right right" data-bind="click: $parent.openModal"><i class="icon-lock"></i> <?php echo $this->get('translator')->trans('Administrar',array(),'templates'); ?></a>
+                            <!-- /ko -->
+                            <div data-bind="with: $data.extras.protectedfolders" class="pull-right right">
+                                <!-- ko if: regStatus() == 2 || regStatus() == 3 || regStatus() == 4 -->
+                                    <img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Procesando',array(),'templates'); ?>" width="24"/>
+                                <!-- /ko -->
+                                <!-- ko if: regStatus() == 2-->
+                                    <span class="label label-success"  data-bind=""><?php echo $this->get('translator')->trans('Protegiendo',array(),'templates'); ?></span>
+                                <!-- /ko -->
+                                <!-- ko if: regStatus() == 3-->
+                                    <span class="label label-success"  data-bind=""><?php echo $this->get('translator')->trans('Modificando',array(),'templates'); ?></span>
+                                <!-- /ko -->
+                                <!-- ko if: regStatus() == 4-->
+                                    <span class="label label-important"  data-bind=""><?php echo $this->get('translator')->trans('Desprotegiendo',array(),'templates'); ?></span>
+                                <!-- /ko -->
+                            </div>
+                        <?php } ?>
+                    </td>
+                </tr>
+                <!-- /ko -->
+
+                <!-- ko if: inprocess() && data().length <= 0 -->
+                    <tr class="info">
+                        <td colspan="3">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+
+                <!-- ko if: !inprocess() && data().length <= 0 -->
+                    <tr class="info">
+                        <td colspan="3">
+                            <?php echo $this->get('translator')->trans('No se encontró contenido en esta carpeta',array(),'templates'); ?>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<div id="manage-protectedfolder" class="modal animated fast pulse hide">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'protectedfolders', 'button', 'CerrarModalAdmCarpeta');">×</button>
+        <h3><?php echo $this->get('translator')->trans('Editar carpeta protegida',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+
+        <!-- ko with: temp -->
+
+            <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                <table class="table table-hover table-condensed">
+                    <thead>
+                        <tr>
+                            <th><?php echo $this->get('translator')->trans('Usuarios',array(),'templates'); ?></th>
+                            <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- ko if: $parent.tempUsers() == 0 -->
+                           <tr class="info">
+                                <td class="iconspace" colspan="2">
+                                    <?php echo $this->get('translator')->trans('No existen usuarios configurados.',array(),'templates'); ?>
+                                </td>
+                            </tr>
+                        <!-- /ko -->
+
+                        <!-- ko foreach: $parent.tempUsers() -->
+                            <tr class="info">
+                                <td class="iconspace">
+                                    <span>
+                                        <i class="icon-user"></i>
+                                        <span data-bind="text: $data"></span>
+                                    </span>
+                                </td>
+                                <td class="right">
+                                    <div class="btn small tlt-toggle" rel="tooltip" data-bind="click: function(d, e) { $(e.currentTarget).find('.tlt').toggle(); }">
+                                        <i class="icon-trash"></i>
+                                        <div class="tlt hide">
+                                            <?php echo $this->get('translator')->trans('Confirmacion: ',array(),'templates'); ?> <a data-bind="click: $parents[1].removeUser"><?php echo $this->get('translator')->trans('Si, eliminar ',array(),'templates'); ?></a>
+                                        </div>
+                                    </div>
+
+                                </td>
+                            </tr>
+                        <!-- /ko -->
+
+                        <tr class="info">
+                            <td class="iconspace" colspan="2">
+                                <a data-bind="click: function(en, ev) {$(ev.target).parents('tr').remove(); $('#protectedfolders-adduser').removeClass('hide');}"><?php echo $this->get('translator')->trans('Agregar un usuario',array(),'templates'); ?></a>
+                            </td>
+                        </tr>
+
+                    </tbody>
+                </table>
+
+                <div class="well well-small clearfix hide animated fast bounceIn" id="protectedfolders-adduser">
+                    <form data-bind="submit: $parent.addUser">
+                        <h4 class="txt-light mt0"><?php echo $this->get('translator')->trans('Agregar un usuario',array(),'templates'); ?></h4>
+                        <div class="row-fluid">
+                            <div class="span5">
+                                <label><?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?></label>
+                                <input type="text" autofocus="autofocus" class="span12" data-bind="value: $parent.tempUser.user.content" name="name"/>
+                                <span class="help-block error" data-bind="if: $parent.tempUser.user.error, text: $parent.tempUser.user.error"></span>
+                            </div>
+                            <div class="span4">
+                                <label><?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?></label>
+                                <input type="text" autofocus="autofocus" class="span12" data-bind="value: $parent.tempUser.pass.content" name="pass"/>
+                                <span class="help-block error" data-bind="if: $parent.tempUser.pass.error, text: $parent.tempUser.pass.error"></span>
+                            </div>
+                            <div class="span3">
+                                <label>&nbsp; </label>
+                                <!-- ko if: $parent.inprocessAddUser() == 0 -->
+                                    <button class="btn btn-primary span11" data-bind="click: $parent.addUser"><i class="icon-plus"></i> <?php echo $this->get('translator')->trans('Agregar',array(),'templates'); ?></button>
+                                <!-- /ko -->
+                                <!-- ko if: $parent.inprocessAddUser() == 1 -->
+                                    <button class="btn span11" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                                <!-- /ko -->
+                            </div>
+                        </div>
+                        <input type="submit" class="hide" />
+                    </form>
+                </div>
+            <?php } ?>
+
+            <div class="row-fluid">
+                <div class="span8">
+                    <input type="text" autofocus="autofocus" class="span12" placeholder="<?php echo $this->get('translator')->trans('Nombre del recurso',array(),'templates'); ?>" data-bind="value: extras.protectedfolders.name, event: {change: function () { $parent.enableSave() }}" />
+                </div>
+                <div class="span4">
+                    <label class="spaen12">
+                        <input type="checkbox" data-bind="checked: extras.protectedfolders.enabled, event: {change: function () { $parent.enableSave() }}"/>
+                        <span class="label-floating"><?php echo $this->get('translator')->trans('Activo',array(),'templates'); ?></span>
+                    </label>
+                </div>
+            </div>
+        <!-- /ko -->
+
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: inprocess() == 0 -->
+            <button class="btn" data-bind="click: cancel" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'protectedfolders', 'button', 'CancelarModal');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save, disable: saveDisabled" onclick="FerozoHosting.sendAnalytics('event', 'protectedfolders', 'button', 'GuardarConfigCarpeta');"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+            
+        <!-- /ko -->
+        <!-- ko if: inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->

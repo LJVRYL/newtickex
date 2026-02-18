@@ -1,0 +1,357 @@
+<!-- ko with: securityVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/server"><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Seguridad',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Ajustes',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+        </div>
+    </header>
+
+    <div class="tabbable">
+        <ul class="nav nav-tabs">
+            <li class="active"><a href="#tab1" data-toggle="tab" id="captchaConfig" onclick="FerozoDhm.sendAnalytics('event', 'Server', 'Ajustes', 'Captcha');"><?php echo $this->get('translator')->trans('Captcha',array(),'templates'); ?></a></li>
+            <li><a href="#tab2" data-toggle="tab" id="securityConfig" onclick="FerozoDhm.sendAnalytics('event', 'Server', 'Ajustes', 'Seguridad');"><?php echo $this->get('translator')->trans('Bloqueo de IP',array(),'templates'); ?></a></li>
+            <li><a href="#tab3" data-toggle="tab" id="blockList" onclick="FerozoDhm.sendAnalytics('event', 'Server', 'Ajustes', 'IPsBlocked');"><?php echo $this->get('translator')->trans('IPs Bloqueadas',array(),'templates'); ?></a></li>
+            <li><a href="#tab4" data-toggle="tab" id="blackList" onclick="FerozoDhm.sendAnalytics('event', 'Server', 'Ajustes', 'BlackList');"><?php echo $this->get('translator')->trans('Lista negra',array(),'templates'); ?></a></li>
+            <li><a href="#tab5" data-toggle="tab" id="whiteList" onclick="FerozoDhm.sendAnalytics('event', 'Server', 'Ajustes', 'WhiteList');"><?php echo $this->get('translator')->trans('Lista blanca',array(),'templates'); ?></a></li>
+        </ul>
+
+        <div class="tab-content tab-content-white">
+            <div class="tab-pane active animated fadeIn" id="tab1">
+                <section>
+                    <h5>
+                        <?php echo $this->get('translator')->trans(
+                            'Al activar esta configuración, ambos logins (DHM y Panel de Hosting), serán protegidos mediante el mismo sistema',
+                            array(), 'templates'); ?>
+                    </h5>
+                    <div style="margin-top: 20px; margin-bottom: 30px;">
+                        <input type="checkbox" style="margin-right: 5px;" data-bind="checked: captchaEnabled" />
+                        <?php echo $this->get('translator')->trans('Habilitar Captcha', array(), 'templates'); ?>
+                    </div>
+                    <div style="margin-left: 25px; margin-bottom: 30px;">
+                        <?php if ($accountInfo["Server"]["Type"] != 'External') { ?>
+                        <label class="radio" style="margin-bottom: 15px; display: block;">
+                            <input type="radio" name="turnstileProvider" value="default"
+                                   data-bind="checked: turnstileProvider, disable: !captchaEnabled()" />
+                            <span class="text-small">Turnstile por defecto</span>
+                        </label>
+                        <?php } ?>
+                        <label class="radio" style="margin-bottom: 15px; display: block;">
+                            <input type="radio" name="turnstileProvider" value="cloudflare"
+                                   data-bind="checked: turnstileProvider, disable: !captchaEnabled()" />
+                            <span class="text-small">Turnstile personalizado</span>
+                        </label>
+                        <label class="radio" style="margin-bottom: 15px; display: block;">
+                            <input type="radio" name="turnstileProvider" value="google"
+                                   data-bind="checked: turnstileProvider, disable: !captchaEnabled()" />
+                            <span class="text-small">Recaptcha de Google</span>
+                        </label>
+                    </div>
+                    <div data-bind="visible: turnstileProvider() === 'cloudflare' || turnstileProvider() === 'google'" style="margin-left: 25px; margin-bottom: 20px;">
+                        <div class="clearfix">
+                            <div class="span6" style="padding-right: 15px;">
+                                <label><?php echo $this->get('translator')->trans('Site Key', [], 'templates'); ?></label>
+                                <input type="text" class="full-width" name="siteKey" placeholder="Ingrese su Site Key"
+                                       data-bind="value: siteKey, disable: !captchaEnabled()" />
+                                <span class="help-block error animated shake"
+                                      data-bind="visible: siteKey.errors(), text: siteKey.errors()"></span>
+                            </div>
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Secret Key', [], 'templates'); ?></label>
+                                <input type="text" class="full-width" name="secretKey" placeholder="Ingrese su Secret Key"
+                                       data-bind="value: secretKey, disable: !captchaEnabled()" />
+                                <span class="help-block error animated shake"
+                                      data-bind="visible: secretKey.errors(), text: secretKey.errors()"></span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section style="margin-top: 40px;">
+                    <a class="btn btn-primary" data-bind="click: saveCaptchaConfig">
+                        <?php echo $this->get('translator')->trans('Guardar', [], 'templates'); ?>
+                    </a>
+                </section>
+            </div>            
+            <div class="tab-pane animated fadeIn" id="tab2"> 
+                <div class="well well-small">
+                    <section data-bind="with: securityConfig">
+                        <div class="modal-body" style="max-height: min-content">
+                            <b><?php echo $this->get('translator')->trans('Aquí podrás cambiar los parámetros de protección de login',array(),'templates'); ?>:</b>
+                            <br>
+                            <div class="span6">
+                                <br>
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="checked: active" /><span> <?php echo $this->get('translator')->trans('Activar el control de intentos fallidos por IP',array(),'templates'); ?></span>
+                                </label>
+                                <br>
+                            </div>
+    
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Máximo de intentos fallidos antes de bloquear temporalmente la IP',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: max_attempts, disable: !active()" placeholder="max_attempts" name="max_attempts" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: max_attempts.errors(), text: max_attempts.errors()"></span>
+                            </div>
+                            
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Tiempo (min) en que se cuentan los intentos fallidos',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: threshold, disable: !active()" placeholder="threshold" name="threshold" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: threshold.errors(), text: threshold.errors()"></span>
+                            </div>
+        
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Bloqueo (min) tras el primer exceso de intentos',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: first_penalty_minutes, disable: !active()" placeholder="first_penalty_minutes" name="first_penalty_minutes" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: first_penalty_minutes.errors(), text: first_penalty_minutes.errors()"></span>
+                            </div>
+        
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Bloqueo (min) tras el segundo exceso de intentos',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: second_penalty_minutes, disable: !active()" placeholder="second_penalty_minutes" name="second_penalty_minutes" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: second_penalty_minutes.errors(), text: second_penalty_minutes.errors()"></span>
+                            </div>
+        
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Bloqueo (horas) tras el tercer exceso de intentos',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: third_penalty_hours, disable: !active()" placeholder="third_penalty_hours" name="third_penalty_hours" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: third_penalty_hours.errors(), text: third_penalty_hours.errors()"></span>
+                            </div>
+    
+                            <div class="span6">
+                                <br>
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="checked: ignore_same_ipuser, disable: !active()" /><span> <?php echo $this->get('translator')->trans('Evita bloqueos si el mismo usuario falla desde la misma IP',array(),'templates'); ?></span>
+                                </label>
+                                <br>
+                            </div>
+                        </div>
+    
+                        <div>
+                            <a class="btn btn-primary pull-left" data-bind="click: save"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></a>
+                            <br><br>
+                        </div>
+
+                    </section>
+                </div>
+
+                <div class="well well-small">
+                    <section data-bind="with: massLogin">
+                        <div class="modal-body" style="max-height: min-content">
+                            <b><?php echo $this->get('translator')->trans('Configura los parámetros para protección de login masivo',array(),'templates'); ?>:</b>
+                            <br>
+                            <div class="span6">
+                                <br>
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="checked: active" /><span> <?php echo $this->get('translator')->trans('Activar el control de login masivo',array(),'templates'); ?></span>
+                                </label>
+                                <br>
+                            </div>
+
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Cantidad de intentos de login antes de bloquear temporalmente la IP',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: max_attempts, disable: !active()" placeholder="max_attempts" name="max_attempts" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: max_attempts.errors(), text: max_attempts.errors()"></span>
+                            </div>
+                            
+                            <div class="span6">
+                                <label><?php echo $this->get('translator')->trans('Tiempo (min) en que se cuentan los intentos de login',array(),'templates'); ?></label>
+                                <input type="number" min="0" data-bind="value: threshold, disable: !active()" placeholder="threshold" name="threshold" class="full-width" />
+                                <span class="help-block error animated shake" data-bind="visible: threshold.errors(), text: threshold.errors()"></span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <a class="btn btn-primary pull-left" data-bind="click: save"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></a>
+                            <br><br>
+                        </div>
+                    </section>
+                </div>
+                
+            </div>
+            <div class="tab-pane animated fadeIn" id="tab3">
+                <div>
+                    <h5><?php echo $this->get('translator')->trans('Listado de IPs bloqueadas',array(),'templates'); ?></h3>
+                </div>
+                <div>
+                    <!-- ko if: ( inprocess() == 1 ) -->
+                        <div class="loading-data text-center well well-small clearfix"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                    <!-- /ko -->
+                    <!-- ko if: ( inprocess() == 0 ) -->
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th><?php echo $this->get('translator')->trans('IP',array(),'templates'); ?></th>
+                                    <th><?php echo $this->get('translator')->trans('Motivo',array(),'templates'); ?></th>
+                                    <th><?php echo $this->get('translator')->trans('Fecha de liberación',array(),'templates'); ?></th>
+                                    <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                    <!-- ko if: blockedIps().length == 0 -->
+                                        <tr>
+                                            <td colspan="2">
+                                                <?php echo $this->get('translator')->trans('No existen IPs bloqueadas en su servidor',array(),'templates'); ?>
+                                            </td>
+                                        </tr>
+                                    <!-- /ko -->
+                                    <!-- ko if: blockedIps().length > 0 -->
+                                        <!-- ko foreach: blockedIps -->
+                                            <tr>
+                                                <td>
+                                                    <span data-bind="text: ipAddress"></span>
+                                                </td>
+                                                <td>
+                                                    <span data-bind="text: reason"></span>
+                                                </td>
+                                                <td>
+                                                    <span data-bind="text: liberationDate"></span>
+                                                </td>
+                                                <td class="right">
+                                                    <a class="close-int" data-bind="click: FerozoDhm.securityVM().unlockIp.bind($data)" onclick="FerozoDhm.sendAnalytics('event', 'Security', 'button', 'UnlockIP');"><i class="icon-remove"></i></a>
+                                                </td>
+                                            </tr>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                
+                            </tbody>
+                        </table>
+                    <!-- /ko -->
+                </div>
+            </div>
+            <div class="tab-pane animated fadeIn" id="tab4">
+                <div class="btn-toolbar btn-toolbar-docs clearfix">
+                    <a class="btn btn-primary pull-right" data-bind="click: function() { FerozoDhm.securityVM().addIpsList('black'); }" onclick="FerozoDhm.sendAnalytics('event', 'config', 'button', 'checkBlockedIps');">
+                        <?php echo $this->get('translator')->trans('Agregar IP',array(),'templates'); ?>
+                    </a>
+                </div>
+                <div>
+                    <h5><?php echo $this->get('translator')->trans('Lista Negra',array(),'templates'); ?></h3>
+                </div>
+                <div>
+                    <!-- ko if: ( inprocess() == 1 ) -->
+                        <div class="loading-data text-center well well-small clearfix"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                    <!-- /ko -->
+                    <!-- ko if: ( inprocess() == 0 ) -->
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th><?php echo $this->get('translator')->trans('IP',array(),'templates'); ?></th>
+                                    <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                    <!-- ko if: blackList().length == 0 -->
+                                        <tr>
+                                            <td colspan="2">
+                                                <?php echo $this->get('translator')->trans('No existen IPs en lista negra en su servidor',array(),'templates'); ?>
+                                            </td>
+                                        </tr>
+                                    <!-- /ko -->
+                                    <!-- ko if: blackList().length > 0 -->
+                                        <!-- ko foreach: blackList -->
+                                            <tr>
+                                                <td>
+                                                    <span data-bind="text: $data"></span>
+                                                </td>
+                                                <td class="right">
+                                                    <a class="close-int" data-bind="click: FerozoDhm.securityVM().listsRm.bind($data)" onclick="FerozoDhm.sendAnalytics('event', 'Security', 'button', 'RemoveBlackListIP');"><i class="icon-remove"></i></a>
+                                                </td>
+                                            </tr>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                
+                            </tbody>
+                        </table>
+                    <!-- /ko -->
+                </div>
+            </div>
+            <div class="tab-pane animated fadeIn" id="tab5">
+                <div class="btn-toolbar btn-toolbar-docs clearfix">
+                    <a class="btn btn-primary pull-right" data-bind="click: function() { FerozoDhm.securityVM().addIpsList('white'); }" onclick="FerozoDhm.sendAnalytics('event', 'config', 'button', 'checkBlockedIps');">
+                        <?php echo $this->get('translator')->trans('Agregar IP',array(),'templates'); ?>
+                    </a>
+                </div>
+                <div>
+                    <h5><?php echo $this->get('translator')->trans('Lista Blanca',array(),'templates'); ?></h3>
+                </div>
+                <div>
+                    <!-- ko if: ( inprocess() == 1 ) -->
+                        <div class="loading-data text-center well well-small clearfix"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                    <!-- /ko -->
+                    <!-- ko if: ( inprocess() == 0 ) -->
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th><?php echo $this->get('translator')->trans('IP',array(),'templates'); ?></th>
+                                    <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                    <!-- ko if: whiteList().length == 0 -->
+                                        <tr>
+                                            <td colspan="2">
+                                                <?php echo $this->get('translator')->trans('No existen IPs en lista blanca en su servidor',array(),'templates'); ?>
+                                            </td>
+                                        </tr>
+                                    <!-- /ko -->
+                                    <!-- ko if: whiteList().length > 0 -->
+                                        <!-- ko foreach: whiteList -->
+                                            <tr>
+                                                <td>
+                                                    <span data-bind="text: $data"></span>
+                                                </td>
+                                                <td class="right">
+                                                    <a class="close-int" data-bind="click: FerozoDhm.securityVM().listsRm.bind($data)" onclick="FerozoDhm.sendAnalytics('event', 'Security', 'button', 'RemoveBlackListIP');"><i class="icon-remove"></i></a>
+                                                </td>
+                                            </tr>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                
+                            </tbody>
+                        </table>
+                    <!-- /ko -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="modal-add-ip" class="modal animated fast pulse hide">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'IP', 'link', 'CerrarModal');">×</button>
+        <h3><?php echo $this->get('translator')->trans('Agregar una nueva IP al listado',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form class="form" data-bind="submit: FerozoDhm.securityVM().addIp">
+            <div class="row-fluid">
+                <div class="">
+                    <label><?php echo $this->get('translator')->trans('IP a añadir',array(),'templates'); ?></label>
+                    <input autofocus="autofocus" class="span12" type="text" data-bind="value: ip" name="ip" placeholder="<?php echo $this->get('translator')->trans('IP a añadir',array(),'templates'); ?>" autofocus="autofocus" />
+                    <span class="help-block error animated shake" data-bind="visible: ip.errors(), text: ip.errors()"></span>
+                </div>
+            </div>
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: inprocess() <= 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'CancelarModal');" ><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: FerozoDhm.securityVM().addIp" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'GuardarModal');"><?php echo $this->get('translator')->trans('Añadir',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: inprocess() >= 1 -->
+            <button class="btn" data-dismiss="modal" disabled="disabled" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+
+<!-- /ko -->

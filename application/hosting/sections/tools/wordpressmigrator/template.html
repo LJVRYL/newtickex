@@ -1,0 +1,174 @@
+<!-- ko with: wordpressmigratorVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Migrador WordPress',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Migrador Wordpress',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix "></div>
+    </header>
+
+    <section>
+        <div class="vm-emtpy-records well">
+            <div class="clearfix">
+                <div class="mr20">
+                    <img src="/application/assets/img/wordpress.png" alt="wordpressmigrator" width="10%"/>
+                </div>
+                <div>
+                    <h3><?php echo $this->get('translator')->trans('Proceso del migrador WordPress Ferozo',array(),'templates');?></h3>
+                    <p data-bind="visible: !migrationInProgress()">
+                        <?php echo $this->get('translator')->trans('Para realizar la importación hay que seguir 2 simples pasos',array(),'templates'); ?>.
+                    </p>
+                </div>
+            </div>
+            <!-- ko if: migrationInProgress -->
+                <div>
+                    <br>
+                    <h5 class="my-2 h5"><?php echo $this->get('translator')->trans('Migración en curso. Por favor espere...',array(),'templates'); ?></h5>
+                    <div style="width:70%;">
+                        <div class="progress task-progress progress-striped progress-primary active">
+                            <div class="bar" data-bind="style: { width: migrationPercentage() + '%' }"></div>
+                        </div>
+                        <h6 class="my-2 h5 center" data-bind="text: migrationStatus"></h6>
+                        <h6 class="my-2 h5 center"><?php echo $this->get('translator')->trans('(El proceso de migración puede tardar varios minutos)',array(),'templates'); ?></h6>
+                    </div>
+                    <div class="right">
+                        <a class="btn small" rel="tooltip" data-toggle="modal" title="<?php echo $this->get('translator')->trans('Ver última log de la migración',array(),'templates'); ?>" data-bind="click: getMigrationLog" onclick="FerozoHosting.sendAnalytics('event', 'WPMigrate', 'button', 'Logs');"><i class="icon-list"></i></a>
+                    </div>
+                </div>
+            <!-- /ko -->
+            <!-- ko ifnot: migrationInProgress -->
+                <section class="well clearfix">
+                    <div class="well clearfix">
+                        <h4><?php echo $this->get('translator')->trans('Paso',array(),'templates'); ?> 1</h4>
+                        <div class="row-fluid">
+                            <p><?php echo $this->get('translator')->trans('Instalar nuestro migrador en tu WordPress: puedes descargarlo de',array(),'templates');?> <a href="https://ferozo.host/wp-plugins/ferozo-wp-migrate.zip" target="_blank"><?php echo $this->get('translator')->trans('aquí',array(),'templates');?></a></p>
+                            <p><?php echo $this->get('translator')->trans('También puedes copiar la url: https://ferozo.host/wp-plugins/ferozo-wp-migrate.zip',array(),'templates');?></p>
+                        </div>
+                    </div>
+                    <div class="well clearfix">
+                        <h4><?php echo $this->get('translator')->trans('Paso',array(),'templates'); ?> 2</h4>
+                        <div class="row-fluid">
+                            <div id="form-wp">
+                                <p><?php echo $this->get('translator')->trans('Ingresa a continuación el código y la url de tu WordPress que te proporcionamos en el plugin y completa los datos de instalación',array(),'templates');?>:</p>
+                                <div>
+                                    <label><?php echo $this->get('translator')->trans('Url de tu WordPress',array(),'templates'); ?></label>
+                                    <input type="text" data-bind="value: wpUrl" placeholder="<?php echo $this->get('translator')->trans('Url de tu WordPress',array(),'templates');?>" class="span4"/>
+                                    <span class="help-block error"></span>
+                                </div>
+                                
+                                <div>
+                                    <label><?php echo $this->get('translator')->trans('Código',array(),'templates'); ?></label>
+                                    <input type="text" data-bind="value: migrationCode" placeholder="<?php echo $this->get('translator')->trans('Código de migración',array(),'templates');?>" class="span4"/>
+                                    <span class="help-block error"></span>
+                                </div>
+                
+                                <label><?php echo $this->get('translator')->trans('Dominio de instalación',array(),'templates'); ?></label>
+                                <select class="add-on span4" data-bind="options: domains, optionsText: function(e) {return e.domain.content();}, value: domainSelected"></select>
+
+                                <div>
+                                    <label><?php echo $this->get('translator')->trans('Especifica el destino de la extraccion',array(),'templates'); ?>:</label> 
+                                    <button class="btn" data-bind="enable: !inprocess(), click: showModalFolder" onclick="FerozoHosting.sendAnalytics('event', 'Folder', 'button', 'wordpressmigrator');"><i class="icon icon-new fa-crosshairs"></i> <?php echo $this->get('translator')->trans('Seleccionar destino de instalación',array(),'templates'); ?></button> <span class="class-info-tec" data-bind="visible:folder, text: folder"></span><span class="class-info-tec" data-bind="visible:folder()=='', text: 'public_html'"></span>
+                                    <input type="hidden" data-bind="value: folder">
+                                    <span class="help-block error"></span>
+                                </div>
+                                
+                                <br><br>
+                                
+                                <!-- ko if: !inprocess() -->
+                                    <button class="btn btn-primary" data-bind="click: startMigration" ><?php echo $this->get('translator')->trans('Comenzar',array(),'templates'); ?></button>
+                                <!-- /ko -->
+                                <!-- ko if: inprocess() -->
+                                    <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                                <!-- /ko -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            <!-- /ko --> 
+        </div>
+    </section>
+
+</div>
+
+<div id="wp-migrate-log" class="modal animated fast pulse hide">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'WPMigrate', 'button', 'CerrarModal');">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Logs durante el proceso de migración',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body" style="background-color: black; color: wheat; margin: 3%;">
+        <div data-bind="html: migrationLogs"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'WPMigrate', 'button', 'ModalWPMigrateCerrar');"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>  
+        <!-- ko if: !inprocess() -->
+            <button class="btn btn-primary" data-bind="click: getFullLog" onclick="FerozoHosting.sendAnalytics('event', 'WPMigrate', 'Button', 'FullLog');"><?php echo $this->get('translator')->trans('Obtener Log completo',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: inprocess() -->
+            <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+
+<div id="fileNavigator" class="modal animated fast pulse hide">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Seleccione una carpeta donde migrar su WordPress',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <section>
+            <table class="table table-hover mb0">
+                <thead>
+                    <tr>
+                        <th><?php echo $this->get('translator')->trans('Nombre de carpeta',array(),'templates'); ?> </th>
+
+                        <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- ko foreach: data() -->
+                        <tr class="info">
+                            <td>
+                                <span  data-bind="visible:$data.type !== 'dir'">
+                                    <i class="icon icon-file"></i>
+                                    <span data-bind="text: $data.name"></span>
+                                </span>
+                                <span style="color: #f90;" data-bind="visible:$data.type === 'dir'">
+                                    <i class="icon icon-folder-close"></i>
+                                    <span data-bind="text: $data.name"></span>
+                                </span>
+                            </td>
+
+                            <td class="right">
+                                <a data-bind="click: $parent.selectFolder.bind($data.name)" class="btn small pull-right"><i class="icon-hand-up"></i> <?php echo $this->get('translator')->trans('Seleccionar',array(),'templates'); ?></a>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+    <div class="modal-footer">
+        <div class="pull-left">
+            <!-- ko if: inprocess() == 0 -->
+                <button class="btn" data-bind="visible: !createFolderName(), click: createFolder"><i class="icon-folder-open"></i> <?php echo $this->get('translator')->trans('Crear carpeta',array(),'templates'); ?></button>
+                <div data-bind="visible: createFolderName">
+                    <input type="text" class="span2" style="margin:0" data-bind="value: newFolder"/>
+                    <button class="btn" data-bind="click: selectNewFolder.bind()"><?php echo $this->get('translator')->trans('Crear',array(),'templates'); ?></button>
+                </div>
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+        <button class="btn" data-bind="click: selectPublic.bind()"><i class="icon-hand-up"></i> <?php echo $this->get('translator')->trans('Usar directorio raíz',array(),'templates'); ?> <b>public_html</b></button>
+    </div>
+</div>
+
+
+<!-- /ko -->

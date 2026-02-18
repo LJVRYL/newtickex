@@ -1,0 +1,202 @@
+<!-- ko with: profileVM-->
+
+    <div class="clearfix animated superfast fadeIn">
+
+        <nav class="section-breadcrum row-fluid">
+            <ul class="breadcrumb">
+              <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+              <li class="active"><?php echo $this->get('translator')->trans('Mi perfil',array(),'templates'); ?></li>
+            </ul>
+            <hr class="mb0" />
+        </nav>
+
+        <header class="clearfix">
+            <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Mi perfil',array(),'templates'); ?></h2>
+        </header>
+
+        <section>
+            <div data-bind="visible: (inprocess() && !user().UserName())" class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+            <div  data-bind="visible: !(inprocess() && !user().UserName())" class="well clearfix">
+                <div class="row-fluid">
+                    <div class="span6">
+                        <div class="fz-blockquote">
+                            <h3 class="txt-light mt0"><i class="icon-user"></i> <?php echo $this->get('translator')->trans('Nombre de Usuario',array(),'templates'); ?></h3>
+                            <div class="fz-blockquote">
+                                <h4 class="txt-light mb0" data-bind="text: user().UserName"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="span6">
+                        <div class="fz-blockquote">
+                            <h3 class="txt-light mt0"><i class="icon-globe"></i> <?php echo $this->get('translator')->trans('Idioma del panel',array(),'templates'); ?></h3>
+                            <div class="fz-blockquote">
+                                <h4 class="txt-light mb0" data-bind="text: user().Language.Name"></h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row-fluid">
+                    <div class="span6">
+                        <div class="fz-blockquote">
+                            <h3 class="txt-light mt0"><i class="icon-envelope"></i> <?php echo $this->get('translator')->trans('Email de contacto',array(),'templates'); ?></h3>
+                            <div class="fz-blockquote">
+                                <h4 class="txt-light mb0" data-bind="text: user().Contact() || '-'"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="span6">
+                        <div class="fz-blockquote">
+                            <h3 class="txt-light mt0"><i class="icon-key"></i> <?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?></h3>
+                            <div class="fz-blockquote">
+                                <h4 class="txt-light mb0 animated fadeIn" data-bind="visible: showPassword, text: user().Password"></h4>
+
+                                <button title="<?php echo $this->get('translator')->trans('Mostrar contrasena',array(),'templates'); ?>" class="btn btn-small" data-bind="visible: !showPassword(), click: showPassword.bind($data, true)">
+                                    <i class="icon-eye-open"></i> <?php echo $this->get('translator')->trans('Mostrar contrasena',array(),'templates'); ?>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row-fluid">
+                    <div class="span12">
+                        <div class="fz-blockquote pull-left">
+                            <h3 class="txt-light mt0"><i class="icon-inbox"></i> <?php echo $this->get('translator')->trans('Cliente de email predeterminado',array(),'templates'); ?></h3>
+                            <div class="fz-blockquote">
+                                <h4 class="txt-light mb0" data-bind="text: user().EmailClient"></h4>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary pull-right" style="margin-top:50px" data-bind="click: openModalEdit">
+                            <i class="icon icon-pencil"></i>
+                            <?php echo $this->get('translator')->trans('Modificar',array(),'templates'); ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section>
+            <div  data-bind="visible: !(inprocess() && !user().UserName())" class="well clearfix">
+                <div class="row-fluid">
+                    <div class="span12">
+                        <div class="fz-blockquote">
+                            <h3 class="txt-light mt0"><i class="icon-lock"></i> <?php echo $this->get('translator')->trans('Seguridad',array(),'templates'); ?></h3>
+                            <div class="fz-blockquote">
+                                <!-- ko if: authFlag() -->
+                                    <h4 class="txt-light mb0"><?php echo $this->get('translator')->trans('2FA Activado',array(),'templates'); ?></h4>
+                                    <button class="btn btn-primary mt10" data-bind="click: openModalReset2fa">
+                                        <?php echo $this->get('translator')->trans('Reiniciar',array(),'templates'); ?>
+                                    </button>
+                                <!-- /ko -->
+                                <!-- ko if: !authFlag() -->
+                                    <div class="span4">
+                                        <h4 class="txt-light mb0"><?php echo $this->get('translator')->trans('2FA Desactivado',array(),'templates'); ?></h4>
+                                        <!-- ko if: ImageBase64() == '' -->
+                                            <button class="btn btn-primary mt10" data-bind="click: get2fa">
+                                                <?php echo $this->get('translator')->trans('Activar',array(),'templates'); ?>
+                                            </button>
+                                        <!-- /ko -->
+                                        <!-- ko if: ImageBase64() != '' -->
+                                            <img width="50%" height="50%" data-bind="attr:{src: 'data:image/png;base64,'+ImageBase64()}"/>
+                                        <!-- /ko -->
+                                        <h5 data-bind="text: secret2fa" style="margin-left:5%" ></h5>
+                                    </div>
+                                    <!-- ko if: secret2fa() != '' -->
+                                        <div class="span6">
+                                            <br>
+                                            <p><?php echo $this->get('translator')->trans('Busca en la App Store o en Google Play "TOTP authenticator" e instala una de las aplicaciones gratuitas de la lista, por ejemplo: 2FA Authenticator, Microsoft Authenticator, Google Authenticator, etc.',array(),'templates'); ?></p>
+                                            <p><?php echo $this->get('translator')->trans('Configura la aplicación escaneando el código QR o introduciendo manualmente el código de configuración',array(),'templates'); ?></p>
+                                            <label><?php echo $this->get('translator')->trans('Código de configuración',array(),'templates'); ?></label>
+                                            <div>
+                                                <input name="input2fa" type="number" class="full-width" data-bind="value: authCode, valueUpdate: 'afterkeydown', enterkey: validate2fa" placeholder="<?php echo $this->get('translator')->trans('Código de configuración del authenticator',array(),'templates'); ?>" />
+                                                <span class="help-block error animated shake" data-bind="visible: authCode.errors(), text: authCode.errors()"></span>
+                                            </div>
+                                            <button class="btn btn-primary mt10" data-bind="click: validate2fa">
+                                                <?php echo $this->get('translator')->trans('Validar',array(),'templates'); ?>
+                                            </button>
+                                        </div>
+                                    <!-- /ko -->
+                                <!-- /ko -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="modal-edit" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header mb0">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            <h3><?php echo $this->get('translator')->trans('Datos del perfil',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <form data-bind="submit: save">
+                <div class="row-fluid">
+                    <div class="span6">
+                        <label><?php echo $this->get('translator')->trans('Email de contacto',array(),'templates'); ?></label>
+                        <div>
+                            <input type="email" class="full-width" data-bind="value: Contact" placeholder="<?php echo $this->get('translator')->trans('Email de contacto actual',array(),'templates'); ?>" />
+                            <span class="help-block error animated shake" data-bind="visible: Contact.errors(), text: Contact.errors()"></span>
+                        </div>
+                    </div>
+
+                    <div class="span6">
+                        <label><?php echo $this->get('translator')->trans('Idioma del panel',array(),'templates'); ?></label>
+                        <div>
+                            <select id="language" class="full-width" data-bind="options: Language.AvailableLanguages, optionsText: 'name', optionsValue: 'id', value: Language.Id"></select>
+                            <span class="help-block error animated shake" data-bind="visible: Language.Id.errors(), text: Language.Id.errors()"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row-fluid">
+                    <div class="span6">
+                        <label><?php echo $this->get('translator')->trans('Cliente de email predeterminado',array(),'templates'); ?></label>
+                        <div>
+                            <select class="full-width" data-bind="options: EmailClients, value: EmailClient"></select>
+                            <span class="help-block error animated shake" data-bind="visible: EmailClient.errors(), text: EmailClient.errors()"></span>
+                        </div>
+                    </div>
+
+                    <div class="span6">
+                        <label><?php echo $this->get('translator')->trans('Cambiar Contrasena',array(),'templates'); ?></label>
+                        <div>
+                            <input type="text" class="full-width" data-bind="value: NewPassword" placeholder="<?php echo $this->get('translator')->trans('Nueva contrasena',array(),'templates'); ?>" />
+                            <span class="help-block error animated shake" data-bind="visible: NewPassword.errors(), text: NewPassword.errors()"></span>
+                        </div>
+                    </div>
+                </div>
+                <input type="submit" class="hide" />
+            </form>
+        </div>
+        <div class="modal-footer">
+             <!-- ko if: $parent.inprocess() == 0 && $parent.inprocessSettings() == 0 -->
+                <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" data-bind="click: save"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <!-- ko if: $parent.inprocess() == 1 || $parent.inprocessSettings() == 1 -->
+                <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+            <!-- /ko -->
+        </div>
+    </div>
+
+    <div id="modal-reset2fa" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header mb0">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            <h3><?php echo $this->get('translator')->trans('Reiniciar 2FA',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <p><?php echo $this->get('translator')->trans('Está seguro que desea eliminar la configuración actual de 2FA?',array(),'templates'); ?></p>
+        </div>
+        <div class="modal-footer">
+             <!-- ko if: $parent.inprocess() == 0 && $parent.inprocessSettings() == 0 -->
+                <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" data-bind="click: $parent.reset2fa"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <!-- ko if: $parent.inprocess() == 1 || $parent.inprocessSettings() == 1 -->
+                <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+            <!-- /ko -->
+        </div>
+    </div>
+
+<!-- /ko -->

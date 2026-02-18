@@ -1,0 +1,168 @@
+.container {
+	flex-direction: row;
+	width: 100%;
+}
+
+ul.stepper li a {
+    padding: 0 !important;
+    text-align: center
+}
+
+.row {
+	width: 100%;
+	display: flow-root;
+	margin-right: 0px !important;
+    margin-left: 0px !important;
+}
+
+body{
+	width: 100%;
+}
+
+h1, 
+h2 {
+	font-weight: 300;
+	font-size: 3.4em;
+	margin-left: 0.9em;
+}
+
+h1 strong,
+h2 strong {
+	font-weight: 600
+}
+
+p {
+	font-weight: 300;
+	line-height: 1.2;
+	margin-top: 0.2em;
+}
+
+p strong {
+	font-weight: 600;
+}
+
+img {
+	height: auto;
+}
+
+.banner{
+	width: 100%;
+	background-position: center;
+    background-size: cover;
+}
+
+.img-ferozo {
+	margin-top: 1%;		
+}
+
+nav {
+	background-color: #ffffff;
+	height: 60px;
+}
+
+header {
+	width: 100%;
+	min-height: calc(100vh - 158px);
+}
+
+section {
+	padding: 5em 0;
+}
+
+.terms {
+	overflow-y: scroll;
+	height: 90%;
+	width: 60%;
+	border: 1px solid #DDD;
+	padding: 10px;
+}
+
+.md-form{
+	width: 40% !important;
+}
+
+
+
+.centrado {
+    color: white;
+    width: 650px;
+    max-width: 95%;
+    margin: 40px auto;
+    font-size: 18px;
+    font-weight: 300;
+}
+
+footer {
+	background-color: #414a70 !important;
+	height: 6em;
+}
+
+ul.stepper.horizontal {
+min-height: 458px;
+}
+
+.spin {
+	-webkit-animation: fa-spin 2s infinite linear;
+	animation: fa-spin 2s infinite linear;
+}
+
+  /* Modal Error (background) */
+  .modal {
+	display: none; /* oculto por defecto */
+	position: fixed; 
+	z-index: 1; 
+	left: 0;
+	top: 0;
+	width: 100%; 
+	height: 100%; 
+	overflow: auto; 
+	background-color: rgb(0,0,0); 
+	background-color: rgba(0,0,0,0.4); 
+  }
+  
+  /* Contenido modal */
+  .modal-content {
+	background-color: #fefefe;
+	margin: 15% auto; 
+	padding: 25px;
+	border: 1px solid #888;
+	width: 35%; 
+  }
+
+@media (max-width: 920px) {
+	.banner{
+		background-image: none !important;
+	}
+
+	.md-form{
+		width: 100% !important;
+	}
+
+	.terms {
+		overflow-y: scroll;
+		height: 250px;
+		width: 250px;
+		border: 1px solid #DDD;
+		padding: 10px;
+	}
+	
+	.img-panel {
+		border-radius: 5px;
+		width: 95%;
+		height: auto;
+		margin-left: 0.5em;
+	}
+
+	.container {
+		display: flex;
+    	flex-flow: row-reverse;  
+  	}
+
+  	footer {
+		height: 110px;
+	}
+
+	.previous-step{
+		display: none;
+	}
+}

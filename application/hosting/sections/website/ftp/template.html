@@ -1,0 +1,229 @@
+<!-- ko with: ftpVM -->
+<div class="clearfix animated superfast fadeIn">
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/website"><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('ftp',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title">FTP</h2>
+            <div class="btn-toolbar btn-toolbar-docs clearfix">
+                <!-- ko if: readyView() != "LOADING" -->
+                    <!-- ko if: domains().length > 0 -->
+                    <a class="btn btn-primary pull-right" accesskey="n" data-bind="click: newftp" title="<?php echo $this->get('translator')->trans('Crear nueva cuenta de FTP (Alt + N )',array(),'templates'); ?>"onclick="FerozoHosting.sendAnalytics('event', 'FTP', 'button', 'ModalFTP');"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+                    <!-- /ko -->
+                <!-- /ko -->
+            </div>
+        <p class="descScreens">
+        <?php echo $this->get('translator')->trans('main-text-ftp',array(),'templates'); ?>.</p>
+    </header>
+    <section >
+        <!-- ko if: readyView() == "LOADING" -->
+            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+        <!-- /ko -->
+        
+        <!-- ko if: readyView() == "WO-DOMAINS" -->
+            <div class="vm-emtpy-records well clearfix">
+                <div class="pull-left mr20">
+                    <img src="/application/assets/img/vm-icons/png/globe.png" alt=""/>
+                </div>
+                <div class="pull-left">
+                    <h3><?php echo $this->get('translator')->trans('Primero apunta un dominio',array(),'templates');?></h3>
+                    <p>
+                        <?php echo $this->get('translator')->trans('Para utilizar esta funcionalidad debes tener por lo menos un dominio apuntado',array(),'templates'); ?>.
+                        <a href="#/domain/domains"><?php echo $this->get('translator')->trans('Apuntar dominio',array(),'templates'); ?></a>
+                    </p>
+                </div>
+            </div>
+        <!-- /ko -->        
+        
+        <!-- ko if: readyView() == "W-DOMAINS" -->
+            <!-- ko if: data().length <= 0  && inprocess() < 1-->
+                <div class="vm-emtpy-records well clearfix">
+                    <div class="pull-left mr20">
+                        <img src="/application/assets/img/vm-icons/png/cloud.png" alt=""/>
+                    </div>
+                    <div class="pull-left">
+                        <h3><?php echo $this->get('translator')->trans('Sin cuentas FTP',array(),'templates');?></h3>
+                        <p>
+                            <?php echo $this->get('translator')->trans('Crea cuentas de FTP y conectate de forma segura y rapida a tu cuenta',array(),'templates'); ?>.
+                            <a data-bind="click: newftp" accesskey="n"><?php echo $this->get('translator')->trans('Crear nueva cuenta',array(),'templates'); ?></a>
+                        </p>
+                    </div>
+                </div>
+            <!-- /ko -->
+            <!-- ko if: data().length > 0 -->
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>
+                            <a  data-bind="click: sortData">
+                                <?php echo $this->get('translator')->trans('Cuenta',array(),'templates'); ?>
+                                <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                                <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                            </a>
+                        </th>
+                        <th ><?php echo $this->get('translator')->trans('Directorio',array(),'templates'); ?></th>
+                        <th class="right"> <?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?> </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- ko foreach: data() -->
+                    <tr class="info">
+                        <td>
+                            <span data-bind="html: account().user"></span>
+                            <!--span data-bind="text: regStatus.description"></span-->
+                        </td>
+                        <td>
+                            <!-- ko if:isDefault() == true -->
+                            <span data-bind="text: '/' + path.content()"></span>
+                            <!-- /ko -->
+                            <!-- ko ifnot: isDefault() == true -->
+                            <span data-bind="text: '/public_html/' + path.content()"></span>
+                            <!-- /ko -->
+                        </td>
+                        <td class="right">
+                            <!-- ko if: regStatus() == 1 && isDefault() != true -->
+                                <div>
+                                    <a class="btn small" title="<?php echo $this->get('translator')->trans('Mostrar contrasena',array(),'templates'); ?>" data-bind="click: $parent.showUserInfo" onclick="FerozoHosting.sendAnalytics('event', 'FTP', 'button', 'MostrarPass');"><i class="icon-eye-open"></i></a>
+                                    <a class="btn small" rel="tooltip" data-toggle="modal" title="<?php echo $this->get('translator')->trans('Cambiar la contrasena de la cuenta',array(),'templates'); ?>" data-bind="click: $parent.modify" onclick="FerozoHosting.sendAnalytics('event', 'FTP', 'button', 'ModalCambiarPass');"><i class="icon-key"></i></a>
+                                    <div  data-bind="template: { name: 'delete-confirm'}" class="delete-confirm" onclick="FerozoHosting.sendAnalytics('event', 'FTP', 'button', 'FTPEliminar');"></div>
+                                </div>
+                            <!-- /ko -->
+                            <!-- ko if:isDefault() == true -->
+                                <span class="hidecol badge badge-success"><?php echo $this->get('translator')->trans('Cuenta principal',array(),'templates'); ?></span>
+                                <a class="btn small" title="<?php echo $this->get('translator')->trans('Mostrar contrasena',array(),'templates'); ?>" data-bind="click: $parent.showUserInfo" onclick="FerozoHosting.sendAnalytics('event', 'FTP', 'button', 'MostrarPass');"><i class="icon-eye-open"></i></a>
+                            <!-- /ko -->
+                            <div data-bind="template: { name: 'rows-loading'}"></div>
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+                    <tr class="info">
+                        <td colspan="3">
+                            <a data-bind="click: newftp"><?php echo $this->get('translator')->trans('Crear cuenta de FTP',array(),'templates'); ?></a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- /ko -->
+        <!-- /ko -->            
+    </section>
+</div>
+
+<div id="apuntar-nuevo" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'FTP', 'button', 'CerrarModal');">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Agregar nueva cuenta de FTP',array(),'templates'); ?></h3>
+    </div>
+    <!-- ko ifnot: $parent.maxAccounts() ==  -1 || ($parent.currentAccounts() < $parent.maxAccounts()) -->
+        <div class="modal-body">
+            <h4><?php echo $this->get('translator')->trans('¡Te has quedado sin cuentas FTP disponibles!',array(),'templates'); ?></h4>
+            <br>
+            <p><?php echo $this->get('translator')->trans('Actualiza tu plan para crear más cuentas FTP',array(),'templates'); ?></p>
+            <br>
+            <?php if (! $accountInfo["WhiteLabel"]) { ?>
+                <!-- ko if: $parent.serviceId() != 0000 -->
+                    <a data-bind="click: $parent.redirectMcSpace"><?php echo $this->get('translator')->trans('Actualizar mi plan',array(),'templates'); ?></a>
+                <!-- /ko -->
+            <?php } ?>
+        </div>
+    <!-- /ko -->
+    <!-- ko if: $parent.maxAccounts() ==  -1 || ($parent.currentAccounts() < $parent.maxAccounts()) -->
+        <div class="modal-body">
+            <form data-bind="submit: save">
+            <label><?php echo $this->get('translator')->trans('Ingresa el nombre para la cuenta de FTP',array(),'templates'); ?>.</label>
+            <div class="input-append">
+                <!-- ko with: usernamePrefix -->
+                    <input type="text" data-bind="value: $data.content" autofocus="autofocus" />
+                <!-- /ko -->
+                    <span class="add-on">@</span>
+                    <select class="add-on" data-bind="options: $parent.domains, optionsText: 'clearDomain', value: domain"></select>
+                <!-- ko with: usernamePrefix -->
+                    <span class="help-block error" data-bind="text: $data.error"></span>
+                <!-- /ko -->
+            </div>
+
+            <label><?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?></label>
+            <div data-bind="with: ftppass">
+                <input type="text" data-bind="value: $data.content" class="full-width" />
+                <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+            </div>
+
+            <label><?php echo $this->get('translator')->trans('Directorio',array(),'templates'); ?></label>
+            <div class="input-prepend">
+                <span class="add-on">public_html/</span>
+                <!-- ko with: path -->
+                    <input type="text" data-bind="value: $data.content" placeholder="images" class="span4" />
+                <!-- /ko -->
+            </div>
+            <!-- ko with: path -->
+                <span class="help-block error" data-bind="text: $data.error"></span>
+            <!-- /ko -->
+            <input type="submit" class="hide" />
+            </form>
+        </div>
+    <!-- /ko -->
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'ZonaDNS', 'button', 'ModalFTPCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <!-- ko if: $parent.maxAccounts() ==  -1 || ($parent.maxAccounts() > $parent.currentAccounts()) -->
+                <button class="btn btn-primary" data-bind="click: save" onclick="FerozoHosting.sendAnalytics('event', 'ZonaDNS', 'button', 'ModalFTPGuardar');"><?php echo $this->get('translator')->trans('Crear ahora',array(),'templates'); ?></button>
+            <!-- /ko -->
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<div id="info-userFTP" class="modal animated fast pulse hide" data-bind="with:temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Informacion del usuario FTP',array(),'templates'); ?> </h3>
+    </div>
+    <div class="modal-body">
+         <div class="row-fluid">
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?></span>
+                <span class="class-info-tec" data-bind="text: account().user"></span>
+            </div>
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?>:</span>
+                <span class="class-info-tec" data-bind="text: account().password"></span>
+            </div>
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?>:</span>
+                <span class="class-info-tec" data-bind="text: 'ftp://'+$parent.getPpalDomain()"></span>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+    </div>
+</div>
+
+
+<!-- Apuntar  -->
+<div id="cambiar-passftp" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Cambiar contrasena de cuenta FTP',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <div data-bind="with: ftppass">
+            <label><?php echo $this->get('translator')->trans('Nueva contrasena',array(),'templates'); ?></label>
+            <input type="text" data-bind="value: $data.content" placeholder="<?php echo strtolower($this->get('translator')->trans('Password',array(),'templates')); ?>" class="full-width" autofocus="autofocus"/>
+            <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() < 1 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'ZonaDNS', 'button', 'FTPCancelarCambiarPass');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: changepass" onclick="FerozoHosting.sendAnalytics('event', 'ZonaDNS', 'button', 'FTPCambiarPass');"><?php echo $this->get('translator')->trans('Cambiar Contrasena',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+<!-- /ko -->

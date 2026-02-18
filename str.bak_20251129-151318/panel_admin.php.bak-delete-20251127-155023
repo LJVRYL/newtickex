@@ -1,0 +1,239 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Panel general – Admin";
+
+require_login();
+
+// ===== AUTH (compat con tu DB) =====
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
+if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
+    header("Location: login.php");
+    exit;
+}
+$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id'])?(int)$cu['id']:0);
+
+// ===== DB =====
+try {
+    $pdo = db();
+} catch (Exception $ex) {
+    http_response_code(500);
+    echo "Error DB: " . e($ex->getMessage());
+    exit;
+}
+
+// ===== Detectar columnas opcionales =====
+$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCreadoPor = false;
+foreach($colsEv as $c){
+    if (isset($c['name']) && $c['name']==='creado_por_admin_id') { $hasCreadoPor=true; break; }
+}
+
+$colsEnt = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
+$hasEventoIdEntradas = false;
+foreach($colsEnt as $c){
+    if (isset($c['name']) && $c['name']==='evento_id') { $hasEventoIdEntradas=true; break; }
+}
+
+// ===== Buscador de eventos =====
+$qev = isset($_GET['qev']) ? trim($_GET['qev']) : '';
+
+// ===== Traer eventos visibles =====
+$whereEv = array();
+$paramsEv = array();
+
+if ($tipoGlobal === 'admin_evento' && $hasCreadoPor && $adminId>0) {
+    $whereEv[] = "creado_por_admin_id = :aid";
+    $paramsEv[':aid'] = $adminId;
+}
+
+if ($qev !== '') {
+    $whereEv[] = "(nombre LIKE :qev OR slug LIKE :qev)";
+    $paramsEv[':qev'] = '%'.$qev.'%';
+}
+
+$whereEvSql = !empty($whereEv) ? ("WHERE ".implode(" AND ", $whereEv)) : "";
+
+$stmtEv = $pdo->prepare("SELECT * FROM eventos $whereEvSql ORDER BY id DESC");
+$stmtEv->execute($paramsEv);
+$eventos = $stmtEv->fetchAll(PDO::FETCH_ASSOC);
+
+// ===== Stats globales y por evento =====
+$eventoIds = array();
+foreach($eventos as $r){
+    $eventoIds[] = (int)$r['id'];
+}
+
+$statsGlobal = array('total'=>0,'checkins'=>0,'pendientes'=>0);
+$statsPorEvento = array();
+
+if (!$hasEventoIdEntradas || empty($eventoIds)) {
+    $totalG = (int)$pdo->query("SELECT COUNT(*) FROM entradas")->fetchColumn();
+    $checkG = (int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE checked_in=1")->fetchColumn();
+    $pendG  = max(0, $totalG-$checkG);
+    $statsGlobal = array('total'=>$totalG,'checkins'=>$checkG,'pendientes'=>$pendG);
+
+    foreach($eventoIds as $eid){
+        $statsPorEvento[$eid] = array('total'=>0,'checkins'=>0,'pendientes'=>0);
+    }
+} else {
+    $in = implode(",", array_fill(0,count($eventoIds),'?'));
+
+    $stmtTot = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id IN ($in)");
+    $stmtTot->execute($eventoIds);
+    $totalG = (int)$stmtTot->fetchColumn();
+
+    $stmtChk = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE checked_in=1 AND evento_id IN ($in)");
+    $stmtChk->execute($eventoIds);
+    $checkG = (int)$stmtChk->fetchColumn();
+
+    $pendG  = max(0, $totalG-$checkG);
+    $statsGlobal = array('total'=>$totalG,'checkins'=>$checkG,'pendientes'=>$pendG);
+
+    foreach($eventoIds as $eid){
+        $stmtE = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id=?");
+        $stmtE->execute(array($eid));
+        $t = (int)$stmtE->fetchColumn();
+
+        $stmtEc = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE checked_in=1 AND evento_id=?");
+        $stmtEc->execute(array($eid));
+        $c = (int)$stmtEc->fetchColumn();
+
+        $p = max(0, $t-$c);
+        $statsPorEvento[$eid] = array('total'=>$t,'checkins'=>$c,'pendientes'=>$p);
+    }
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+
+
+
+  <span style="flex:1 1 auto;"></span>
+
+
+</div>
+
+<div class="card">
+  <h2>Panel general</h2>
+  <div style="color:var(--muted);font-size:14px;">
+    Usuario: <strong><?php echo e($_SESSION['usuario']); ?></strong>
+    <?php if($tipoGlobal==='super_admin' || $tipoGlobal==='superadmin'): ?>
+      — <span style="color:var(--ok);font-weight:700;">SUPER ADMIN</span>
+    <?php endif; ?>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
+    <div class="card" style="min-width:190px;background:var(--panel-2);">
+      <div style="font-size:12px;color:var(--muted);">Entradas totales (mis eventos)</div>
+      <div style="font-size:24px;font-weight:800;margin-top:4px;"><?php echo (int)$statsGlobal['total']; ?></div>
+    </div>
+    <div class="card" style="min-width:190px;background:var(--panel-2);">
+      <div style="font-size:12px;color:var(--muted);">Check-ins</div>
+      <div style="font-size:24px;font-weight:800;margin-top:4px;"><?php echo (int)$statsGlobal['checkins']; ?></div>
+    </div>
+    <div class="card" style="min-width:190px;background:var(--panel-2);">
+      <div style="font-size:12px;color:var(--muted);">Pendientes</div>
+      <div style="font-size:24px;font-weight:800;margin-top:4px;"><?php echo (int)$statsGlobal['pendientes']; ?></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Buscar eventos</h3>
+  <form method="get" style="margin-top:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+      <div style="flex:1 1 260px;">
+        <label>Nombre o slug</label>
+        <input ty
+      </div>
+      <div>
+        <button class="btn secondary" type="submit">Buscar</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Mis eventos</h3>
+
+  <?php if(empty($eventos)): ?>
+    <div class="card" style="background:var(--panel-2);">No hay eventos para mostrar.</div>
+  <?php else: ?>
+
+  <div style="overflow:auto;margin-top:8px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Flyer</th>
+          <th>Evento</th>
+          <th>Slug</th>
+          <th>Fecha</th>
+          <th>Totales</th>
+          <th>Check-ins</th>
+          <th>Pendientes</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+
+      <?php foreach($eventos as $ev): ?>
+        <?php
+          $eid = (int)$ev['id'];
+          $st = isset($statsPorEvento[$eid]) ? $statsPorEvento[$eid] : array('total'=>0,'checkins'=>0,'pendientes'=>0);
+          $fd = isset($ev['fecha_desde']) ? $ev['fecha_desde'] : '';
+          $fh = isset($ev['fecha_hasta']) ? $ev['fecha_hasta'] : '';
+          $flyerOk = (!empty($ev['flyer_filename']) && file_exists(__DIR__ . '/' . $ev['flyer_filename']));
+        ?>
+        <tr>
+          <td>
+            <?php if($flyerOk): ?>
+              <img src="<?php echo e($ev['flyer_filename']); ?>" alt="Flyer" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#000;">
+            <?php else: ?>
+              <span style="color:var(--muted);font-size:13px;">Sin flyer</span>
+            <?php endif; ?>
+          </td>
+
+          <td><?php echo e($ev['nombre']); ?></td>
+          <td><?php echo e($ev['slug']); ?></td>
+
+          <td>
+            <?php
+              if($fd==='' && $fh==='') echo '<span style="color:var(--muted);font-size:13px;">Sin fecha</span>';
+              else {
+                echo e($fd);
+                if($fh!=='') echo ' → '.e($fh);
+              }
+            ?>
+          </td>
+
+          <td><?php echo (int)$st['total']; ?></td>
+          <td><?php echo (int)$st['checkins']; ?></td>
+          <td>
+            <?php if((int)$st['pendientes']>0): ?>
+              <span style="color:var(--warn);font-weight:700;"><?php echo (int)$st['pendientes']; ?> pendientes</span>
+            <?php else: ?>
+              <span style="color:var(--ok);font-weight:700;">0 pendientes</span>
+            <?php endif; ?>
+          </td>
+
+          <td>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <a class="link" href="panel_evento.php?id=<?php echo $eid; ?>">Administrar</a>
+              <span style="color:var(--muted);">·</span>
+              <a class="link" href="editar_evento.php?id=<?php echo $eid; ?>">Editar</a>
+            </div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+
+      </tbody>
+    </table>
+  </div>
+
+  <?php endif; ?>
+</div>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

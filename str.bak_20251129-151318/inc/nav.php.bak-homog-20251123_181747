@@ -1,0 +1,21 @@
+<?php
+$cu = current_user();
+$rol = isset($cu['rol']) ? $cu['rol'] : null;
+$evento_id = isset($cu['evento_id']) ? (int)$cu['evento_id'] : 0;
+?>
+<nav class="nav">
+  <?php if($rol === 'superadmin'): ?>
+    <a href="superadmin.php">SuperAdmin</a>
+    <a href="crear_evento.php">Crear evento</a>
+  <?php endif; ?>
+
+  <?php if(in_array($rol, array('admin_evento','superadmin'), true)): ?>
+    <a href="panel_admin.php">Panel admin</a>
+    <a href="editar_evento.php?evento_id=<?php echo $evento_id; ?>">Editar evento</a>
+  <?php endif; ?>
+
+  <?php if(in_array($rol, array('staff_evento','admin_evento','superadmin'), true)): ?>
+    <a href="puerta.php?evento_id=<?php echo $evento_id; ?>">Puerta</a>
+    <a href="checkin.php?evento_id=<?php echo $evento_id; ?>">Check-in</a>
+  <?php endif; ?>
+</nav>

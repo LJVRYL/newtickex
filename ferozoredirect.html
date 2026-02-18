@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirección - Ferozo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+            font-family: 'Open Sans', Arial, sans-serif;
+            background-color: #f5f6fa;
+            color: #4d4d4d;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+        .logo {
+            padding: 30px;
+        }
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            text-align: center;
+            padding: 30px;
+        }
+        h1 {
+            color: #336FFF;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        p {
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+        a {
+            text-decoration: none;
+        }
+        .redirect-button {
+            display: inline-block;
+            margin: 20px 0;
+            padding: 12px 25px;
+            font-size: 16px;
+            color: white;
+            background-color: #56A846;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .redirect-button:hover {
+            background-color: #449837;
+        }
+        .counter {
+            font-size: 18px;
+            color: #56A846;
+            margin-top: 10px;
+        }
+        .bottom-text {
+            margin-bottom: 2%;
+            margin-right: 5%;
+            text-align: right;
+        }
+        footer {
+            text-align: center;
+            padding: 20px 0;
+            background-color: #336FFF;
+            color: white;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <img src="https://ferozo.host/application/assets/installer-assets/img/ferozo-logo.png" alt="Ferozo"/>
+    </div>
+    <div class="content">
+        <div class="container">
+            <h1>Importante!</h1>
+            <p>
+                <strong><span id="dynamic-url"></span></strong> dejará de estar disponible próximamente.<br>
+                En unos momentos serás redirigido a <strong><a href="https://ferozo.host">https://ferozo.host</a></strong><br>
+                Actualiza el enlace en tus favoritos para utilizar el servicio sin interrupciones.
+            </p>
+            <a href="https://ferozo.host" class="redirect-button" id="redirect-now">Redirigir ahora</a>
+            <div class="counter" id="counter">Redirigiendo en 10 segundos...</div>
+        </div>
+    </div>
+    <p class="bottom-text"><a href="https://soporte.donweb.com/hc/es/articles/33442642741652" target="_blank">¿Por qué este cambio?</a></p>
+    <footer>
+        © 2024 Ferozo Panel de Hosting
+    </footer>
+
+    <script>
+        (function() {
+            // Dynamic URL para ajustar mipanel.ferozo.com o URL de Reseller
+            const dynamicUrlElement = document.getElementById('dynamic-url');
+            dynamicUrlElement.textContent = window.location.hostname;
+
+            // Logica del contador
+            const counterElement = document.getElementById('counter');
+            const redirectButton = document.getElementById('redirect-now');
+            let countdown = 10;
+
+            const interval = setInterval(() => {
+                countdown--;
+                counterElement.textContent = `Redirigiendo en ${countdown} segundos...`;
+
+                if (countdown <= 0) {
+                    clearInterval(interval);
+                    window.location.href = redirectButton.href;
+                }
+            }, 1000);
+
+            redirectButton.addEventListener('click', () => {
+                clearInterval(interval);
+            });
+        })();
+    </script>
+</body>
+</html>

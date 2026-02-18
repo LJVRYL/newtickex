@@ -1,0 +1,95 @@
+<!-- ko with: whitelabelVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/configs"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Personalizar',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Marca blanca',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Marca blanca',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+        </div>
+    </header>
+
+
+    <div>
+
+        <div data-bind="visible: inprocess()" class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+
+        <div data-bind="visible: !inprocess()">
+            <div class="fz-blockquote clearfix">
+                <form class="mb0" method="post" enctype="multipart/form-data" data-bind="submit: save">
+
+                    <div class="clearfix">
+                        <h3 class="txt-light mt0"><?php echo $this->get('translator')->trans('Logo actual',array(),'templates');?></h3>
+                        <div class="whitelabel-logo-container">
+                            <img alt="" data-bind="attr: { src: '/common/logo' }" />
+                        </div>
+
+                        <div class="btn-group mt7">
+                            <ul class="dropdown-menu">
+                                <li><a data-bind="click: changeFrom.bind($data, 'file')" onclick="FerozoDhm.sendAnalytics('event', 'WhiteLabel', 'Button', 'CambiarLogoFile');"><?php echo $this->get('translator')->trans('Desde un archivo',array(),'templates');?></a></li>
+                                <li><a data-bind="click: changeFrom.bind($data, 'url')" onclick="FerozoDhm.sendAnalytics('event', 'WhiteLabel', 'Button', 'CambiarLogoURL');"><?php echo $this->get('translator')->trans('Desde una url',array(),'templates');?></a></li>
+                            </ul>
+                            <button class="btn btn-primary" data-toggle="dropdown" onclick="FerozoDhm.sendAnalytics('event', 'WhiteLabel', 'Button', 'CambiarLogo');">
+                                <?php echo $this->get('translator')->trans('Cambiar',array(),'templates');?>
+                                <span class="caret"></span>
+                            </button>
+                        </div>
+
+                        <div class="btn-group mt7">
+                            <ul class="dropdown-menu">
+                                <li><a data-bind="click: deleteLabel.bind($data, false)" ><?php echo $this->get('translator')->trans('En la cuenta actual',array(),'templates');?></a></li>
+                                <li><a data-bind="click: deleteLabel.bind($data, true)" ><?php echo $this->get('translator')->trans('En todas las cuentas',array(),'templates');?></a></li>
+                            </ul>
+                            <button class="btn btn-primary" data-toggle="dropdown">
+                                <?php echo $this->get('translator')->trans('Eliminar',array(),'templates');?>
+                                <span class="caret"></span>
+                            </button>
+                        </div>
+
+                        <!--<div class="btn-group mt7">
+                            <ul class="dropdown-menu">
+                                <li><a data-bind="click: revert"><?php echo $this->get('translator')->trans('Confirmar',array(),'templates');?></a></li>
+                            </ul>
+                            <button class="btn btn-danger" data-toggle="dropdown">
+                                <i class="icon icon-new fa-times"></i> <?php echo $this->get('translator')->trans('Revertir',array(),'templates');?>
+                                <span class="caret"></span>
+                            </button>
+                        </div>-->
+                    </div>
+
+                    <div class="animated fadeIn" data-bind="visible: changeFrom">
+                        <hr class="mt10 mb10"/>
+                        <div class="animated fadeIn" data-bind="visible: changeFrom() === 'url'">
+                            <label><?php echo $this->get('translator')->trans('Cargar desde una url',array(),'templates');?></label>
+                            <input name="fileUrl" type="text" placeholder="http://www.panel.com/logo.png" class="span6 mb0" data-bind="value: fileUrl"/>
+                            <span class="help-block error animated shake" data-bind="visible: fileUrl.errors(), text: fileUrl.errors()"></span>
+                        </div>
+                        <div class="animated fadeIn" data-bind="visible: changeFrom() === 'file'">
+                            <label><?php echo $this->get('translator')->trans('Cargar desde un archivo',array(),'templates');?></label>
+                            <input type="file" name="file" data-bind="value: file" class="span6 mb0" />
+                            <span class="help-block error animated shake" data-bind="visible: file.errors(), text: file.errors()"></span>
+                        </div>
+
+                        <label class="checkbox mt10 mb10">
+                            <input type="checkbox" data-bind="checked: applyToAccounts" /> <?php echo $this->get('translator')->trans('Aplicar a todas las cuentas',array(),'templates');?>
+                        </label>
+                        <button type="submit" class="btn btn-primary" onclick="FerozoDhm.sendAnalytics('event', 'WhiteLabel', 'Button', 'GuardarCambios');"><?php echo $this->get('translator')->trans('Guardar',array(),'templates');?></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+<span class="hide" id="trans-error-uploading-file"><?php echo $this->get('translator')->trans('Error al subir el archivo',array(),'templates'); ?>.</span>
+<span class="hide" id="trans-upload-success"><?php echo $this->get('translator')->trans('Archivo subido correctamente',array(),'templates'); ?>.</span>
+<span class="hide" id="trans-file-not-image"><?php echo $this->get('translator')->trans('El tipo de archivo no es una imagen',array(),'templates'); ?>.</span>
+<!-- /ko -->

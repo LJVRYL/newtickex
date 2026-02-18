@@ -1,0 +1,47 @@
+:root{
+  --bg:#0b1020; --panel:#111827; --panel-2:#0f172a;
+  --ink:#e5e7eb; --muted:#9ca3af; --line:#1f2937;
+  --acc:#22d3ee; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,Segoe UI,Roboto,Arial}
+.wrap{max-width:1100px;margin:0 auto;padding:18px}
+.topbar{position:sticky;top:0;background:rgba(11,16,32,.95);border-bottom:1px solid var(--line)}
+.topbar .wrap{display:flex;align-items:center;gap:12px}
+.logo{font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);text-decoration:none}
+.nav{display:flex;gap:8px;flex-wrap:wrap}
+.nav a{color:var(--ink);text-decoration:none;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2)}
+.nav a:hover{border-color:var(--acc)}
+.userchip{margin-left:auto;display:flex;gap:10px;align-items:center;color:var(--muted)}
+.link{color:var(--acc);text-decoration:none}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:12px 0}
+.card h2{margin:0 0 8px;font-size:20px}
+.card h3{margin:12px 0 6px;font-size:16px;color:#93c5fd}
+
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:10px;border-bottom:1px solid var(--line);text-align:left}
+.table th{color:var(--muted);font-weight:600}
+
+input,select,textarea{
+  width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);
+  background:#0b1220;color:var(--ink);outline:none
+}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:9px 14px;border-radius:999px;border:1px solid transparent;
+  background:linear-gradient(135deg,#ffdd33,#ff8a00);color:#111;
+  font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer
+}
+.btn.secondary{background:var(--panel-2);color:var(--ink);border-color:var(--line)}
+.btn.danger{background:transparent;border-color:var(--err);color:var(--err)}
+
+.flash{padding:10px 12px;border-radius:10px;margin:10px 0;border:1px solid var(--line)}
+.flash.ok{border-color:var(--ok)}
+.flash.err{border-color:var(--err)}
+.flash.warn{border-color:var(--warn)}
+
+.footer{color:var(--muted);border-top:1px solid var(--line)}

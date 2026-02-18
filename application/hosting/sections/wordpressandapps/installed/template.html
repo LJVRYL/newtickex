@@ -1,0 +1,133 @@
+<!-- ko with: installedVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/wordpress"><?php echo $this->get('translator')->trans('Wordpress & Apps',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Aplicaciones Instaladas',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Aplicaciones Instaladas',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix"></div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-packAmigoInstalled',array(),'templates'); ?>.</p>
+    </header>
+    <section >
+        <div class="row-fluid">
+            <!-- ko if: inprocess() >= 1 && data().length <= 0 -->
+                <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+            <!-- /ko -->
+            <!-- ko if: data().length <= 0  && inprocess() < 1-->
+                <div class="vm-emtpy-records well clearfix">
+                    <div class="pull-left mr20">
+                        <img src="/application/assets/img/vm-icons/png/brick.png" alt=""/>
+                    </div>
+                    <div class="pull-left">
+                        <h3><?php echo $this->get('translator')->trans('Ninguna aplicación instalada',array(),'templates');?></h3>
+                        <p>
+                            <?php echo $this->get('translator')->trans('Instala aplicaciones para sacar el máximo provecho de tu cuenta',array(),'templates'); ?>.
+                            <a href="/#/wordpress"><?php echo $this->get('translator')->trans('Ir a la app',array(),'templates'); ?></a>
+                        </p>
+                    </div>
+                </div>
+            <!-- /ko -->
+            <!-- ko if: data().length > 0 -->
+                <ul class="thumbnails thumbnails-packamigo">
+                    <!-- ko foreach: data() -->
+                        <li class="span3">
+                            <div class="thumbnail">
+                                <!--<div class="span12 store-thumb center clearfix mb10"><i class="icon icon-new fa-cube"></i></div>-->
+                                <div class="ds-icon-container">
+                                    <div data-bind="css: 'ds-icon ' + webApp.nameKey().toLowerCase()"></div>
+                                </div>
+
+                                <div class="caption center">
+                                    <h5>
+                                        <span data-bind="text: webApp.name"></span>
+                                    </h5>
+
+                                    <div class="mb10" style="max-width:300px; overflow: hidden">
+                                        <a data-bind="attr: {'href': 'http://'+domain.domain.content()+'/'+folder.content(), 'target' : '_blank' }">
+                                            <span class="text-half"><b data-bind="html: 'http://'+domain.domain.content()+'/'+folder.content()+''"></b></span>
+                                        </a>
+                                    </div>
+
+                                    <div class="center">
+                                        <!-- ko if: regStatus() == 2 || regStatus() == 3 || regStatus() == 4 || regStatus() == 6 -->
+                                            <img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Procesando',array(),'templates'); ?>" width="24"/>
+                                        <!-- /ko -->
+                                        <!-- ko if: regStatus() == 2-->
+                                            <span class="label label-success" data-bind=""><?php echo $this->get('translator')->trans('Agregando',array(),'templates'); ?></span>
+                                        <!-- /ko -->
+                                        <!-- ko if: regStatus() == 3-->
+                                            <span class="label label-success" data-bind=""><?php echo $this->get('translator')->trans('Modificando',array(),'templates'); ?></span>
+                                        <!-- /ko -->
+                                        <!-- ko if: regStatus() == 4-->
+                                            <span class="label label-important" data-bind=""><?php echo $this->get('translator')->trans('Eliminando',array(),'templates'); ?></span>
+                                        <!-- /ko -->
+
+                                        <!-- ko if: regStatus() == 1 -->
+
+                                            <!-- ko if: webApp.allowSyncPass() == true -->
+                                            <a class="btn small" rel="tooltip" href=""  title="<?php echo $this->get('translator')->trans('Resetear Contrasena',array(),'templates'); ?>" target="_blank" data-bind="click: resetpassword"><i class="icon-key"></i> <span class="visible-desktop">Reset Pass</span></a>
+                                            <!-- /ko -->
+                                            <!-- ko if: webApp.allowSyncPass() == false -->
+                                                <a class="btn small" rel="tooltip" disabled="disabled" title="<?php echo $this->get('translator')->trans('Esta aplicacion no admite Resetear Contrasena',array(),'templates'); ?>">Reset Pass</a>
+                                            <!-- /ko -->
+                                            <!-- ko if: webApp.allowSyncPass() != '' -->
+                                                <a class="btn small" rel="tooltip" href="" title="<?php echo $this->get('translator')->trans('Ingresar a la administracion de la aplicacion',array(),'templates'); ?>" target="_blank" data-bind="attr: { 'href': '/hosting/webapp/autologin/'+id()}">
+                                                    <i class="icon-signin"></i>
+                                                </a>
+                                            <!-- /ko -->
+                                            <!-- ko if: webApp.allowSyncPass() == '' -->
+                                                <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Ingresar a la administracion de la aplicacion',array(),'templates'); ?>" disabled="disabled">
+                                                    <i class="icon-signin"></i>
+                                                </a>
+                                            <!-- /ko -->
+                                            <a class="btn small" rel="tooltip" href="" title="<?php echo $this->get('translator')->trans('Cambiar dominio de instalacion',array(),'templates'); ?>" data-bind="click: $parent.edit">
+                                                <i class="icon-edit"></i>
+                                            </a>
+                                            <div class="btn small tlt-toggle" rel="tooltip" data-bind="click: function(d, e) { $(e.currentTarget).find('.tlt').toggle(); }">
+                                                <i class="icon-trash"></i>
+                                                <div class="tlt hide" style="max-width: 160px;">
+                                                    <?php echo $this->get('translator')->trans('Confirmacion: ',array(),'templates'); ?>
+                                                    <a data-bind="click: uninstall"><?php echo $this->get('translator')->trans('Desinstalar ',array(),'templates'); ?></a>
+                                                </div>
+                                            </div>
+
+                                        <!-- /ko -->
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                    <!-- /ko -->
+                </ul>
+            <!-- /ko -->
+        </div>
+    </section>
+</div>
+
+<div id="editar-app" class="modal animated fast pulse in hide" tabindex="-1" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3>
+            <?php echo $this->get('translator')->trans('Cambiar dominio de instalacion',array(),'templates'); ?>
+        </h3>
+    </div>
+    <div class="modal-body">
+        <label><?php echo $this->get('translator')->trans('Dominio de la instalacion',array(),'templates'); ?>:</label>
+        <select class="full-width" data-bind="options: $parent.domains, optionsText: 'clearDomain', value: domain"></select>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: saveedit"><?php echo $this->get('translator')->trans('Cambiar ahora',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<!-- /ko -->

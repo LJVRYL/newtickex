@@ -1,0 +1,109 @@
+<!-- ko with: apachehandlersVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Manejadores de Apache',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Apache handlers',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix ">
+            <a class="btn btn-primary pull-right"  accesskey="n" data-bind="click: openModal.bind($data, 'new')" rel="tooltip"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+            <!--div data-bind="template: {name: 'inline-search'}"></div-->
+        </div>
+    </header>
+    <section >
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <a data-bind="click: sortHandler">
+                            <?php echo $this->get('translator')->trans('Handler',array(),'templates'); ?>
+                            <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th class="span4 align-right">
+                        <a data-bind="click: sortExtension">
+                            <?php echo $this->get('translator')->trans('Extension',array(),'templates'); ?>
+                            <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th class="span4 align-right"><a ><?php echo $this->get('translator')->trans('Tipo',array(),'templates'); ?>  <i class="icon-chevron-up"> </i></a></th>
+                    <th class="span2 align-right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko foreach: data() -->
+                    <tr data-bind="attr: { 'class': rowstatus()== 1 ? 'rowDelete': 'info'}">
+                        <td >
+                            <span data-bind="text: handler().content()"></span>
+                        </td>
+                        <td >
+                            <span data-bind="text: extension().content()"></span>
+                        </td>
+                        <!--ko ifnot: _default().content() -->
+                            <td >
+                                <span ><?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?></span>
+                            </td>
+                            <td class="right">
+                                <div data-bind="template: { name: 'rows-loading'}"></div>
+                                <!-- ko if: regStatus() == 1 -->
+                                    <div  data-bind="template: { name: 'delete-confirm'}" class="delete-confirm"></div>
+                                <!-- /ko -->
+                            </td>
+                        <!-- /ko -->
+                        <!--ko if: _default().content() -->
+                            <td>
+                                <span ><?php echo $this->get('translator')->trans('Sistema',array(),'templates'); ?></span>
+                            </td>
+                            <td>
+                            </td>
+                        <!-- /ko -->
+                    </tr>
+                <!-- /ko -->
+                <tr class="info">
+                    <td colspan="4">
+                        <a data-bind="click:openModal"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+</div>
+<!-- Crear handler apache -->
+<div id="apuntar-nuevo" class="modal animated fast pulse hide" data-bind="with: temp()">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('configureAccessHandlers',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <label><?php echo $this->get('translator')->trans('Manejador',array(),'templates'); ?></label>
+        <div data-bind="with: handler">
+            <input type="text" data-bind="value: content" class="full-width" placeholder="handler" autofocus="autofocus" />
+            <span class="help-block error" data-bind="if: error,text: error"></span>
+        </div>
+        <label><?php echo $this->get('translator')->trans('Extension',array(),'templates'); ?></label>
+        <div data-bind="with: extension">
+            <input type="text" data-bind="value: content" class="full-width" placeholder="extension" />
+            <span class="help-block error" data-bind="if: error,text: error"></span>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->

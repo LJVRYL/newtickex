@@ -1,0 +1,147 @@
+<?php
+// Conexión a la base
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+$pdo = new PDO('sqlite:' . $dbFile);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+// === CONTADORES ===
+$total = (int) $pdo->query("SELECT COUNT(*) FROM entradas")->fetchColumn();
+$checkins = (int) $pdo->query("SELECT COUNT(*) FROM entradas WHERE checkin = 1")->fetchColumn();
+$faltan = $total - $checkins;
+
+// Obtener todas las entradas
+$stmt = $pdo->query("SELECT * FROM entradas ORDER BY id DESC");
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Save The Rave – Panel Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      padding: 20px;
+    }
+    h1 { margin-bottom: 10px; }
+
+    /* Tarjetas contadoras */
+    .stats {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: #1a1a1a;
+      padding: 16px 20px;
+      border-radius: 14px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      flex: 1;
+    }
+    .card .label {
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+    .card .value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+    th, td {
+      border-bottom: 1px solid #333;
+      padding: 8px 10px;
+    }
+    th {
+      background: #222;
+      text-align: left;
+    }
+    tr:hover td { background: #1a1a1a; }
+
+    .btn-del {
+      background: #d71d24;
+      padding: 4px 10px;
+      border-radius: 6px;
+      color: white;
+      font-size: 0.8rem;
+      text-decoration: none;
+    }
+
+    .logout {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #333;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      text-decoration: none;
+      color: #eee;
+    }
+    .logout:hover { background: #444; }
+  </style>
+</head>
+<body>
+
+<a href="admin.php?logout=1" class="logout">Cerrar sesión</a>
+
+<h1>Panel de Administración – Save The Rave</h1>
+
+<!-- Contadores -->
+<div class="stats">
+  <div class="card">
+    <div class="label">Entradas Totales</div>
+    <div class="value"><?php echo $total; ?></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Check-ins realizados</div>
+    <div class="value"><?php echo $checkins; ?></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Faltan por escanear</div>
+    <div class="value"><?php echo $faltan; ?></div>
+  </div>
+</div>
+
+<!-- Tabla principal -->
+<table>
+  <tr>
+    <th>ID</th>
+    <th>Nombre</th>
+    <th>Email</th>
+    <th>Tipo</th>
+    <th>Monto</th>
+    <th>Check-in</th>
+    <th>Acción</th>
+  </tr>
+
+  <?php foreach ($rows as $r): ?>
+    <tr>
+      <td><?php echo (int)$r['id']; ?></td>
+      <td><?php echo htmlspecialchars($r['nombre'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo htmlspecialchars($r['email'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo htmlspecialchars($r['tipo'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo htmlspecialchars($r['monto'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo $r['checkin'] == 1 ? '✔' : '—'; ?></td>
+      <td>
+        <a class="btn-del" href="?delete=<?php echo (int)$r['id']; ?>"
+           onclick="return confirm('¿Eliminar?');">
+          borrar
+        </a>
+      </td>
+    </tr>
+  <?php endforeach; ?>
+</table>
+
+</body>
+</html>

@@ -1,0 +1,162 @@
+.container {
+	flex-direction: row;
+	width: 100%;
+}
+
+.row {
+	width: 100%;
+	display: flow-root;
+	margin-right: 0px !important;
+    margin-left: 0px !important;
+}
+
+h1, 
+h2 {
+	font-weight: 300;
+	font-size: 3.4em;
+	margin-left: 0.9em;
+}
+
+h1 strong,
+h2 strong {
+	font-weight: 600
+}
+
+p {
+	font-weight: 300;
+	line-height: 1.2;
+	margin-top: 0.2em;
+}
+
+p strong {
+	font-weight: 600;
+}
+
+img {
+	height: auto;
+}
+
+.banner{
+	width: 100%;
+	background-position: center;
+    background-size: cover;
+    background-image: url(../img/banner.png)
+}
+
+.img-electro {
+	height: auto;
+	width: 20%
+}
+
+.btn-verde {
+	width: 20em;
+    color: white;
+    font-size: 1em;
+	text-transform: uppercase;
+	text-align: center;
+    margin-top: 2em;
+    margin-bottom: 4em;
+    margin-left: 10%;
+    padding: 10px 30px;
+    background-color:#73a777;
+    border: 1px solid #73a777;
+    border-radius: 5px;
+    display: inline-block;
+    transition: .2s all;
+    box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.35);
+}
+
+.btn-verde:hover {
+	background-color: #5b865e;
+	border: 1px solid #5b865e;
+	color: #fff;
+    text-decoration: none;
+}
+
+.btn-azul {
+	width: 20em;
+    color: #00b7f4;
+    font-size: 1em;
+	text-transform: uppercase;
+	text-align: center;
+    margin-top: 2em;
+    margin-bottom: 4em;
+    margin-left: 10%;
+    padding: 10px 30px;
+    background-color:white;
+    border: 2px solid #00b7f4;
+    border-radius: 5px;
+    display: inline-block;
+    transition: .2s all;
+    box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.35);
+}
+
+.btn-azul:hover {
+	background-color: #00b7f4;
+	border: 1px solid #00b7f4;
+	color: #fff;
+    text-decoration: none;
+}
+
+nav {
+	background-color: #ffffff;
+	height: 60px;
+}
+
+header {
+	min-height: calc(100vh - 110px);
+	font-family: "Berlin Sans FB";
+}
+
+section {
+	padding: 5em 0;
+}
+
+
+
+.centrado {
+    color: white;
+    width: 650px;
+    max-width: 95%;
+    margin: 40px auto;
+    font-size: 18px;
+    font-weight: 300;
+}
+
+footer {
+	background-color: #414a70 !important;
+	height: 4em;
+}
+
+@media (max-width: 920px) {
+	.banner{
+		background-image: none !important;
+	}
+
+	.img-electro {
+		display: none !important;
+	}
+
+	.img-panel {
+		border-radius: 5px;
+		width: 95%;
+		height: auto;
+		margin-left: 0.5em;
+	}
+
+	.container {
+		display: flex;
+    	flex-flow: row-reverse;  
+  	}
+
+  	footer {
+		height: 110px;
+	}
+
+	.btn-verde{
+		margin-left: 7.5%;
+	}
+	.btn-azul{
+		margin-left: 7.5%;
+	}
+}

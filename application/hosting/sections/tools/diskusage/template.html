@@ -1,0 +1,70 @@
+<!-- ko with: diskusageVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Uso del disco',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Uso del disco',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix "></div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-diskUsage',array(),'templates'); ?>.</p>
+    </header>
+    <section data-bind="with: treeNavigation">
+        <ul class="breadcrumb">
+            <li><i class="icon-folder-open"></i></li>
+            <!-- ko foreach: currentArray -->
+                <li>
+                    <a data-bind="text: $data, click: $parent.gotoDir.bind($data, $index())"></a>
+                    <span class="divider">/</span>
+                </li>
+            <!-- /ko -->
+            <li>
+                <!-- ko if: inprocess() == 1 || actualFolder() === "/public_html" -->
+                    <button disabled="disabled" class="btn btn-small"><i class="icon-arrow-up"></i></button>
+                <!-- /ko -->
+                <!-- ko if: inprocess() == 0 &&  actualFolder() !== "/public_html"  -->
+                    <button class="btn btn-small" data-bind="click: upDir"><i class="icon-arrow-up"></i></button>
+                <!-- /ko -->
+            </li>
+        </ul>
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th><?php echo $this->get('translator')->trans('Nombre de carpeta',array(),'templates'); ?> </th>
+                    <th class="right"><?php echo $this->get('translator')->trans('Tamaño',array(),'templates'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko foreach: data().childs -->
+                    <!-- ko if: $parent.inprocess() == 0 -->
+                        <tr class="info">
+                            <td>
+                                <a data-bind="click: $parent.selectThis">
+                                    <i class="icon icon-folder-close"></i>
+                                    <span data-bind="text: $data.name"></span>
+                                </a>
+                            </td>
+                            <td class="right">
+                                <span data-bind="text: $data.size+' MB'"></span>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                <!-- /ko -->
+                <!-- ko if: inprocess() == 1 -->
+                    <tr class="info">
+                        <td colspan="2">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+            </tbody>
+        </table>
+    </section>
+</div>
+<!-- /ko -->

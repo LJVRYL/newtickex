@@ -1,0 +1,183 @@
+<!-- ko with: domainsVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/domain"><?php echo $this->get('translator')->trans('Dominios',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Administrar dominios',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Administrar dominios',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+            <a class="btn btn-primary pull-right" data-bind="click: openModal" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'ModalNuevo');">
+                <?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?>
+            </a>
+        </div>
+    </header>
+
+    <div>
+
+        <div data-bind="with: pagination">
+            <form data-bind="submit: search" class="email-filter mb0 clearfix">
+                <div class="fz-input-prepend pull-left mr3">
+                    <span class="add-on"><i class="icon-search"></i></span>
+                    <input class="" placeholder="<?php echo $this->get('translator')->trans('Buscar dominio',array(),'templates');?> …" type="text" data-bind="value: query, valueUpdate: 'keyup'" autocomplete="off">
+                </div>
+                <div class="fz-input-prepend pull-left mr3" data-bind="visible: $root.profileVM().isDhm()">
+                    <span class="add-on"><i class="icon-filter"></i></span>
+                    <select title="<?php echo $this->get('translator')->trans('Filtrar por hosting',array(),'templates');?>" class="" data-bind="options: $parent.hostingsFilter, optionsText: 'username', optionsValue: 'id', value: selectedHosting"></select>
+                </div>
+
+                <div class="pull-left">
+                    <a class="btn btn-primary" data-bind="click: function() { search(); }"><i class="icon-search"></i></a>
+                    <button class="hide" type="submit" data-bind="click: search"></button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ko if: (inprocess() && data().length <= 0) || pagination.paginationRequesting -->
+            <div class="loading-data text-center well well-small clearfix"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+        <!-- /ko -->
+
+        <!-- ko ifnot: pagination.paginationRequesting -->
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <a data-bind="click: sortByDomain.sortData">
+                            <?php echo $this->get('translator')->trans('Dominio',array(),'templates'); ?>
+                            <!-- ko if: sortByDomain.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByDomain.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th class="hidecol">
+                        <a data-bind="click: sortByHosting.sortData">
+                            <?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?>
+                            <!-- ko if: sortByHosting.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByHosting.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th class="invisible-mobile"><?php echo $this->get('translator')->trans('Certificado SSL',array(),'templates'); ?></th>
+                    <th class="invisible-desktop"><?php echo $this->get('translator')->trans('SSL',array(),'templates'); ?></th>
+                    <th class="invisible-mobile"><?php echo $this->get('translator')->trans('Emisor',array(),'templates'); ?></th>
+                    <th class="right">
+                        <?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko if: data().length <= 0  && !inprocess() -->
+                    <tr class="info">
+                        <td colspan="6">
+                            <span><?php echo $this->get('translator')->trans('Ninguna cuenta de hosting creada o encontrada',array(),'templates'); ?></span>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+
+                <!-- ko foreach: data() -->
+                    <tr class="info">
+                        <td><span data-bind="text: domain"></span></td>
+
+                        <td class="hidecol"><span data-bind="html: username() || '<img src=\'/application/assets/img/loading-well.svg\' />'"></span></td>
+                        <!-- ko if: regStatus() == 1 && sslCert -->
+                            <!-- ko ifnot: (sslCert.issuer() == 'CloudFlare' && !sslCert.expirationDate())  -->
+                                <!-- ko if: (sslCert.sslStatusDescription() !== '') -->
+                                    <td>
+                                        <span class="badge badge-success" data-bind="text: sslCert.sslStatusDescription, style: { backgroundColor: sslCert.sslStatus() === 1 ? '#45d3a6' :  sslCert.sslStatus() === 4 ? '#ffbb00' : sslCert.sslStatus() === 2 ? '#45c6d3' : sslCert.sslStatus() === 3 ? '#45c6d3' : '#dc4437' }"></span>
+                                    </td>
+                                    <td class="invisible-mobile">
+                                        <!-- ko if: (sslCert.issuer() != 'Ferozo') -->
+                                            <span data-bind="text: sslCert.issuer"></span>
+                                        <!-- /ko -->
+                                    </td>
+                                <!-- /ko -->
+                                <!-- ko ifnot: (sslCert.sslStatusDescription() !== '') -->
+                                    <td class="invisible-mobile"></td>
+                                    <td></td>
+                                <!-- /ko -->
+                            <!-- /ko -->
+                            <!-- ko if: (sslCert.issuer() == 'CloudFlare' && !sslCert.expirationDate())  -->
+                                <td>
+                                    <a class="badge badge-success" data-bind="text: '<?php echo $this->get('translator')->trans('Activo',array(),'templates'); ?>'" style="background-color: #45d3a6" href="#/domain/ssl" title="<?php echo $this->get('translator')->trans('Ver detalles de SSL',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'SSL', 'button', 'VerDetallesSSL');"></a>
+                                </td>
+                                <td class="invisible-mobile">
+                                    <span data-bind="text: sslCert.issuer"></span>
+                                </td>
+                            <!-- /ko -->
+                        <!-- /ko -->
+                        <!-- ko if: regStatus() == 1 -->
+                            <!-- ko ifnot: sslCert -->
+                                <td class="invisible-mobile"></td>
+                                <td></td>
+                            <!-- /ko -->
+                        <!-- /ko -->
+                        <!-- ko if: regStatus() != 1 -->
+                            <td class="invisible-mobile"></td>
+                            <td></td>
+                        <!-- /ko -->
+                        <td class="right">
+                            <div data-bind="template: { name: 'rows-loading'}"></div>
+                            <!-- ko if: isDefault()-->
+                            <span class="hidecol badge badge-success"><?php echo $this->get('translator')->trans('Dominio principal',array(),'templates'); ?></span>
+                            <!-- /ko -->
+                            <!-- ko if: regStatus() == 1 && $root.profileVM().isDhm() && !$parent.isFzCom(domain) -->
+                                <button class="btn small" title="<?php echo $this->get('translator')->trans('Administrar cuenta',array(),'templates'); ?>" data-bind="click: $parent.impersonate.bind($data)" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'Impersonate');">
+                                    <i class="icon-user"></i>
+                                </button>
+                                <button class="btn small" data-bind="click: $parent.goDnsZone.bind($data)" title="<?php echo $this->get('translator')->trans('Ir a la zona DNS',array(),'templates'); ?>" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'IrZonaDns');">
+                                    <i class="icon-globe"></i>
+                                </button>
+                            <!-- ko ifnot: isDefault() -->
+                                <div title="<?php echo $this->get('translator')->trans('Eliminar Dominio',array(),'templates'); ?>" data-bind="template: { name: 'delete-confirm'}" class="delete-confirm" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'EliminarDominio');"></div>
+                            <!-- /ko -->
+                            <!-- /ko -->
+                        </td>
+                    </tr>
+                <!-- /ko -->
+            </tbody>
+        </table>
+        <!-- /ko -->
+        <div data-bind="template: { name: 'pagination-ajax'}"></div>
+    </div>
+</div>
+
+<span class="hide" id="trans-all-hostings"><?php echo $this->get('translator')->trans('Todos los hostings',array(),'templates'); ?></span>
+
+<div id="modal-create" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'link', 'CerrarModal');">×</button>
+        <h3><?php echo $this->get('translator')->trans('Apuntar un nuevo dominio',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form class="form" data-bind="submit: save">
+            <div class="row-fluid">
+                <div class="">
+                    <label><?php echo $this->get('translator')->trans('Ingresa el dominio que quieres apuntar',array(),'templates'); ?></label>
+                    <input autofocus="autofocus" class="span12" type="text" data-bind="value: domain" name="domain" placeholder="<?php echo strtolower($this->get('translator')->trans('Dominio',array(),'templates')); ?>.com" autofocus="autofocus" />
+                    <span class="help-block error animated shake" data-bind="visible: domain.errors(), text: domain.errors()"></span>
+                </div>
+                <div class="">
+                    <label><?php echo $this->get('translator')->trans('Asociar a hosting',array(),'templates'); ?></label>
+                    <select class="span12" name="hosting" data-bind="options: $parent.hostings, optionsText: 'username', optionsValue: 'id', value: hosting"></select>
+                    <span class="help-block error animated shake" data-bind="visible: hosting.errors(), text: hosting.errors()"></span>
+                </div>
+            </div>
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() <= 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'CancelarModal');" ><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save" onclick="FerozoDhm.sendAnalytics('event', 'Dominios', 'Button', 'GuardarModal');"><?php echo $this->get('translator')->trans('Crear',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() >= 1 -->
+            <button class="btn" data-dismiss="modal" disabled="disabled" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->

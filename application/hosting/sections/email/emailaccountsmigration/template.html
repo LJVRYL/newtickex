@@ -1,0 +1,130 @@
+<!-- ko with: emailaccountsmigrationVM-->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/email"><?php echo $this->get('translator')->trans('Email',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Migracion de cuentas de email',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Migración de cuentas de correos',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+        </div>
+        <p class="descScreens">
+        <?php echo $this->get('translator')->trans('main-text-emailMigration-1',array(),'templates'); ?>.
+        </p>
+        <div class="alert">
+        <?php echo $this->get('translator')->trans('main-text-emailMigration-2',array(),'templates'); ?>.
+        </div>    
+    </header>
+    <section data-bind="visible: subdomainsDomains.domains().length > 0">
+        <div class="row-fluid mb10 mt10">
+
+            <div class="span4 pull-left">
+                    <div class="input-prepend span4">
+                        <span class="add-on"><?php echo $this->get('translator')->trans('Mover las cuentas del dominio',array(),'templates'); ?></span>
+                        <select class="add-on selectmobile" data-bind="value: domain1, event:{ change: domainChanged}">
+                            <optgroup data-bind="attr: {label:'Dominios'}, foreach: subdomainsDomainsIn.domains(),visible: subdomainsDomainsIn.domains().length > 0">
+                                <option data-bind="text: name, option: $data, value: $data"></option>
+                            </optgroup>
+                            <optgroup data-bind="attr: {label:'Subdominios'}, foreach: subdomainsDomainsIn.subdomains(),visible: subdomainsDomainsIn.subdomains().length > 0">
+                                <option data-bind="text: name, option: $data, value: $data"></option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <br/><br/>
+                    <div class="input-prepend span4" style="margin-left: 0px">
+                        <span class="add-on"><i class="icon icon-new fa-arrow-right"></i> <?php echo $this->get('translator')->trans('Hacia el dominio',array(),'templates'); ?></span>
+                        <select class="add-on" data-bind="value: domain2">
+                            <optgroup data-bind="attr: {label:'Dominios'}, foreach: domainsDestination.domains(),visible: domainsDestination.domains().length > 0">
+                                <option data-bind="text: name, option: $data, value: $data"></option>
+                            </optgroup>
+                            <optgroup data-bind="attr: {label:'Subdominios'}, foreach: domainsDestination.subdomains(),visible: domainsDestination.subdomains().length > 0">
+                                <option data-bind="text: name, option: $data, value: $data"></option>
+                            </optgroup>
+
+                          </select>
+                    </div>
+            </div>
+            <div class="span4 pull-right">
+                <button class="btn btn-primary" data-bind="click: verify, enable:(domainsDestination.domains().length > 0 || domainsDestination.subdomains().length > 0) && !inprocess() && migrationInitialized() != 1" title="<?php echo $this->get('translator')->trans('Verificar migracion',array(),'templates'); ?>"  data-toggle="modal" onclick="FerozoHosting.sendAnalytics('event', 'MigrateEmails', 'button', 'VerificarMigracion');"><?php echo $this->get('translator')->trans('Verificar migracion',array(),'templates'); ?></button>
+                <button class="btn btn-primary" data-bind="enable:emailsCheckResult().length > 0 && !inprocess() && migrationInitialized() != 1 && allowMigration(), click:migrate" title="<?php echo $this->get('translator')->trans('Comenzar migracion',array(),'templates'); ?>"  data-toggle="modal" onclick="FerozoHosting.sendAnalytics('event', 'MigrateEmails', 'button', 'ComenzarMigracion');"><?php echo $this->get('translator')->trans('Comenzar migracion',array(),'templates'); ?></button>
+            </div>
+
+        </div>
+
+
+
+          <table class="table table-hover" data-bind="visible: inprocess() == 0 && migrationInitialized() != 1">
+                <thead>
+                    <tr>
+                        <th><?php echo $this->get('translator')->trans('Cuentas que se migraran',array(),'templates'); ?> </th>
+                        <th><?php echo $this->get('translator')->trans('Motivo', array(),'templates'); ?> </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- ko foreach: emailsCheckResult -->
+                    <tr class="info">
+                        <td>
+                            <span data-bind="text:email"></span>
+                        </td>
+                        <td>
+                            <!-- ko if: !allowMigration && motive == 'inactive' --><span class="label label-important"><i class="icon-remove-sign"></i></span> <?php echo $this->get('translator')->trans('Cuenta desactivada',array(),'templates'); ?><!-- /ko -->
+                            <!-- ko if: !allowMigration && motive == 'already_exist' --><span class="label label-important"><i class="icon-remove-sign"></i></span> <?php echo $this->get('translator')->trans('Existe el nombre de la cuenta en el dominio destino',array(),'templates'); ?><!-- /ko -->
+                            <!-- ko if: !allowMigration && motive == 'already_exist_alias' --><span class="label label-important"><i class="icon-remove-sign"></i></span> <?php echo $this->get('translator')->trans('Existe el nombre de la cuenta como alias en el dominio de destino',array(),'templates'); ?><!-- /ko -->
+                            <!-- ko if: allowMigration -->
+                            <span class="label label-success"><i class="icon-ok-sign"></i> OK</span>
+                            <!-- /ko -->
+
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+                    <!-- ko if: aliasCheckResult().length > 0 -->
+                    <tr>
+                        <th><?php echo $this->get('translator')->trans('Alias que se migraran',array(),'templates'); ?> </th>
+                        <th><?php echo $this->get('translator')->trans('Motivo', array(),'templates'); ?> </th>
+                    </tr>
+
+                    <!-- ko foreach: aliasCheckResult -->
+                    <tr class="info">
+                        <td>
+                            <span data-bind="text:alia"></span>
+                        </td>
+                        <td>
+                            <!-- ko if: !allowMigration && motives == 'alias_already_exist' --><span class="label label-important"><i class="icon-remove-sign"></i></span> <?php echo $this->get('translator')->trans('El Alias existe en el dominio de destino',array(),'templates'); ?><!-- /ko -->
+                            <!-- ko if: !allowMigration && motives == 'alias_already_exist_email' --><span class="label label-important"><i class="icon-remove-sign"></i></span> <?php echo $this->get('translator')->trans('El nombre del alias se encuentra en uso como email en el dominio de destino',array(),'templates'); ?><!-- /ko -->
+                            <!-- ko if: allowMigration -->
+                            <span class="label label-success"><i class="icon-ok-sign"></i> OK</span>
+                            <!-- /ko -->
+
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+                    <!-- /ko -->
+                    <!-- ko if: emailsCheckResult().length <= 0 -->
+                    <tr class="info">
+                        <td colspan="2">
+                            <?php echo $this->get('translator')->trans('No existen cuentas de correo',array(),'templates'); ?>
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+                </tbody>
+            </table>
+    </section>
+    <section data-bind="visible: domainsDestination.domains().length <= 0 && inprocess() == 0">
+        <div class="alert"><i class="icon icon-new fa-exclamation-triangle"></i> <?php echo $this->get('translator')->trans('Para poder migrar cuentas de correo se necesitan 2 dominios como minimo en su cuenta',array(),'templates'); ?></div>
+    </section>
+    <section data-bind="visible: inprocess() != 0">
+        <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+    </section>
+    <section data-bind="visible: migrationInitialized() == 1">
+        <div class="alert"><?php echo $this->get('translator')->trans('Se comenzó con la migración, esto puede tardar varios minutos. Por favor verifique el estado en la barra de tareas',array(),'templates'); ?></div>
+    </section>
+</div>
+
+
+<!-- /ko -->

@@ -1,0 +1,789 @@
+<!-- ko with: emailaccountsVM-->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/email"><?php echo $this->get('translator')->trans('Email',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Cuentas de email',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Cuentas de email',array(),'templates'); ?></h2>
+        
+            <div class="btn-toolbar btn-toolbar-docs clearfix">
+                <!-- ko if: readyView() != "LOADING" -->
+                    <!-- ko if: SubdomainsDomains.domains().length > 0 -->
+                    <a class="btn btn-primary pull-right" data-bind="click: newmail" accesskey="n" title="<?php echo $this->get('translator')->trans('Crear nueva cuenta de email (Alt + N )',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'EmailAccounts', 'button', 'CrearEmailModal');"><?php echo $this->get('translator')->trans('Crear nueva',array(),'templates'); ?></a>
+                    <a class="btn pull-right mr5" data-bind="visible: showUpdateUsedSpaceMassiveBtn(), click: updatequotas"><i class="icon-refresh"></i> <?php echo $this->get('translator')->trans('Actualizar espacio utilizado',array(),'templates'); ?></a>
+                    <!-- /ko -->
+                <!-- /ko -->
+            </div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-emails',array(),'templates'); ?>.</p>
+    </header>
+    <section>
+        <div class="row-fluid">
+            <!-- ko if: externalMXTotal() > 0 -->
+            <div class="alert mt10 mb0">
+                <i class="icon icon-new fa-info-circle"></i> <!-- ko if: externalMXTotal() == 1 --><?php echo $this->get('translator')->trans('El dominio',array(),'templates'); ?><!--/ko--><!-- ko if: externalMXTotal() > 1 --><?php echo $this->get('translator')->trans('Los dominios',array(),'templates'); ?><!--/ko--> <span data-bind="text: externalMX()"></span> <!-- ko if: externalMXTotal() == 1 --><?php echo $this->get('translator')->trans('tiene',array(),'templates'); ?><!--/ko--><!-- ko if: externalMXTotal() > 1 --><?php echo $this->get('translator')->trans('tienen',array(),'templates'); ?><!--/ko--> <?php echo $this->get('translator')->trans('configurado MX externos. Los cambios en esta sección no tendrán ningún efecto.',array(),'templates'); ?>
+            </div><br />
+            <!-- /ko -->
+            <?php if($accountInfo["Server"]["Type"] != "Shared"){ ?>
+                <?php
+                    $espacioUsado = $accountInfo["UsedSpaceHome"];
+                    $espacioAsignado = $accountInfo["AsignedSpace"];
+                    $espacioRestante = $espacioAsignado - $espacioUsado;
+                    $porcentajeUsado = ($espacioUsado * 100) / $espacioAsignado;
+                ?>
+                <?php if ($espacioAsignado != -1 && $porcentajeUsado >= 80) { ?>
+                    <div class="alert alert-danger mt10 mb0">
+                        <i class="icon icon-new fa-exclamation-triangle"></i>
+                        <?php if ($espacioRestante < 10) { ?>
+                            <?php echo $this->get('translator')->trans('No tienes más espacio disponible para correos. Tu cuenta tiene menos de 10MB disponibles. Si no liberas espacio de inmediato, dejarás de recibir correos electrónicos', array(), 'templates'); ?>
+                        <?php } else { ?>
+                            <?php echo $this->get('translator')->trans('Advertencia: estás alcanzando el máximo espacio disponible. Quedan disponibles', array(), 'templates'); ?>
+                            <?php echo number_format($espacioRestante, 2); ?>
+                            <?php echo $this->get('translator')->trans(' MB.', array(), 'templates'); ?>
+                        <?php } ?>
+                    </div><br />
+                <?php } ?>
+            <?php } ?>
+            
+            <?php if($accountInfo["Server"]["Type"] == "Shared"){ ?>
+                <?php
+                    $espacioUsado = $accountInfo["UsedSpaceEmail"];
+                    $espacioAsignado = $accountInfo["AsignedSpaceEmail"];
+                    $espacioRestante = $espacioAsignado - $espacioUsado;
+                    $porcentajeUsado = ($espacioUsado * 100) / $espacioAsignado;
+                ?>
+                <?php if ($espacioAsignado != -1 && $porcentajeUsado >= 80) { ?>
+                    <div class="alert alert-danger mt10 mb0">
+                        <i class="icon icon-new fa-exclamation-triangle"></i>
+                        <?php if ($espacioRestante < 1) { ?>
+                            <?php echo $this->get('translator')->trans('No tienes más espacio disponible para correos. Tu cuenta tiene menos de 10MB disponibles. Si no liberas espacio de inmediato, dejarás de recibir correos electrónicos', array(), 'templates'); ?>
+                        <?php } else { ?>
+                            <?php echo $this->get('translator')->trans('Advertencia: estás alcanzando el máximo espacio disponible. Quedan disponibles', array(), 'templates'); ?>
+                            <?php echo number_format($espacioRestante, 2); ?>
+                            <?php echo $this->get('translator')->trans(' MB.', array(), 'templates'); ?>
+                        <?php } ?>
+                    </div><br />
+                <?php } ?>
+            <?php } ?>
+            
+            <ko data-bind="with: $root.profileVM">
+            <div class="alert alert-warning" data-bind="visible: $parent.getHostingSuspended()">
+                <i class="icon icon-new fa-warning"></i>
+                <b><?php echo $this->get('translator')->trans('Se han suspendido los siguientes servicios en su cuenta',array(),'templates'); ?>:</b>
+                <ul>
+                    <!-- ko if: isInArrayMotives('6') -->
+                        <li><?php echo $this->get('translator')->trans('msg-suspended-services-m6',array(),'templates'); ?>.</li>
+                    <!-- /ko -->
+                    <!-- ko if: isInArrayMotives('7') -->
+                        <li><?php echo $this->get('translator')->trans('msg-suspended-services-m7',array(),'templates'); ?>.</li>
+                    <!-- /ko -->
+                    <!-- ko if: isInArrayMotives('8') -->
+                        <li><?php echo $this->get('translator')->trans('msg-suspended-services-m8',array(),'templates'); ?>.</li>
+                    <!-- /ko -->
+                    <!-- ko if: isInArrayMotives('9') -->
+                        <li><?php echo $this->get('translator')->trans('msg-suspended-services-m9',array(),'templates'); ?>.</li>
+                    <!-- /ko -->
+                </ul>
+                <!-- ko if: $parent.getHostingWhiteLabel() -->
+                <span><?php echo $this->get('translator')->trans('Contacte al administrador',array(),'templates'); ?>.</span>
+                <!-- /ko -->
+                <?php if (! $accountInfo["WhiteLabel"]) { ?>
+                <a class="text-small" target="_blank" href="https://micuenta.donweb.com/es-ar/soporte/ayuda">
+                    <i class="icon icon-new fa-info-circle"></i> <?php echo $this->get('translator')->trans('Ver aviso en área de cliente',array(),'templates'); ?>
+                </a>
+                <?php } ?>
+            </div>
+            </ko>
+            
+            <!--  ko if: suspendedFlag() -->
+            <div class="alert alert-warning" data-bind="visible: thereAreDisabledAccounts">
+                <i class="icon icon-new fa-warning"></i>
+                <b><?php echo $this->get('translator')->trans('Atención',array(),'templates');?>:</b>
+                <?php echo $this->get('translator')->trans('Si una cuenta de correos no es accedida por más de 90 días, será desactivada',array(),'templates');?>.
+            </div>
+            <!-- /ko -->
+                
+            <!-- ko if: readyView() == "LOADING" -->
+                    <div class="loading-data text-center well well-small"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                <!-- /ko -->
+            
+           <!-- ko if: readyView() == "WO-DOMAINS" -->
+                <div class="vm-emtpy-records well clearfix">
+                    <div class="pull-left mr20">
+                        <img src="/application/assets/img/vm-icons/png/globe.png" alt=""/>
+                    </div>
+                    <div class="pull-left">
+                        <h3><?php echo $this->get('translator')->trans('Primero apunta un dominio',array(),'templates');?></h3>
+                        <p>
+                            <?php echo $this->get('translator')->trans('Para utilizar esta funcionalidad debes tener por lo menos un dominio apuntado',array(),'templates'); ?>.
+                            <a href="#/domain/domains"><?php echo $this->get('translator')->trans('Apuntar dominio',array(),'templates'); ?></a>
+                        </p>
+                    </div>
+                </div>
+            <!-- /ko -->
+                
+            <!-- ko if: readyView() == "W-DOMAINS" -->
+                <!-- ko if: data().length > 0 || query() -->
+                    <div class="fz-input-prepend clearfix">
+                        <form data-bind="submit: search" class="email-filter">
+                            <span class="add-on"><i class="icon-search"></i></span>
+                            <input class="pull-left" placeholder="<?php echo $this->get('translator')->trans('Buscar',array(),'templates');?> …" type="text" data-bind="value: query, valueUpdate: 'keyup'" autocomplete="off">
+                            <a class="clear-search animated fast fadeIn pull-left" data-bind="visible: query, click: function() { query(''); search(); }"><i class="icon-remove"></i></a>
+                            <a class="btn btn-primary animated fast fadeIn pull-left" data-bind="visible: query, click: function() { search(); }"><i class="icon-search"></i></a>
+                            <button class="hide" type="submit" data-bind="click: search"></button>
+                        </form>
+                    </div>
+                <!-- /ko -->
+
+
+                <!-- ko if: data().length <= 0  && !query() -->
+                    <div class="vm-emtpy-records well clearfix">
+                        <div class="pull-left mr20">
+                            <img src="/application/assets/img/vm-icons/png/envelope.png" alt=""/>
+                        </div>
+                        <div class="pull-left">
+                            <h3><?php echo $this->get('translator')->trans('Aun no haz creado una cuenta de correo',array(),'templates');?></h3>
+                            <p>
+                                <?php echo $this->get('translator')->trans('Comienza a comunicarte con tus cuentas de email propias',array(),'templates'); ?>.
+                                <a href="#" data-bind="click: newmail"><?php echo $this->get('translator')->trans('Crear nueva',array(),'templates'); ?></a>
+                            </p>
+                        </div>
+                    </div>
+                <!-- /ko -->
+
+                <!-- ko if: data().length > 0 || query() -->
+                <!-- ko ifnot: pagination.paginationRequesting -->
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th >
+                                <a data-bind="click: sortData">
+                                    <?php echo $this->get('translator')->trans('Cuenta de email',array(),'templates'); ?>
+                                    <!-- ko if: sortDirection() == 'asc' -->
+                                    <i class="icon-chevron-up"> </i>
+                                    <!-- /ko -->
+                                    <!-- ko if: sortDirection() == 'des' -->
+                                    <i class="icon-chevron-down"> </i>
+                                    <!-- /ko -->
+                            </th>
+                            <th class="hidden-phone">
+                                <?php echo $this->get('translator')->trans('Utilizado',array(),'templates'); ?> / <?php echo $this->get('translator')->trans('Capacidad',array(),'templates'); ?> / %
+                            </th>
+                            <th class="right"><span class="hidden-phone"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <!-- ko foreach: data -->
+                    <tr data-bind="attr: { 'class': rowstatus()== 1 ? 'rowDelete': 'info'}">
+                        <!-- ko if: completeAccountIdn() -->
+                        <td style="line-height: 16px;">
+                            <span data-bind="text: completeAccount()"></span>
+                            <br /><span data-bind="text: '('+completeAccountIdn()+')'" style="font-size: 10px; line-height: 0;"></span>
+                        </td>
+                        <!-- /ko -->
+                        <!-- ko ifnot: completeAccountIdn() -->
+                        <td>
+                            <span data-bind="text: completeAccount()"></span>
+                            <div class="visible-phone">
+                                                            <div data-bind="template: { name: 'rows-loading'}"></div>
+                            <!-- ko if: regStatus() == 1 -->
+                                <ko data-bind="if: !isDefault()"> 
+                                    <button data-bind="click: changestatus,visible:active()==0" class="btn small btn-primary" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Reactivar la cuenta de email',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'EmailAccounts', 'button', 'ActivarEmail');">
+                                        <?php echo $this->get('translator')->trans('Activar',array(),'templates'); ?>
+                                    </button>
+                                    <!--<button data-bind="click: $parent.showModalDisableAccount.bind($parent, $data),visible:active()==1" class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Desactivar la cuenta de email',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'DesactivarEmailModal');">
+                                        <?php echo $this->get('translator')->trans('Desactivar',array(),'templates'); ?>
+                                    </button>-->
+                                </ko>
+
+                                <ko data-bind="if: active">
+                                    <a class="btn small" rel="tooltip" target="_blank"  title="<?php echo $this->get('translator')->trans('Ver datos configuración',array(),'templates'); ?>" data-bind="click: $parent.openShowInfo.bind($parent)" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ShowInfo');">
+                                        <i class="icon-info-sign"></i>
+                                    </a>
+                                    <a data-bind="visible: !isDefault(), click: changeNameEmailAccount" class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Cambiar nombre',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'RenombrarEmail');">
+                                        <i class="icon-random"></i>
+                                    </a>
+                                    <!-- ko ifnot: account.user().includes('.ferozo.net') ||  account.user().includes('.ferozo.com')-->
+                                        <a class="btn small" rel="tooltip" target="_blank"  title="<?php echo $this->get('translator')->trans('Acceder al webmail',array(),'templates'); ?>" data-bind="attr: { 'href': '/hosting/email/autologin-webmail/'+id()}" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'AccederWebmail');">
+                                            <i class="icon-envelope"></i>
+                                        </a>
+                                        <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Cambiar la contrasena de la cuenta',array(),'templates'); ?>" data-bind="click: openChangepassword" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ModalCambiarPassword');">
+                                            <i class="icon-key"></i>
+                                        </a>
+                                    <!-- /ko -->
+                                    <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Actualizar espacio utilizado',array(),'templates'); ?>" data-bind="click: updateQuota" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'UpdateSingleQuota');">
+                                        <i class="icon-refresh"></i>
+                                    </a>
+                                    <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Cambiar el tamano de la cuenta',array(),'templates'); ?>" data-bind="click: openChangequota" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ModalCambiarQuota');">
+                                        <i class="icon-hdd"></i>
+                                    </a>
+                                    <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Configurar antiSpam',array(),'templates'); ?>" data-bind="click: $parent.antispamconf" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ConfigurarAntiSpam');">
+                                        <i class="icon-filter"></i>
+                                    </a>
+                                </ko>
+                                <div data-bind="visible: !isDefault(), template: { name: 'delete-confirm'}" class="delete-confirm" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'EliminarEmail');"></div>
+                            <!-- /ko -->
+                            </div>
+                        </td>
+                        <!-- /ko -->
+                        <td class="hidden-phone">
+                            <!-- ko if: quota.content() == -1 -->
+                                <div class="progress progress-striped" style="margin-bottom: 0px; margin-top: 7px;">
+                                    <span class="progress-legend">
+                                        <span data-bind="text: usedQuota()"></span> MB / <?php echo $this->get('translator')->trans('Capacidad máxima del hosting',array(),'templates'); ?> <!-- ko if: $parent.getAsignedSpaceEmail() != "(-1GB)" --><span class="descScreens">(*)</span> <!-- /ko -->
+                                    </span>
+                                    <div class="bar bar-fz" data-bind="style: {width: (usedQuota() / usedQuota()) +'%' }"></div>
+                                </div>
+                            <!-- /ko -->
+                            <!-- ko if: quota.content() != -1 -->
+                                <div class="progress progress-striped" style="margin-bottom: 0px; margin-top: 7px;">
+                                    <span class="progress-legend">
+                                        <span data-bind="text: usedQuota()"></span> MB / <span data-bind="text: quota.content()"></span> MB  / <span data-bind="text: Math.ceil(usedQuota() * 100 / quota.content())"></span>% 
+                                    </span>
+                                    <div class="bar bar-fz" data-bind="style: {width: (usedQuota() * 100 / quota.content()) +'%' }"></div>
+                                </div>
+                            <!-- /ko -->
+                        </td>
+                        <td class="right">
+                        <span class="hidden-phone">
+                            <div data-bind="template: { name: 'rows-loading'}"></div>
+                            <!-- ko if: regStatus() == 1 -->
+                                <ko data-bind="if: !isDefault()"> 
+                                    <button data-bind="click: changestatus,visible:active()==0" class="btn small btn-primary" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Reactivar la cuenta de email',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'EmailAccounts', 'button', 'ActivarEmail');">
+                                        <?php echo $this->get('translator')->trans('Activar',array(),'templates'); ?>
+                                    </button>
+                                    <button data-bind="click: $parent.showModalDisableAccount.bind($parent, $data),visible:active()==1" class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Desactivar la cuenta de email',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'DesactivarEmailModal');">
+                                        <?php echo $this->get('translator')->trans('Desactivar',array(),'templates'); ?>
+                                    </button>
+                                </ko>
+
+                                <ko data-bind="if: active">
+                                    <a class="btn small" rel="tooltip" target="_blank"  title="<?php echo $this->get('translator')->trans('Ver datos configuración',array(),'templates'); ?>" data-bind="click: $parent.openShowInfo.bind($parent)" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ShowInfo');">
+                                        <i class="icon-info-sign"></i>
+                                    </a>
+                                    <a data-bind="visible: !isDefault(), click: changeNameEmailAccount" class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Cambiar nombre',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'RenombrarEmail');">
+                                        <i class="icon-random"></i>
+                                    </a>
+                                    <!-- ko ifnot: account.user().includes('.ferozo.net') ||  account.user().includes('.ferozo.com')-->
+                                        <a class="btn small" rel="tooltip" target="_blank"  title="<?php echo $this->get('translator')->trans('Acceder al webmail',array(),'templates'); ?>" data-bind="attr: { 'href': '/hosting/email/autologin-webmail/'+id()}" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'AccederWebmail');">
+                                            <i class="icon-envelope"></i>
+                                        </a>
+                                        <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Cambiar la contrasena de la cuenta',array(),'templates'); ?>" data-bind="click: openChangepassword" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ModalCambiarPassword');">
+                                            <i class="icon-key"></i>
+                                        </a>
+                                    <!-- /ko -->
+                                    <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Actualizar espacio utilizado',array(),'templates'); ?>" data-bind="click: updateQuota" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'UpdateSingleQuota');">
+                                        <i class="icon-refresh"></i>
+                                    </a>
+                                    <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Cambiar el tamano de la cuenta',array(),'templates'); ?>" data-bind="click: openChangequota" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ModalCambiarQuota');">
+                                        <i class="icon-hdd"></i>
+                                    </a>
+                                    <a class="btn small" rel="tooltip"  title="<?php echo $this->get('translator')->trans('Configurar antiSpam',array(),'templates'); ?>" data-bind="click: $parent.antispamconf" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'ConfigurarAntiSpam');">
+                                        <i class="icon-filter"></i>
+                                    </a>
+                                </ko>
+                                <div data-bind="visible: !isDefault(), template: { name: 'emailaccount-delete-confirm'}" class="delete-confirm" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'EliminarEmail');"></div>
+                            <!-- /ko -->
+                            </span>
+                        </td>
+                    </tr>
+                    <!-- /ko-->
+                    <tr class="info">
+                        <td colspan="2">
+                            <a href="#" data-bind="click: newmail" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'Link', 'CrearEmail');"> <?php echo $this->get('translator')->trans('Crear nueva cuenta',array(),'templates'); ?></a>
+                        </td>
+                        <td class="hidden-phone"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <!-- /ko-->
+
+                <!-- /ko -->
+                <div data-bind="template: { name: 'pagination-ajax'}"></div>
+            <!-- /ko -->
+            <!-- ko if: getAsignedSpaceEmail() != "(-1GB)" -->
+            <p class="descScreens center">
+                (*) <?php echo $this->get('translator')->trans('Limitado por el espacio asignado al plan',array(),'templates'); ?>
+                <span data-bind="text: getAsignedSpaceEmail()"></span>
+            </p>
+            <!-- /ko -->
+        </div>
+    </section>
+</div>
+    <!-- Crear cuenta de Email -->
+    <div id="crearCuentaEmail" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CerrarModalCrearCuenta');">×</button>
+            <h3><?php echo $this->get('translator')->trans('Nueva cuenta de email',array(),'templates'); ?></h3>
+        </div>
+        <!-- ko ifnot: $parent.maxAccounts() ==  -1 || ($parent.currentAccounts() < $parent.maxAccounts()) -->
+            <div class="modal-body" style="max-height: 580px;">
+                <h4><?php echo $this->get('translator')->trans('¡Te has quedado sin cuentas de correo disponibles!',array(),'templates'); ?></h4>
+                <br>
+                <p><?php echo $this->get('translator')->trans('Actualiza tu plan para crear más cuentas de correo',array(),'templates'); ?></p>
+                <br>
+                <?php if (! $accountInfo["WhiteLabel"]) { ?>
+                    <!-- ko if: $parent.serviceId() != 0000 -->
+                        <a data-bind="click: $parent.redirectMcSpace"><?php echo $this->get('translator')->trans('Actualizar mi plan',array(),'templates'); ?></a>
+                    <!-- /ko -->
+                <?php } ?>
+            </div>
+        <!-- /ko -->
+        <!-- ko if: $parent.maxAccounts() ==  -1 || ($parent.currentAccounts() < $parent.maxAccounts()) -->
+            <div class="modal-body" style="max-height: 580px;">
+                <form data-bind="submit: save">
+                    <label><?php echo $this->get('translator')->trans('Ingresa el nombre para la nueva cuenta.',array(),'templates'); ?></label>
+                    <div class="input-append">
+                        <!-- ko with: usernamePrefix -->
+                        <input type="text" maxlength="64" id="prefix" autofocus="autofocus" data-bind="value: $data.content" placeholder="info" tabindex="1" />
+                        <!-- /ko -->
+                        <span class="add-on">@</span>
+                        <select class="add-on" data-bind="value: subdomainDomain">
+                            <optgroup data-bind="attr: {label:'Dominios'}, foreach: $parent.SubdomainsDomains.domains(),visible:$parent.SubdomainsDomains.domains().length > 0">
+                                <option data-bind="text: name, option: $data, value: $data"></option>
+                            </optgroup>
+                            <optgroup data-bind="attr: {label:'Subdominios'}, foreach: $parent.SubdomainsDomains.subdomains(),visible:$parent.SubdomainsDomains.subdomains().length > 0">
+                                <option data-bind="text: name, option: $data, value: $data"></option>
+                            </optgroup>
+                        </select>
+
+                        <!-- ko with: usernamePrefix -->
+                            <span class="help-block error" data-bind="text: $data.error"></span>
+                        <!-- /ko -->
+                    </div>
+                    <!-- /input-append -->
+                    <!-- redirecciòn -->
+                    <label>
+                    <?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?>:
+                    </label>
+                    <div data-bind="with: password">
+                        <a class="btn" data-bind="click: $parent.genPass" style="margin-left: -1px;"><i class="icon icon-key"></i> <?php echo $this->get('translator')->trans('Generar contraseña',array(),'templates'); ?></a>
+                        <input id='fieldPass1' autocomplete="off" tabindex="2" style="position: relative;float: left;clear: both;" type="text" data-bind="value: $data.content, valueUpdate: 'afterkeydown'" placeholder="<?php echo strtolower($this->get('translator')->trans('Password',array(),'templates')); ?>"  />
+                        <span class="help-block error password" style="clear:both" data-bind="visible: $data.error, html: $data.error"></span>
+                    </div>
+                    <div class="text-small mb0 mt10" style="width: 400px; border-radius: 4px; border: solid 1px #dee1e9; margin: .5rem 0; padding: .5rem 1rem; background-color: #fff;">
+                        <ul style="list-style-type: none;">
+                            <li>
+                                <!-- ko ifnot: conditionLength()-->
+                                    <i class="icon-remove-circle" style="color: #dc4437"></i>
+                                <!-- /ko -->
+                                <!-- ko if: conditionLength()-->
+                                    <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                                <!-- /ko -->
+                                <?php echo $this->get('translator')->trans('Debe tener ocho caracteres o más',array(),'templates'); ?>.
+                            </li>
+                            <li>
+                                <!-- ko ifnot: conditionChars() -->
+                                    <i class="icon-remove-circle" style="color: #dc4437"></i>
+                                <!-- /ko -->
+                                <!-- ko if: conditionChars() -->
+                                    <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                                <!-- /ko -->
+                                <?php echo $this->get('translator')->trans('Utilizar mayúsculas, minúsculas y números no consecutivos (Ej: No utilizar 1234)',array(),'templates'); ?>.
+                            </li>
+                            <li>
+                                <!-- ko ifnot: conditionSymbols() -->
+                                    <i class="icon-remove-circle" style="color: #dc4437"></i>
+                                <!-- /ko -->
+                                <!-- ko if: conditionSymbols() -->
+                                    <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                                <!-- /ko -->
+                                <?php echo $this->get('translator')->trans('Debe utilizar alguno de los siguientes símbolos @, *, /',array(),'templates'); ?>.
+                            </li>
+                            <li>
+                                <!-- ko ifnot: conditionDomain() != $parent.getForbiddenWords() -->
+                                    <i class="icon-remove-circle" style="color: #dc4437"></i>
+                                <!-- /ko -->
+                                <!-- ko if: conditionDomain() != $parent.getForbiddenWords() -->
+                                    <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                                <!-- /ko -->
+                                <?php echo $this->get('translator')->trans('NO debe contener las palabras',array(),'templates'); ?>: <span class="bold" data-bind="text: $parent.getForbiddenWords()" />
+                            </li>
+                            <li>
+                                <!-- ko ifnot: conditionSingle() -->
+                                    <i class="icon-remove-circle" style="color: #dc4437"></i>
+                                <!-- /ko -->
+                                <!-- ko if: conditionSingle() -->
+                                    <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                                <!-- /ko -->
+                                <?php echo $this->get('translator')->trans('NO debe estar asignada a ninguna otra cuenta de email',array(),'templates'); ?>.
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div style="clear: both">
+                        <div data-bind="visible: quota.content() != -1">
+                            <label>Quota:</label>
+                            <!-- ko with: quota -->
+                                <div class="input-append">
+                                    <input type="text" maxlength="10" tabindex="3" value="" data-bind="enable: !$parent.hasUnlimitedQuota(),value: $data.content" placeholder="100" class="span3 quota-value" />
+                                    <span  class="add-on">MB</span>
+                                    <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+                                </div>
+                            <!-- /ko -->
+                        </div>
+                    <div class="input" data-bind="visible: canUseUnlimitedQuota()">
+                        <label class="checkbox">
+                            <input type="checkbox" tabindex="4" data-bind="checked: hasUnlimitedQuota() && canUseUnlimitedQuota(), click: toggleUnlimitedQuota.bind($data)"> <?php echo $this->get('translator')->trans('Capacidad máxima del hosting',array(),'templates'); ?><?php if ($accountInfo["AsignedSpace"] != -1) { ?> (<?php echo $accountInfo["AsignedSpace"]?> <?php echo $this->get('translator')->trans(' MB.)',array(),'templates'); ?><?php } ?>
+                        </label>
+                    </div>
+                        
+                    </div>
+                    
+                    <input type="submit" class="hide" />
+                    
+                    <div class="mb0 mt10" style="font-size: 0.9em;">
+                        <label><?php echo $this->get('translator')->trans('Datos de Configuración en tu cliente de correos',array(),'templates'); ?></label>
+                        <div class="pull-left" style="width: 55%;">
+                            <label style="font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Correo Entrante',array(),'templates'); ?></label>
+                            <span style="font-size: 0.8em;font-weight:600;margin:0px;"><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?>: </span><span data-bind="text: configInfo().pop.dom"></span>
+                            <br />
+                            <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Certificado de seguridad SSL',array(),'templates'); ?>: </span><span data-bind="visible: configInfo().imap.ssl"><?php echo $this->get('translator')->trans('Si',array(),'templates'); ?></span><span data-bind="visible: !configInfo().imap.ssl"><?php echo $this->get('translator')->trans('No',array(),'templates'); ?></span>
+                            <br />
+                            <span class="badge badge-success">IMAP</span> <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>: </span><span data-bind="text: configInfo().imap.port"></span>
+                            <span class="badge badge-success">POP3</span> <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>: </span><span data-bind="text: configInfo().pop.port"></span>
+                        </div>
+                        <div class="pull-left" style="width: 45%;">
+                            <label style="font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Correo Saliente',array(),'templates'); ?></label>
+                            <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?>: </span><span data-bind="text: configInfo().smtp.dom"></span>
+                            <br />
+                            <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Certificado de seguridad SSL',array(),'templates'); ?>: </span><span data-bind="visible: configInfo().smtp.ssl"><?php echo $this->get('translator')->trans('Si',array(),'templates'); ?></span><span data-bind="visible: !configInfo().smtp.ssl"><?php echo $this->get('translator')->trans('No',array(),'templates'); ?></span>
+                            <br />
+                            <span class="badge badge-success">SMTP</span> <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>: </span><span data-bind="text: configInfo().smtp.port"></span>
+                        </div>
+                    </div>
+                    <div class="" style="clear:both;padding-top:10px;">
+                        <label class="checkbox">
+                            <input type="checkbox" data-bind="checked: notifyConfig, checkedValue: notifyConfig"> <?php echo $this->get('translator')->trans('Enviar configuración por email',array(),'templates'); ?>
+                        </label>
+                        <div data-bind="with: notifyConfigEmail">
+                        <input type="text" data-bind="visible: $parent.notifyConfig, value: $data.content" class="full-width" />
+                        <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+                        </div>    
+                    </div>
+                    
+                </form>
+            </div>
+        <!-- /ko --> 
+        
+        <div class="modal-footer">
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CerrarModalCrearEmail');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <!-- ko if: $parent.readyView() == "LOADING"  -->
+            <button class="btn btn-primary " disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /></button>
+            <!-- /ko --> 
+            <!-- ko if: $parent.readyView() ==  "W-DOMAINS" -->
+                <!-- ko if: $parent.maxAccounts() ==  -1 || ($parent.maxAccounts() > $parent.currentAccounts()) -->
+                    <button class="btn btn-primary" tabindex="5" data-bind="click: save, enable: !$parent.flagInstall()" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CrearEmail');"><?php echo $this->get('translator')->trans('Crear ahora',array(),'templates'); ?></button>
+                <!-- /ko -->
+            <!-- /ko -->
+        </div>
+    </div>
+
+    <!-- renombre | Cambiar nombre cuenta de Email -->
+    <div id="changeNameEmailAccount" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CerrarModalRenombrar');">×</button>
+            <h3><?php echo $this->get('translator')->trans('Renombre de cuenta',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <label><?php echo $this->get('translator')->trans('Ingresa el nuevo nombre para la cuenta de correo.',array(),'templates'); ?></label>
+            <div class="input-append clearfix">
+                <input type="text" autofocus="autofocus" maxlength="64" data-bind="value: usernamePrefix.content" placeholder="info"  />
+                <span class="add-on">@</span>
+                <select class="add-on" data-bind="value: subdomainDomain">
+                    <optgroup data-bind="attr: {label:'Dominios'}, foreach: $parent.SubdomainsDomains.domains(),visible:$parent.SubdomainsDomains.domains().length > 0">
+                        <option data-bind="text: name, option: $data, value: $data"></option>
+                    </optgroup>
+                    <optgroup data-bind="attr: {label:'Subdominios'}, foreach: $parent.SubdomainsDomains.subdomains(),visible:$parent.SubdomainsDomains.subdomains().length > 0">
+                        <option data-bind="text: name, option: $data, value: $data"></option>
+                    </optgroup>
+                </select>
+            </div>
+            <span class="help-block error" data-bind="text: usernamePrefix.error"></span>
+            <div class="alert">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php echo $this->get('translator')->trans('Al renombrar una cuenta de email los correos no se perderan',array(),'templates'); ?>
+            </div>
+            <!-- ko if: isWPAccount() == 1 -->
+            <div class="alert mb0">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php echo $this->get('translator')->trans('Esta cuenta es utilizada para enviar correos desde Wordpress asociado al dominio', array(),'templates'); ?>
+            </div>
+            <!-- /ko -->
+        </div>
+        <div class="modal-footer">
+             <!-- ko if: $parent.readyView() == "W-DOMAINS" -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CancelarRenombrar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: renameEmailAccount" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'RenombrarEmail');"><?php echo $this->get('translator')->trans('Renombrar ahora',array(),'templates'); ?></button>
+            <!-- /ko -->
+             <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+    </div>
+
+
+    <div id="modal-disable-email" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            <h3><?php echo $this->get('translator')->trans('Desactivar cuenta',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <div class="alert">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php echo $this->get('translator')->trans('La cuenta de correo puede ser desactivada de forma manual o de forma automática luego de no ingresar a la cuenta durante 90 días',array(),'templates'); ?>.
+            </div>
+            <!-- ko if: isWPAccount() == 1 -->
+            <div class="alert">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php echo $this->get('translator')->trans('Esta cuenta es utilizada para enviar correos desde Wordpress asociado al dominio', array(),'templates'); ?>
+            </div>
+            <!-- /ko -->
+            <label>
+                <?php echo $this->get('translator')->trans('Está seguro que desea desactivar la cuenta',array(),'templates'); ?>
+                <b data-bind="text: account.user"></b> ?
+            </label>
+        </div>
+        <div class="modal-footer">
+             <!-- ko if: $parent.readyView() == "W-DOMAINS" -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CancelarModalDeshabilitar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: changestatus" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'DeshabilitarEmail');"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+            <!-- /ko -->
+             <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+    </div>
+    <!-- END-Cambiar nombre cuenta de Email -->
+    <!-- Cambiar quota-->
+    <div id="changequota" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CerrarModalQuota');">×</button>
+            <h3><?php echo $this->get('translator')->trans('Cambiar tamañ+o de cuenta',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <label data-bind="text: '<?php echo $this->get('translator')->trans('Tamano para',array(),'templates'); ?> ' + completeAccount()"></label>
+            <div id="">
+                <div data-bind="visible: quota.content() != -1">
+                    <label>Quota:</label>
+                    <!-- ko with: quota -->
+                        <div class="input-append">
+                            <input type="text" maxlength="10" value="" data-bind="enable: !$parent.hasUnlimitedQuota(),value: $data.content" placeholder="10" class="span3 quota-value" />
+                            <span  class="add-on">MB</span>
+                            <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+                        </div>
+                    <!-- /ko -->
+                </div>
+
+                <div class="input" data-bind="visible: canUseUnlimitedQuota()">
+                    <label class="checkbox">
+                        <input type="checkbox" data-bind="checked: hasUnlimitedQuota() && canUseUnlimitedQuota(), click: toggleUnlimitedQuota.bind($data)"> <?php echo $this->get('translator')->trans('Capacidad máxima del hosting',array(),'templates'); ?> <?php if ($accountInfo["AsignedSpace"] != -1) { ?> (<?php echo $accountInfo["AsignedSpace"]?> <?php echo $this->get('translator')->trans(' MB.)',array(),'templates'); ?><?php } ?>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+             <!-- ko if: $parent.readyView() == "W-DOMAINS" -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CancelarChangeQuota');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: changequota" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CambiarQuota');"><?php echo $this->get('translator')->trans('Cambiar',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+    </div>
+    <!-- Cambiar Password-->
+    <div id="changepassword" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CerrarModalChangePass');">×</button>
+            <h3><?php echo $this->get('translator')->trans('Cambiar contrasena de la cuenta',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <label data-bind="text: '<?php echo $this->get('translator')->trans('Contrasena para',array(),'templates'); ?>: ' + completeAccount()"></label>
+<!--            <div data-bind="with: password">
+                <input type="text" data-bind="value: $data.content" placeholder="<?php echo strtolower($this->get('translator')->trans('Password',array(),'templates')); ?>" class="full-width" autofocus="autofocus" />
+                <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+            </div>-->
+             <div data-bind="with: password">
+                    <button class="btn" data-bind="click: $parent.genPass"  style="margin-left: -1px;"><i class="icon icon-key" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'GenerarPassword');"></i> <?php echo $this->get('translator')->trans('Generar contraseña',array(),'templates'); ?></button>
+                    <input id='fieldPass2' autocomplete="off" tabindex="2" style="position: relative;float: left;clear: both;" type="text" data-bind="value: $data.content, valueUpdate: 'afterkeydown'" placeholder="<?php echo strtolower($this->get('translator')->trans('Password',array(),'templates')); ?>"  />
+                    <span class="help-block error password" style="clear:both" data-bind="visible: $data.error, html: $data.error"></span>
+            </div>
+
+            <div class="text-small mb0 mt10" style="width: 400px; border-radius: 4px; border: solid 1px #dee1e9; margin: .5rem 0; padding: .5rem 1rem; background-color: #fff;">
+                <ul style="list-style-type: none;">
+                    <li>
+                        <!-- ko ifnot: conditionLength()-->
+                            <i class="icon-remove-circle" style="color: #dc4437"></i>
+                        <!-- /ko -->
+                        <!-- ko if: conditionLength()-->
+                            <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                        <!-- /ko -->
+                        <?php echo $this->get('translator')->trans('Debe tener ocho caracteres o más',array(),'templates'); ?>.
+                    </li>
+                    <li>
+                        <!-- ko ifnot: conditionChars() -->
+                            <i class="icon-remove-circle" style="color: #dc4437"></i>
+                        <!-- /ko -->
+                        <!-- ko if: conditionChars() -->
+                            <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                        <!-- /ko -->
+                        <?php echo $this->get('translator')->trans('Utilizar mayúsculas, minúsculas y números no consecutivos (Ej: No utilizar 1234)',array(),'templates'); ?>.
+                    </li>
+                    <li>
+                        <!-- ko ifnot: conditionSymbols() -->
+                            <i class="icon-remove-circle" style="color: #dc4437"></i>
+                        <!-- /ko -->
+                        <!-- ko if: conditionSymbols() -->
+                            <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                        <!-- /ko -->
+                        <?php echo $this->get('translator')->trans('Debe utilizar alguno de los siguientes símbolos @, *, /',array(),'templates'); ?>.
+                    </li>
+                    <li>
+                        <!-- ko ifnot: conditionDomain() != $parent.getForbiddenWords() -->
+                            <i class="icon-remove-circle" style="color: #dc4437"></i>
+                        <!-- /ko -->
+                        <!-- ko if: conditionDomain() != $parent.getForbiddenWords() -->
+                            <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                        <!-- /ko -->
+                        <?php echo $this->get('translator')->trans('NO debe contener las palabras',array(),'templates'); ?>: <span class="bold" data-bind="text: $parent.getForbiddenWords()" />
+                    </li>
+                    <li>
+                        <!-- ko ifnot: conditionSingle() -->
+                            <i class="icon-remove-circle" style="color: #dc4437"></i>
+                        <!-- /ko -->
+                        <!-- ko if: conditionSingle() -->
+                            <i class="icon-ok-circle" style="color: #5cb85c"></i>
+                        <!-- /ko -->
+                        <?php echo $this->get('translator')->trans('NO debe estar asignada a ninguna otra cuenta de email',array(),'templates'); ?>.
+                    </li>
+                </ul>
+            </div>          
+        </div>
+        <div class="modal-footer">
+              <!-- ko if: $parent.readyView() == "W-DOMAINS" -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CancelarCambioPass');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: changepassword" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CambiarPassword');"><?php echo $this->get('translator')->trans('Cambiar',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+    </div>
+    
+    <!-- Mostrar Info-->
+    <div id="showinfo" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'CerrarModalConfiguracion');">×</button>
+            <h3><?php echo $this->get('translator')->trans('Datos de configuración de la cuenta',array(),'templates'); ?></h3>
+        </div>
+        
+        
+        <div class="modal-body">
+
+            <div>
+                <div class="pull-left" style="width: 60%;">
+                    <span style="font-size: 0.8em;font-weight:600;margin:0px;"><?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?>: </span><span class="text-small" data-bind="text: getInfocompleteAccountIdn()"></span>
+                </div>
+                <!-- ko ifnot: getInfocompleteAccountIdn().toString().includes('.ferozo.com') || getInfocompleteAccountIdn().toString().includes('.ferozo.net') -->
+                    <div class="pull-left" style="width: 40%;">
+                        <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?>: </span>
+                        <span class="mb0 text-small" data-bind="visible: ! $parent.showPassword()">********</span>
+                        <span class="mb0 animated fadeIn text-small" data-bind="visible: $parent.showPassword, text: account.password"></span>
+                        <button title="<?php echo $this->get('translator')->trans('Mostrar contrasena',array(),'templates'); ?>" class="btn btn-small mt2" style="background-color:white" data-bind="visible: !$parent.showPassword(), click: $parent.showPassword.bind($data, true)" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'MostrarPassword');">
+                            <i class="icon-eye-open"></i>
+                        </button>
+                    </div>
+                <!-- /ko -->
+                <div style="clear: both;"></div>
+                <hr style="display: block;">
+            </div>
+            
+            <div class="mb0 mt10" style="font-size: 0.9em;">
+                <div class="pull-left" style="width: 55%;">
+                    <label style="font-weight:300;margin:0px;" ><?php echo $this->get('translator')->trans('Correo Entrante',array(),'templates'); ?></label>
+                    <br/>
+                    <span style="font-size: 0.9em;font-weight:600;margin:0px;"><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?>: </span><span data-bind="text: configInfo().pop.dom"></span>
+                    <br />
+                    <span style="font-size: 0.9em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Certificado de seguridad SSL',array(),'templates'); ?>: </span><span data-bind="visible: configInfo().imap.ssl"><?php echo $this->get('translator')->trans('Si',array(),'templates'); ?></span><span data-bind="visible: !configInfo().imap.ssl"><?php echo $this->get('translator')->trans('No',array(),'templates'); ?></span>
+                    <br /><br/>
+                    <span class="badge badge-success">IMAP</span> <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>: </span><span data-bind="text: configInfo().imap.port"></span>
+                    <span class="badge badge-success">POP3</span> <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>: </span><span data-bind="text: configInfo().pop.port"></span>
+                    <hr style="display: block;margin-right: 20px;">
+                </div>
+                <div class="pull-left" style="width: 45%;">
+                    <label style="font-weight:300;margin:0px;" ><?php echo $this->get('translator')->trans('Correo Saliente',array(),'templates'); ?></label>
+                    <br/>
+                    <span style="font-size: 0.9em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?>: </span><span data-bind="text: configInfo().smtp.dom"></span>
+                    <br />
+                    <span style="font-size: 0.9em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Certificado de seguridad SSL',array(),'templates'); ?>: </span><span data-bind="visible: configInfo().smtp.ssl"><?php echo $this->get('translator')->trans('Si',array(),'templates'); ?></span><span data-bind="visible: !configInfo().smtp.ssl"><?php echo $this->get('translator')->trans('No',array(),'templates'); ?></span>
+                    <br /><br/>
+                    <span class="badge badge-success">SMTP</span> <span style="font-size: 0.8em;font-weight:600;margin:0px;" ><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>: </span><span data-bind="text: configInfo().smtp.port"></span>
+                    <hr style="display: block;">                    
+                </div>
+            </div>
+            <div class="" style="clear:both;padding-top:10px;">
+                <label class="checkbox">
+                    <input type="checkbox" data-bind="checked: notifyConfig, checkedValue: notifyConfig"> <?php echo $this->get('translator')->trans('Enviar configuración por email',array(),'templates'); ?>
+                </label>
+                <div class="clearfix">
+                    <div data-bind="with: notifyConfigEmail" class="pull-left mr10">
+                        <input type="text" data-bind="visible: $parent.notifyConfig, value: $data.content" class="add-on" style="width: 290px;" />
+                        <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+                    </div>
+                    <!-- ko if: $parent.inprocessSendConfig() == 0  -->
+                        <button aria-hidden="true" data-bind="visible: notifyConfig, click: sendConfig" class="btn btn-primary pull-left" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'EnviarConfiguracion');"><?php echo $this->get('translator')->trans('Enviar',array(),'templates'); ?></button>                        
+                    <!-- /ko -->
+                    <!-- ko if: $parent.inprocessSendConfig() == 1  -->
+                        <button class="btn btn-primary pull-left" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /></button>
+                    <!-- /ko -->                    
+                    
+                </div>
+                
+            </div>
+            <!-- ko if: $parent.authFlag() -->
+                <div>
+                    <span class="text-small" style="color: #999;font-size:0.8em; margin-right:15px;" ><?php echo $this->get('translator')->trans('Actualmente tiene 2FA Habilitado en esta cuenta',array(),'templates'); ?></span>
+                    <button data-bind="click: disableAuth, enable: !$parent.inprocessDisableAuth()" class="btn btn-primary"><?php echo $this->get('translator')->trans('Deshabilitar',array(),'templates'); ?></button>
+                </div>    
+            <!-- /ko -->        
+        </div>
+        <div class="modal-footer">
+            <span class="text-small" style="color: #999;font-size:0.8em; margin-right:15px;" >* <?php echo $this->get('translator')->trans('Ver correos en el navegador',array(),'templates'); ?></span>
+            <!-- ko if: $parent.readyView() == "W-DOMAINS" -->
+            <a target="_blank" data-bind="attr: { 'href': '/hosting/email/autologin-webmail/'+id()}" onclick="FerozoHosting.sendAnalytics('event', 'Email', 'button', 'AccederWebmail');">
+                <button class="btn btn-primary"><?php echo $this->get('translator')->trans('Webmail',array(),'templates'); ?></button>
+            </a>            
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>        
+    </div>
+
+    <!-- Remove Email Account Confirmation -->
+    <div id="confirm-delete" class="modal animated fast pulse hide" data-bind="with: temp">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            <h3><?php echo $this->get('translator')->trans('Confirmacion: ',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <p>
+                <label><?php echo $this->get('translator')->trans('Esta cuenta es utilizada para enviar correos desde Wordpress asociado al dominio', array(),'templates'); ?></label>
+                <label><?php echo $this->get('translator')->trans('¿Deseas continuar de todos modos?', array(),'templates'); ?></label>
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" data-dismiss="modal" aria-hidden="true"  onclick="FerozoHosting.sendAnalytics('event', 'Domain', 'button', 'EliminarCuentaEmailCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: remove" onclick="FerozoHosting.sendAnalytics('event', 'Domain', 'button', 'EliminarCuentaEmailConfirmar');"> <?php echo $this->get('translator')->trans('Si, eliminar ',array(),'templates'); ?></button>
+        </div>
+    </div>
+    
+<!-- /ko -->
+
+<div style="display:none">
+     <span class="vpTitle"><?php echo $this->get('translator')->trans('La contraseña debe tener:',array(),'messages'); ?></span>
+     <span class="vpNumber"><?php echo $this->get('translator')->trans('Un número.',array(),'messages'); ?></span>
+     <span class="vpLowercase"><?php echo $this->get('translator')->trans('Una letra minúscula',array(),'messages'); ?></span>
+     <span class="vpCapital"><?php echo $this->get('translator')->trans('Una letra mayúscula',array(),'messages'); ?></span>
+     <span class="vpSpecial"><?php echo $this->get('translator')->trans('Un símbolo, por ejemplo "/", "*" o "@"',array(),'messages'); ?></span>
+     <span class="vpMinLength"><?php echo $this->get('translator')->trans('Como mínimo, 8 caracteres',array(),'messages'); ?></span>
+     <span class="vpNumbers"><?php echo $this->get('translator')->trans('No debe contener números consecutivos. Ej: 123, 456, etc.',array(),'messages'); ?></span>
+     <span class="vpValueInPass"><?php echo $this->get('translator')->trans('No debe contener parte de la cuenta de correo.',array(),'messages'); ?></span>     
+</div>

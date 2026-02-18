@@ -1,0 +1,232 @@
+<!-- ko with: gitVM -->
+<div class="clearfix animated superfast fadeIn">
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/website"><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('GIT',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title">GIT</h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+            <a class="btn btn-primary pull-right" data-bind="click: newgit" title="<?php echo $this->get('translator')->trans('Crear nuevo repositorio',array(),'templates'); ?>"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+            <a class="btn btn-secondary pull-right" style="margin-right: 1%;" data-bind="click: getssh" title="<?php echo $this->get('translator')->trans('Clave SSH',array(),'templates'); ?>"><?php echo $this->get('translator')->trans('Clave SSH',array(),'templates'); ?></a>
+        </div>
+        <p class="descScreens">
+        <?php echo $this->get('translator')->trans('Desde aquí podrás administrar repositorios para tus proyectos',array(),'templates'); ?>.</p>
+    </header>
+    <section class="mobile-table">
+        <!-- ko if: readyView() == "LOADING" -->
+            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+        <!-- /ko -->     
+        
+        <!-- ko if: readyView() == "W-REPOS" -->
+            <!-- ko if: data().length <= 0  && inprocess() < 1-->
+                <div class="vm-emtpy-records well clearfix">
+                    <div class="pull-left mr20">
+                        <img src="/application/assets/img/vm-icons/png/window-layout.png" alt=""/>
+                    </div>
+                    <div class="pull-left">
+                        <h3><?php echo $this->get('translator')->trans('Sin repositorios GIT añadidos',array(),'templates');?></h3>
+                        <p>
+                            <?php echo $this->get('translator')->trans('Para utilizar esta funcionalidad debes tener por lo menos un repositorio en tu cuenta',array(),'templates'); ?>.
+                            <a data-bind="click: newgit" accesskey="n"><?php echo $this->get('translator')->trans('Crear nueva cuenta',array(),'templates'); ?></a>
+                        </p>
+                    </div>
+                </div>
+            <!-- /ko -->
+            <!-- ko if: data().length > 0 -->
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>
+                            <a  data-bind="click: sortData">
+                                <?php echo $this->get('translator')->trans('Repositorio',array(),'templates'); ?>
+                                <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                                <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                            </a>
+                        </th>
+                        <th ><?php echo $this->get('translator')->trans('Rama',array(),'templates'); ?></th>
+                        <th ><?php echo $this->get('translator')->trans('Ruta de instalación',array(),'templates'); ?></th>
+                        <th class="right"> <?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?> </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- ko foreach: data() -->
+                    <tr class="info">
+                        <td>
+                            <span data-bind="text: url"></span>
+                        </td>
+                        <td>
+                            <!-- ko ifnot: branch == null -->
+                                <span data-bind="text: branch"></span>
+                            <!-- /ko -->
+                            <!-- ko if: branch == null -->
+                                <span data-bind="text: 'main'"></span>
+                            <!-- /ko -->
+                        </td>
+                        <td>
+                            <!-- ko if: folder == '/' -->
+                                <span data-bind="text: '/public_html'"></span>
+                            <!-- /ko -->
+                            <!-- ko ifnot: folder == '/' -->
+                                <span data-bind="text: '/public_html' + folder.content()"></span>
+                            <!-- /ko -->
+                        </td>
+                        <td class="right">
+                            <!-- ko if: regStatus() == 1 -->
+                                <div>
+                                    <a class="btn small" rel="tooltip" data-toggle="modal" title="<?php echo $this->get('translator')->trans('Desplegar',array(),'templates'); ?>" data-bind="click: $parent.deployGit" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'Deploy');"><i class="icon icon-new fa-terminal"></i></a>
+                                    <a class="btn small" rel="tooltip" data-toggle="modal" title="<?php echo $this->get('translator')->trans('Implementación automática',array(),'templates'); ?>" data-bind="click: $parent.autoDeploy" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'AutoDeploy');"><i class="icon-magic"></i></a>
+                                    <a class="btn small" rel="tooltip" data-toggle="modal" title="<?php echo $this->get('translator')->trans('Ver última salida de compilación',array(),'templates'); ?>" data-bind="click: $parent.getGitLog" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'Logs');"><i class="icon-list"></i></a>
+                                    <div data-bind="template: { name: 'delete-confirm'}" class="delete-confirm" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'GITEliminar');"></div>
+                                </div>
+                            <!-- /ko -->
+                            <!-- ko ifnot: regStatus() == 1 -->
+                                <div data-bind="template: { name: 'rows-loading'}"></div>
+                            <!-- /ko -->
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+                    <tr class="info">
+                        <td colspan="4">
+                            <a data-bind="click: newgit"><?php echo $this->get('translator')->trans('Nuevo repositorio GIT',array(),'templates'); ?></a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- /ko -->
+        <!-- /ko -->            
+    </section>
+</div>
+
+<div id="apuntar-nuevo" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'CerrarModal');">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Agregar nuevo repositorio GIT',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        
+        
+        <form data-bind="submit: save">
+        
+        <label><?php echo $this->get('translator')->trans('Repositorio',array(),'templates'); ?></label>
+
+        <div>
+            <!-- ko with: repository -->
+                <input type="text" data-bind="value: $data.content" placeholder="git@gitexample.com:examplerepo/examplesite.git" class="span5" />
+            <!-- /ko -->
+            <!-- ko with: repository -->
+                <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+            <!-- /ko -->
+        </div>
+
+        <label><?php echo $this->get('translator')->trans('Rama',array(),'templates'); ?></label>
+        <div>
+            <!-- ko with: branch -->
+                <input type="text" data-bind="value: $data.content" placeholder="main" class="span5" />
+            <!-- /ko -->
+            <!-- ko with: branch -->
+                <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+            <!-- /ko -->
+        </div>
+
+        <label><?php echo $this->get('translator')->trans('Directorio',array(),'templates'); ?></label>
+        <div>
+            <div class="input-prepend">
+                <span class="add-on" style="padding-right: 3%;">public_html/</span>
+                <!-- ko with: folder -->
+                    <input type="text" data-bind="value: $data.content" placeholder="folder/subfolder" class="span4" />
+                <!-- /ko -->
+            </div>
+            <!-- ko with: folder -->
+                <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+            <!-- /ko -->
+        </div>
+
+        <div class="alert alert-info text-small mb0 mt10">
+            <ul>
+                <li>
+                    <?php echo $this->get('translator')->trans('Si dejas la ruta de instalación vacía, tu aplicación se implementará por defecto en public_html',array(),'templates'); ?>  
+                </li>
+                <li>
+                    <?php echo $this->get('translator')->trans('El directorio de implementación debe estar completamente vacío, de lo contrario fallará',array(),'templates'); ?>  
+                </li>
+            </ul>
+        </div>
+
+        <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'ModalGITCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'ModalGITGuardar');"><?php echo $this->get('translator')->trans('Crear ahora',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+
+<div id="git-log" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'CerrarModal');">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Última salida de compilación',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body" style="background-color: black; color: wheat; margin: 3%;">
+        <div data-bind="html: $parent.gitLog"></div>
+    </div>
+    <div class="modal-footer">
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'ModalGITLogCerrar');"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>  
+    </div>
+</div>
+
+<div id="auto-deploy" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'CerrarModal');">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Integración automática',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <p><?php echo $this->get('translator')->trans('Debes copiar la siguiente ruta en la configuración de tu repositorio GIT para activar la integración automática con tu Panel:',array(),'templates'); ?></p>
+        
+            <code data-bind="text: $parent.autoDep"></code><br>
+            <div style="text-align: right; border-block-end-style: inherit; margin-right: 5%; margin-top: 2%;">
+                <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Copiar al portapapeles',array(),'templates'); ?>" data-bind="click: $parent.copyToClipboard" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'CopyToClipboard');"><i class="icon icon-new fa-copy"></i></a>
+            </div>
+    </div>
+    <div class="modal-footer">
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'ModalGITLogCerrar');"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>  
+    </div>
+</div>
+
+<div id="generar-ssh" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GITSSH', 'button', 'CerrarModal');">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Repositorio privado GIT',array(),'templates'); ?></h3>
+    </div>
+    <!-- ko if: $parent.sshKey() != '' -->
+        <div class="modal-body">
+            <p><?php echo $this->get('translator')->trans('Debes agregar esta clave SSH en tu repositorio GIT para implementar repositorios privados',array(),'templates'); ?></p>
+            
+                <textarea rows="9" style="width: 335px;" data-bind="text: $parent.sshKey, enable:false"></textarea><br>
+                <div style="text-align: right; border-block-end-style: inherit; margin-right: 5%; margin-top: 2%;">
+                    <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Copiar al portapapeles',array(),'templates'); ?>" data-bind="click: $parent.copyToClipboardSsh" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'CopyToClipboard');"><i class="icon icon-new fa-copy"></i></a>
+                </div>
+        </div>
+    <!-- /ko -->
+    <!-- ko if: $parent.sshKey() == '' -->
+    <div class="modal-body">
+        <p><?php echo $this->get('translator')->trans('Debes generar una clave SSH e implementarla en tu repositorio GIT para poder añadir repositorios privados',array(),'templates'); ?></p>
+        <br>
+        <a class="btn btn-primary" data-bind="click: $parent.genssh" title="<?php echo $this->get('translator')->trans('Generar clave SSH',array(),'templates'); ?>"><?php echo $this->get('translator')->trans('Generar clave SSH',array(),'templates'); ?></a><br><br>
+    </div>
+<!-- /ko -->
+    <div class="modal-footer">
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'GIT', 'button', 'ModalGITLogCerrar');"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>  
+    </div>
+</div>
+
+<!-- /ko -->

@@ -1,0 +1,123 @@
+<!-- ko with: hotlinksVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Protección contra links externos',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Protección contra links externos',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix "></div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-hotLinks-1',array(),'templates'); ?>
+        <?php echo $this->get('translator')->trans('main-text-hotLinks-2',array(),'templates'); ?>
+        <?php echo $this->get('translator')->trans('main-text-hotLinks-3',array(),'templates'); ?>
+        </p>
+    </header>
+    <section>
+        <div class="well clearfix">
+            <div class="row-fluid">
+                <div class="span6">
+                    <label><?php echo $this->get('translator')->trans('Redireccionar a',array(),'templates'); ?></label>
+                    <div class="input-prepend">
+                        <span class="add-on">http://</span>
+                        <input type="text" class="span11" name="redirection" data-bind="value: redirection, enable: !inprocess()" placeholder="www.<?php echo strtolower($this->get('translator')->trans('Dominio',array(),'templates')); ?>.com" />
+                        <span class="help-block error"></span>
+                    </div>
+                </div>
+
+                <div class="span6">
+                    <label><?php echo $this->get('translator')->trans('Extensiones',array(),'templates'); ?></label>
+                    <input type="text" class="full-width97" name="extensions" id="extensions" data-bind="value: extensions, enable: !inprocess()" data-role="tagsinput" />
+                    <span class="help-block error"></span>
+                </div>
+            </div>
+            <div class="clearfix">
+
+                <label class="checkbox pull-left mt10">
+                    <input type="checkbox" name="enabled" data-bind="checked: enabled, enable: !inprocess()" /> <?php echo $this->get('translator')->trans('Activar',array(),'templates'); ?>
+                </label>
+
+                <button class="btn btn-primary pull-right mt10" data-bind="click: configure, enable: !inprocess()"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+            </div>
+        </div>
+
+        <!-- ko if: inprocess() > 0 && data().length <= 0 -->
+            <div class="loading-data text-center well well-small"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+        <!-- /ko -->
+
+        <div class="animated fast" data-bind="css: displayTable() ? 'animated fadeIn':'animated fadeOut'">
+            <button class="btn pull-right mb10" data-bind="click: modalCreate, enable: !inprocess()"><i class="icon icon-new fa-link"></i> <?php echo $this->get('translator')->trans('Agregar URL',array(),'templates'); ?></button>
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>
+                            <a data-bind="click: sortData">
+                                URL
+                                <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                                <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                            </a>
+                        </th>
+
+                        <th class="right">
+                            <?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="info" data-bind="visible: data().length <= 0  && inprocess() < 1">
+                        <td colspan="2">
+                            <span><?php echo $this->get('translator')->trans('Ningún registro creado',array(),'templates'); ?></span>
+                        </td>
+                    </tr>
+                    <!-- ko foreach: data() -->
+                        <tr data-bind="attr: { 'class': rowstatus() == 1 ? 'rowDelete': 'info'}">
+                            <td>
+                                <span data-bind="text: url"></span>
+                            </td>
+                            <td>
+                                <div class="right">
+                                    <div data-bind="template: { name: 'rows-loading'}"></div>
+                                    <!-- ko if: regStatus() == 1 -->
+                                        <div  data-bind="template: { name: 'delete-confirm'}" class="delete-confirm"></div>
+                                    <!-- /ko -->
+                                </div>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div id="modal-create" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Agregar una URL ',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <div>
+            <div class="input-prepend">
+                <span class="add-on">http://</span>
+                <input type="text" class="span5" name="url" data-bind="value: url" autofocus="autofocus" />
+                <span class="help-block error"></span>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->
