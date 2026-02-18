@@ -46,6 +46,7 @@ foreach ($eventos as $ev) {
       );
     }
   } catch (Exception $e) {}
+    // Removed incomplete code fragment '$e' that caused syntax error
 
   // Plantillas de entrada (por si no existen tipos cargados)
   try {
