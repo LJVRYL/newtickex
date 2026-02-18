@@ -247,70 +247,7 @@ include __DIR__ . '/inc/layout_top.php';
   </div>
 <?php endif; ?>
 
-<div style="max-width:900px;margin:0 auto;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.4fr);gap:16px;flex-wrap:wrap;">
-  <!-- Columna izquierda -->
-  <div style="display:flex;flex-direction:column;gap:16px;">
-
-    <!-- Datos personales -->
-    <div class="card">
-      <h3>Datos personales</h3>
-      <div style="display:grid;grid-template-columns:120px 1fr;row-gap:6px;column-gap:8px;font-size:14px;margin-top:8px;">
-        <div style="color:var(--muted);">Nombre</div>
-        <div><?php echo htmlspecialchars($u['nombre'], ENT_QUOTES, 'UTF-8'); ?></div>
-
-        <div style="color:var(--muted);">Apellido</div>
-        <div><?php echo htmlspecialchars($u['apellido'], ENT_QUOTES, 'UTF-8'); ?></div>
-
-        <div style="color:var(--muted);">Apodo</div>
-        <div><?php echo htmlspecialchars($u['apodo'], ENT_QUOTES, 'UTF-8'); ?></div>
-
-        <div style="color:var(--muted);">Género</div>
-        <div><?php echo htmlspecialchars($u['genero'], ENT_QUOTES, 'UTF-8'); ?></div>
-
-        <div style="color:var(--muted);">Email</div>
-        <div><?php echo htmlspecialchars($emailUsuario, ENT_QUOTES, 'UTF-8'); ?></div>
-
-        <div style="color:var(--muted);">DNI</div>
-        <div><?php echo htmlspecialchars($u['dni'], ENT_QUOTES, 'UTF-8'); ?></div>
-
-        <div style="color:var(--muted);">Creado</div>
-        <div><?php echo htmlspecialchars($u['creado_en'], ENT_QUOTES, 'UTF-8'); ?></div>
-      </div>
-
-      <div style="margin-top:12px;font-size:13px;color:var(--muted);">
-        Podés actualizar tu perfil desde "Mi perfil".
-      </div>
-    </div>
-
-    <!-- Seguridad / contraseña -->
-    <?php $hasPwd = !empty($u['password_hash']); ?>
-    <div class="card">
-      <h3>Seguridad</h3>
-      <p style="margin-top:0;color:var(--muted);font-size:14px;">
-        <?php echo $hasPwd ? 'Podés cambiar tu contraseña ingresando la actual.' : 'Aún no configuraste contraseña; elegí una nueva para poder iniciar sesión con email y contraseña.'; ?>
-      </p>
-      <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
-        <input type="hidden" name="action" value="change_password">
-        <?php if ($hasPwd): ?>
-          <div>
-            <label for="pass_actual">Contraseña actual</label>
-            <input type="password" id="pass_actual" name="pass_actual" autocomplete="current-password" required>
-          </div>
-        <?php endif; ?>
-        <div>
-          <label for="pass_nueva">Nueva contraseña (mín 6)</label>
-          <input type="password" id="pass_nueva" name="pass_nueva" autocomplete="new-password" required>
-        </div>
-        <div>
-          <label for="pass_repite">Repetir nueva</label>
-          <input type="password" id="pass_repite" name="pass_repite" autocomplete="new-password" required>
-        </div>
-        <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <button type="submit" class="btn">Guardar contraseña</button>
-          <span style="font-size:12px;color:var(--muted);">Se guarda cifrada; no podemos leerla.</span>
-        </div>
-      </form>
-    </div>
+<div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
 
     <!-- Mis últimos Tickex -->
     <div class="card">
@@ -322,7 +259,7 @@ include __DIR__ . '/inc/layout_top.php';
         </div>
       </div>
       <?php if (!empty($tickets)): ?>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:10px;">
+        <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px;margin-top:10px;">
           <?php foreach ($tickets as $t): ?>
             <?php
               $flyer = null;
@@ -337,10 +274,10 @@ include __DIR__ . '/inc/layout_top.php';
               elseif (isset($t['ubicacion']) && $t['ubicacion']) $loc = $t['ubicacion'];
               $ticketUrl = 'entrada.php?c=' . urlencode($t['codigo']);
             ?>
-            <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;gap:12px;align-items:stretch;">
-              <div style="width:120px;min-width:120px;max-width:120px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;gap:12px;align-items:stretch;width:100%;">
+              <div style="flex:0 0 140px;height:140px;display:flex;align-items:center;justify-content:center;background:var(--panel-3);border-radius:8px;margin:12px 0 12px 12px;overflow:hidden;">
                 <?php if ($flyer): ?>
-                  <img src="<?php echo e($flyer); ?>" alt="Flyer" style="width:100%;height:100%;object-fit:cover;display:block;">
+                  <img src="<?php echo e($flyer); ?>" alt="Flyer" style="width:100%;height:100%;max-width:140px;max-height:140px;object-fit:cover;aspect-ratio:1/1;display:block;margin:auto;">
                 <?php else: ?>
                   <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">Sin flyer</div>
                 <?php endif; ?>
@@ -387,67 +324,12 @@ include __DIR__ . '/inc/layout_top.php';
 
   </div>
 
-  <!-- Columna derecha -->
-  <div style="display:flex;flex-direction:column;gap:16px;">
-
-    <div class="card">
-      <h3>Accesos rápidos</h3>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;font-size:14px;">
-        <a href="#"
-           style="text-decoration:none;">
-          👉 Mis Tickex (historial de entradas)
-          <span style="display:block;font-size:12px;color:var(--muted);">
-            Próximamente: listado completo de tus entradas, con QR y estados.
-          </span>
-        </a>
-
-        <a href="#"
-           style="text-decoration:none;">
-          💳 Compras y pagos
-          <span style="display:block;font-size:12px;color:var(--muted);">
-            Próximamente: detalle de compras, medios de pago y estados.
-          </span>
-        </a>
-
-        <a href="#"
-           style="text-decoration:none;">
-          🧾 Facturas y comprobantes
-          <span style="display:block;font-size:12px;color:var(--muted);">
-            Próximamente: descarga de facturas y comprobantes.
-          </span>
-        </a>
-
-        <a href="#"
-           style="text-decoration:none;">
-          ❓ Centro de ayuda / FAQ
-          <span style="display:block;font-size:12px;color:var(--muted);">
-            Próximamente: respuestas a preguntas frecuentes.
-          </span>
-        </a>
-
-        <a href="#"
-           style="text-decoration:none;">
-          💬 Contactar soporte
-          <span style="display:block;font-size:12px;color:var(--muted);">
-            Próximamente: formulario para escribirle a soporte de Tickex.
-          </span>
-        </a>
-      </div>
-    </div>
-
-    <div class="card" style="font-size:13px;color:var(--muted);">
-      <h3>Información</h3>
-      <p>
-        Este panel es para vos como usuario final de Tickex:
-        la persona que compra entradas y las recibe por email.
-      </p>
-      <p>
-        Los organizadores (boliches, teatros, festivales, etc.) van a tener
-        un panel aparte con herramientas para crear eventos y vender entradas.
-      </p>
-    </div>
-
-  </div>
+  <!-- Columna derecha eliminada: solo cards de Tickex -->
 </div>
+
+<footer style="max-width:900px;margin:32px auto 0 auto;text-align:center;font-size:13px;color:var(--muted);">
+  <a href="#" style="color:var(--muted);text-decoration:underline;">Centro de Ayuda / FAQ</a> ·
+  <a href="#" style="color:var(--muted);text-decoration:underline;">Contactar soporte</a>
+</footer>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

@@ -53,7 +53,7 @@ $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
             <?php else: ?>
               <div class="quick-links" aria-label="Accesos rápidos">
                 <a href="panel_usuario.php">Mis Tickex</a>
-                <a href="completar_registro.php">Mi perfil</a>
+                <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
               </div>
             <?php endif; ?>
         <?php endif; ?>
