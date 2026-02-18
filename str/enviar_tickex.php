@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/mail.php';
 require_login();
@@ -114,107 +117,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($email === '') $errors[] = 'Ingresá el email del destinatario o su Tickex ID.';
 
     if (empty($errors)) {
-<<<<<<< HEAD
         // Generar código único
         $codigo = 'CORT-' . strtoupper(substr(md5($email . microtime(true)), 0, 10));
         $fecha  = date('Y-m-d H:i:s');
         $nombreIns = $nombre !== '' ? $nombre : $email;
         try {
-          $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
-          $stmt->execute(array(
-            ':n'  => $nombreIns,
-            ':e'  => $email,
-            ':f'  => $fecha,
-            ':c'  => $codigo,
-            ':t'  => $tipoId,
-            ':ev' => $eventoId,
-          ));
-          $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+            $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
+            $stmt->execute(array(
+                ':n'  => $nombreIns,
+                ':e'  => $email,
+                ':f'  => $fecha,
+                ':c'  => $codigo,
+                ':t'  => $tipoId,
+                ':ev' => $eventoId,
+            ));
+            $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
 
-          // Envío automático de email
-          $asunto = "¡Recibiste una entrada de cortesía!";
-          $mensaje = "Hola $nombreIns,\n\nTe han asignado una entrada de cortesía para el evento.\n\n";
-          $mensaje .= "Código de entrada: $codigo\n";
-          $mensaje .= "Tipo: $tipoId\n";
-          $mensaje .= "Fecha de registro: $fecha\n";
-          $mensaje .= "\nMostrá este código en la puerta del evento para ingresar.\n\n";
-          $mensaje .= "Si tenés dudas, respondé este email.\n\n";
-          $mensaje .= "¡Nos vemos!\nEquipo Tickex";
-          $headers = "From: info@tickex.com.ar\r\nReply-To: info@tickex.com.ar\r\n";
-          // mail() puede fallar silenciosamente, así que no interrumpe el flujo
-          @mail($email, $asunto, $mensaje, $headers);
+            // Envío automático de email
+            $asunto = "¡Recibiste una entrada de cortesía!";
+            $mensaje = "Hola $nombreIns,\n\nTe han asignado una entrada de cortesía para el evento.\n\n";
+            $mensaje .= "Código de entrada: $codigo\n";
+            $mensaje .= "Tipo: $tipoId\n";
+            $mensaje .= "Fecha de registro: $fecha\n";
+            $mensaje .= "\nMostrá este código en la puerta del evento para ingresar.\n\n";
+            $mensaje .= "Si tenés dudas, respondé este email.\n\n";
+            $mensaje .= "¡Nos vemos!\nEquipo Tickex";
+            $headers = "From: info@tickex.com.ar\r\nReply-To: info@tickex.com.ar\r\n";
+            // mail() puede fallar silenciosamente, así que no interrumpe el flujo
+            @mail($email, $asunto, $mensaje, $headers);
         } catch (Exception $e) {
-          $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
+            $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
         }
-      }
-=======
-      // Generar código único
-      $codigo = 'CORT-' . strtoupper(substr(md5($email . microtime(true)), 0, 10));
-      $fecha  = date('Y-m-d H:i:s');
-      $nombreIns = $nombre !== '' ? $nombre : $email;
-      try {
-        $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
-        $stmt->execute(array(
-          ':n'  => $nombreIns,
-          ':e'  => $email,
-          ':f'  => $fecha,
-          ':c'  => $codigo,
-          ':t'  => $tipoId,
-          ':ev' => $eventoId,
-        ));
-        $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
-
-        // Enviar email al destinatario si hay email válido
-        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
-          // Buscar datos del evento
-          $evento = null;
-          foreach ($eventos as $ev) {
-            if ((int)$ev['id'] === (int)$eventoId) {
-              $evento = $ev;
-              break;
-            }
-          }
-          $eventoNombre = $evento ? $evento['nombre'] : '';
-          $eventoFecha = '';
-          // Intentar obtener fecha del evento si existe columna fecha en la tabla eventos
-          try {
-            $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-            $hasFecha = false;
-            foreach ($colsEv as $c) { if (!empty($c['name']) && $c['name']==='fecha') { $hasFecha = true; break; } }
-            if ($hasFecha && $evento) {
-              $stEv = $pdo->prepare("SELECT fecha FROM eventos WHERE id = :id LIMIT 1");
-              $stEv->execute(array(':id'=>$eventoId));
-              $rowEv = $stEv->fetch(PDO::FETCH_ASSOC);
-              if ($rowEv && !empty($rowEv['fecha'])) {
-                $eventoFecha = $rowEv['fecha'];
-              }
-            }
-          } catch (Exception $e) {}
-
-          $baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'];
-          $linkRegistro = $baseUrl . "/registro.php?email=" . urlencode($email);
-          $linkEntrada = $baseUrl . "/entrada.php?c=" . urlencode($codigo);
-
-          $subject = "Te enviaron un Tickex para un evento";
-          $body = "Hola!\n\n";
-          $body .= "Te enviaron un Tickex para que puedas ir al evento." . "\n\n";
-          $body .= "Evento: " . $eventoNombre . "\n";
-          if ($eventoFecha) $body .= "Fecha: " . $eventoFecha . "\n";
-          $body .= "\n";
-          $body .= "Para ver tu Tickex y registrarte, usá este link:\n";
-          $body .= $linkRegistro . "\n\n";
-          $body .= "Cuando completes el registro, vas a poder ver tu Tickex en: \n";
-          $body .= $linkEntrada . "\n\n";
-          $body .= "¡Nos vemos en el evento!\n";
-          $body .= "Equipo Tickex";
-
-          tickex_send_mail($email, $subject, $body);
-        }
-      } catch (Exception $e) {
-        $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
-      }
     }
->>>>>>> 1f222f565ef7163255e5c55fbc1af28ef402382a
 }
 
 $title = 'Enviar Tickex';
