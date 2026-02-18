@@ -2,3 +2,7 @@
 # local secrets
 str/.secrets/
 
+
+# runtime logs/secrets
+.secrets/
+*.log

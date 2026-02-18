@@ -1,2 +1,0 @@
-[2026-02-05 23:18:00] [STR][TEST] diag_test hit
-[2026-02-05 23:18:00] [STR][EXC] Error: Call to undefined function undefined_function_call() in /opt/ferozo3/web/str/diag_test.php:4 uri=/diag_test.php method=GET
