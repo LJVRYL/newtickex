@@ -1,0 +1,319 @@
+<?php
+ini_set("display_errors",1);
+ini_set("display_startup_errors",1);
+error_reporting(E_ALL);
+
+require __DIR__ . '/inc/bootstrap.php';
+require __DIR__ . '/inc/auth.php';
+
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+$errores = array();
+$usuario = null;
+$tickets = array();
+$usuarioEmail = '';
+$usuarioNombreCompleto = '';
+
+// Helper de escape, por si no existe
+if (!function_exists('e')) {
+    function e($str) {
+        return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+// ---------------------------------------------------------------------
+// 1) Determinar ID del usuario en sesión
+// ---------------------------------------------------------------------
+$usuarioId = null;
+
+if (function_exists('usuario_actual_id')) {
+    $usuarioId = (int) usuario_actual_id();
+} elseif (isset($_SESSION['usuario_id'])) {
+    $usuarioId = (int) $_SESSION['usuario_id'];
+} elseif (isset($_SESSION['user_id'])) {
+    $usuarioId = (int) $_SESSION['user_id'];
+}
+
+if (!$usuarioId) {
+    header('Location: login.php');
+    exit;
+}
+
+try {
+    // -----------------------------------------------------------------
+    // 2) Obtener $pdo (usar el global si ya existe)
+    // -----------------------------------------------------------------
+    if (isset($pdo) && $pdo instanceof PDO) {
+        // Usamos el que vino de bootstrap.php
+    } else {
+        $dbFile = __DIR__ . '/save_the_rave.sqlite';
+        $pdo = new PDO('sqlite:' . $dbFile);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    }
+
+    // -----------------------------------------------------------------
+    // 3) Cargar datos del usuario
+    // -----------------------------------------------------------------
+    $sqlUsuario = 'SELECT id, nombre, apellido, email, dni, rol, email_confirmado, creado_en
+                   FROM usuarios
+                   WHERE id = :id
+                   LIMIT 1';
+    $stmtU = $pdo->prepare($sqlUsuario);
+    $stmtU->execute(array(':id' => $usuarioId));
+    $usuario = $stmtU->fetch(PDO::FETCH_ASSOC);
+
+    if (!$usuario) {
+        $errores[] = 'No se encontró el usuario en la base de datos.';
+    } else {
+        $usuarioEmail = $usuario['email'];
+        $usuarioNombreCompleto = trim($usuario['nombre'] . ' ' . $usuario['apellido']);
+        if ($usuarioNombreCompleto === '') {
+            $usuarioNombreCompleto = $usuarioEmail;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // 4) Cargar entradas ("Mis Tickex") por email
+    // -----------------------------------------------------------------
+    if ($usuario && $usuarioEmail !== '') {
+        $sqlTickets = 'SELECT
+                           e.id,
+                           e.codigo,
+                           e.fecha_registro,
+                           e.tipo,
+                           e.monto_pagado,
+                           e.checked_in,
+                           e.checked_in_at,
+                           e.evento_id,
+                           ev.nombre AS evento_nombre,
+                           ev.fecha_desde,
+                           ev.fecha_hasta
+                       FROM entradas e
+                       LEFT JOIN eventos ev ON ev.id = e.evento_id
+                       WHERE e.email = :email
+                       ORDER BY e.fecha_registro DESC
+                       LIMIT 100';
+        $stmtT = $pdo->prepare($sqlTickets);
+        $stmtT->execute(array(':email' => $usuarioEmail));
+        $tickets = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+} catch (Exception $e) {
+    $errores[] = 'Error al cargar datos del panel: ' . $e->getMessage();
+}
+
+include __DIR__ . '/inc/layout_top.php';
+?>
+<div class="card" style="max-width:960px;margin:0 auto 16px auto;">
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;">
+    <img src="tickex-logo_sobre_oscuro.svg"
+         alt="Tickex"
+         style="height:64px;display:block;">
+    <div style="flex:1 1 auto;">
+      <h2 style="margin:0 0 4px 0;">Mi cuenta en Tickex</h2>
+      <div style="color:var(--muted);font-size:14px;">
+        Hola,
+        <strong><?php echo e($usuarioNombreCompleto); ?></strong><br>
+        Email:
+        <strong><?php echo e($usuarioEmail); ?></strong><br>
+        Rol:
+        <strong><?php echo e(isset($usuario['rol']) ? $usuario['rol'] : 'cliente'); ?></strong>
+      </div>
+    </div>
+    <div style="min-width:200px;text-align:right;">
+      <?php if ($usuario && (int)$usuario['email_confirmado'] === 1): ?>
+        <span style="display:inline-flex;align-items:center;gap:6px;
+                     padding:4px 10px;border-radius:999px;
+                     background:#0b9444;color:#fff;font-size:12px;">
+          ✅ Email verificado
+        </span>
+      <?php else: ?>
+        <span style="display:inline-flex;align-items:center;gap:6px;
+                     padding:4px 10px;border-radius:999px;
+                     background:#b54708;color:#fff;font-size:12px;">
+          ⚠ Email no verificado
+        </span>
+      <?php endif; ?>
+    </div>
+  </div>
+</div>
+
+<?php if (!empty($errores)): ?>
+  <div class="card" style="max-width:960px;margin:0 auto 16px auto;">
+    <div class="flash err">
+      <ul style="margin:0 0 0 18px;padding:0;">
+        <?php foreach ($errores as $eMsg): ?>
+          <li><?php echo e($eMsg); ?></li>
+        <?php endforeach; ?>
+      </ul>
+    </div>
+  </div>
+<?php endif; ?>
+
+<div class="card" style="max-width:960px;margin:0 auto 16px auto;">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <a href="#perfil"    class="btn secondary">Mi perfil</a>
+      <a href="#tickets"   class="btn secondary">Mis Tickex</a>
+      <a href="#facturas"  class="btn secondary">Facturas</a>
+      <a href="#actividad" class="btn secondary">Actividad</a>
+      <a href="#ayuda"     class="btn secondary">Ayuda & soporte</a>
+    </div>
+    <div>
+      <a href="logout.php" class="btn danger">Cerrar sesión</a>
+    </div>
+  </div>
+</div>
+
+<!-- Sección: Mi perfil -->
+<div id="perfil" class="card" style="max-width:960px;margin:0 auto 16px auto;">
+  <h3>Mi perfil</h3>
+  <?php if ($usuario): ?>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:8px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);">Nombre</label>
+        <div style="font-size:14px;"><?php echo e($usuario['nombre']); ?></div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);">Apellido</label>
+        <div style="font-size:14px;"><?php echo e($usuario['apellido']); ?></div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);">Email</label>
+        <div style="font-size:14px;"><?php echo e($usuario['email']); ?></div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);">DNI</label>
+        <div style="font-size:14px;"><?php echo e($usuario['dni']); ?></div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);">Fecha de alta</label>
+        <div style="font-size:14px;"><?php echo e($usuario['creado_en']); ?></div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;">
+      <a href="editar_perfil.php" class="btn secondary">Editar datos</a>
+      <a href="cambiar_password.php" class="btn secondary">Cambiar contraseña</a>
+    </div>
+  <?php else: ?>
+    <p>No se pudieron cargar los datos de tu perfil.</p>
+  <?php endif; ?>
+</div>
+
+<!-- Sección: Mis Tickex -->
+<div id="tickets" class="card" style="max-width:960px;margin:0 auto 16px auto;">
+  <h3>Mis Tickex</h3>
+  <p style="color:var(--muted);font-size:14px;margin-top:4px;">
+    Acá ves todas las entradas asociadas a tu email.
+  </p>
+
+  <?php if ($usuarioEmail === ''): ?>
+    <p>No tenemos un email asociado a tu usuario. No se pueden listar tus Tickex.</p>
+  <?php elseif (empty($tickets)): ?>
+    <p>Todavía no tenés entradas registradas con este email.</p>
+  <?php else: ?>
+    <div style="overflow-x:auto;margin-top:8px;">
+      <table class="tbl" style="min-width:720px;">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Evento</th>
+            <th>Tipo</th>
+            <th>Fecha registro</th>
+            <th>Monto</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($tickets as $t): ?>
+            <?php
+              $estado = 'Vigente';
+              if (isset($t['checked_in']) && (int)$t['checked_in'] === 1) {
+                  $estado = 'Usada';
+              }
+              $monto = isset($t['monto_pagado']) ? (int)$t['monto_pagado'] : 0;
+            ?>
+            <tr>
+              <td>#<?php echo (int) $t['id']; ?></td>
+              <td>
+                <?php
+                  if (isset($t['evento_nombre']) && $t['evento_nombre'] !== '') {
+                      echo e($t['evento_nombre']);
+                  } else {
+                      echo 'Evento #' . (int) $t['evento_id'];
+                  }
+                ?>
+              </td>
+              <td><?php echo e(isset($t['tipo']) ? $t['tipo'] : ''); ?></td>
+              <td><?php echo e(isset($t['fecha_registro']) ? $t['fecha_registro'] : ''); ?></td>
+              <td>
+                <?php echo '$ ' . number_format($monto / 100, 2, ',', '.'); ?>
+              </td>
+              <td><?php echo e($estado); ?></td>
+              <td>
+                <a class="btn secondary" href="ticket.php?c=<?php echo urlencode($t['codigo']); ?>" target="_blank">
+                  Ver QR
+                </a>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
+</div>
+
+<!-- Sección: Facturas -->
+<div id="facturas" class="card" style="max-width:960px;margin:0 auto 16px auto;">
+  <h3>Facturas</h3>
+  <p style="color:var(--muted);font-size:14px;">
+    Acá vas a poder ver y descargar tus comprobantes de pago cuando integremos
+    la facturación online con los organizadores de eventos.
+  </p>
+  <p style="color:var(--muted);font-size:13px;">
+    Por ahora, si necesitás una factura de alguna compra, escribinos a
+    <a href="mailto:soporte@tickex.com.ar">soporte@tickex.com.ar</a>
+    indicando el email de tu cuenta y el evento.
+  </p>
+</div>
+
+<!-- Sección: Actividad -->
+<div id="actividad" class="card" style="max-width:960px;margin:0 auto 16px auto;">
+  <h3>Actividad de la cuenta</h3>
+  <p style="color:var(--muted);font-size:14px;">
+    En esta sección más adelante vamos a mostrar:
+  </p>
+  <ul style="color:var(--muted);font-size:14px;">
+    <li>Últimos inicios de sesión (fecha, hora, IP aproximada).</li>
+    <li>Últimas compras o registros de entradas.</li>
+    <li>Acciones importantes sobre tu cuenta (cambios de contraseña, etc.).</li>
+  </ul>
+  <p style="color:var(--muted);font-size:13px;">
+    Esto te va a ayudar a detectar cualquier uso extraño de tu cuenta.
+  </p>
+</div>
+
+<!-- Sección: Ayuda & Soporte -->
+<div id="ayuda" class="card" style="max-width:960px;margin:0 auto 32px auto;">
+  <h3>Ayuda & soporte</h3>
+  <p style="color:var(--muted);font-size:14px;">
+    Algunas preguntas frecuentes que podemos sumar en una página aparte:
+  </p>
+  <ul style="color:var(--muted);font-size:14px;">
+    <li>
+�    <li>“Perdí el mail, ¿puedo volver a descargar mi entrada?”</li>
+    <li>“¿Qué hago si mi QR no se ve bien en la pantalla?”</li>
+    <li>“¿Puedo transferir mi Tickex a otra persona?”</li>
+  </ul>
+  <p style="color:var(--muted);font-size:14px;">
+    Si necesitás ayuda con tu cuenta o con una entrada:
+  </p>
+  <ul style="color:var(--muted);font-size:14px;">
+    <li>Escribinos a <a href="mailto:soporte@tickex.com.ar">soporte@tickex.com.ar</a></li>
+    <li>Incluí tu email de Tickex y, si podés, el nombre del evento.</li>
+  </ul>
+</div>
+
+<?php include __DIR__ . '/inc/layout_bottom.php'; ?>

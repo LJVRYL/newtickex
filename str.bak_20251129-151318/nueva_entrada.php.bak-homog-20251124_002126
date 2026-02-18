@@ -1,0 +1,270 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Nueva entrada – Puerta";
+
+require_login();
+
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
+$rolEvento  = isset($_SESSION['rol_evento']) ? $_SESSION['rol_evento'] : (isset($cu['rol_evento'])?$cu['rol_evento']:'');
+
+// ===== Permisos =====
+$permitido = false;
+if ($tipoGlobal === 'staff_evento' && $rolEvento === 'puerta') $permitido = true;
+if ($tipoGlobal === 'admin_evento' || $tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') $permitido = true;
+
+if (!$permitido) {
+    http_response_code(403);
+    include __DIR__.'/inc/layout_top.php';
+    echo "<div class='card error'><h2>Acceso denegado</h2><p>Solo Puerta / Admin puede crear entradas.</p></div>";
+    include __DIR__.'/inc/layout_bottom.php';
+    exit;
+}
+
+$pdo = db();
+
+// ===== eventoId efectivo =====
+$eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+$eventoIdSes = isset($_SESSION['evento_id']) ? (int)$_SESSION['evento_id'] : 0;
+$eventoId = $eventoIdGet > 0 ? $eventoIdGet : $eventoIdSes;
+
+if ($eventoId <= 0) abort_404("ID de evento inválido.");
+
+// Staff puerta: fuerza su evento
+if ($tipoGlobal === 'staff_evento' && $rolEvento === 'puerta') {
+    if ($eventoIdSes > 0) $eventoId = $eventoIdSes;
+}
+
+// ===== Traer evento =====
+$stmtEv = $pdo->prepare("SELECT id, nombre, slug FROM eventos WHERE id=? LIMIT 1");
+$stmtEv->execute(array($eventoId));
+$evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
+if (!$evento) abort_404("Evento no encontrado.");
+
+// ===== Detectar columnas opcionales en entradas / tipos_entrada =====
+$colsEnt = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
+$hasEventoIdEntradas = false;
+$hasMontoPagado = false;
+foreach($colsEnt as $c){
+    if (isset($c['name']) && $c['name']==='evento_id') $hasEventoIdEntradas = true;
+    if (isset($c['name']) && $c['name']==='monto_pagado') $hasMontoPagado = true;
+}
+
+$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCdisp = false;
+foreach($colsTE as $c){
+    if (isset($c['name']) && $c['name']==='cantidad_disponible') { $hasCdisp = true; break; }
+}
+
+// ===== Tipos reales del evento =====
+$stmtTE = $pdo->prepare("
+    SELECT id, nombre, tipo, precio, cantidad_disponible
+    FROM tipos_entrada
+    WHERE evento_id=?
+    ORDER BY id ASC
+");
+$stmtTE->execute(array($eventoId));
+$tipos = $stmtTE->fetchAll(PDO::FETCH_ASSOC);
+
+// Si no hay tipos, no se puede crear
+if (!$tipos) {
+    include __DIR__.'/inc/layout_top.php';
+    echo "<div class='card'><h2>Sin tipos de entrada</h2><p>Este evento no tiene tipos definidos.</p></div>";
+    echo "<a class='btn secondary' href='puerta.php?evento_id=".$eventoId."'>Volver</a>";
+    include __DIR__.'/inc/layout_bottom.php';
+    exit;
+}
+
+// ===== Form state =====
+$errores = array();
+$ok = false;
+$ticketCodigoNuevo = '';
+
+$nombre = '';
+$tipoEntradaId = (int)$tipos[0]['id'];
+$pagoRaw = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nombre = trim(isset($_POST['nombre']) ? $_POST['nombre'] : '');
+    $tipoEntradaId = (int)(isset($_POST['tipo_entrada_id']) ? $_POST['tipo_entrada_id'] : 0);
+    $pagoRaw = trim(isset($_POST['pago']) ? $_POST['pago'] : '');
+
+    if ($nombre === '') $errores[] = "El nombre es obligatorio.";
+
+    // Validar tipo dentro del evento
+    $tipoElegido = null;
+    foreach($tipos as $t){
+        if ((int)$t['id'] === $tipoEntradaId) { $tipoElegido = $t; break; }
+    }
+    if (!$tipoElegido) $errores[] = "Tipo de entrada inválido.";
+
+    // Monto (opcional)
+    $monto = 0;
+    if ($pagoRaw !== '') {
+        $tmp = str_replace(',', '.', $pagoRaw);
+        if (!is_numeric($tmp)) {
+            $errores[] = "El monto pagado debe ser numérico.";
+        } else {
+            $monto = (int)round((float)$tmp);
+        }
+    }
+
+    // Si el tipo es paga y no pusieron monto, usamos precio como sugerido
+    if ($tipoElegido && isset($tipoElegido['tipo']) && $tipoElegido['tipo']==='paga' && $monto<=0) {
+        $precioBase = isset($tipoElegido['precio']) ? (int)$tipoElegido['precio'] : 0;
+        if ($precioBase > 0) $monto = $precioBase;
+    }
+
+    // Stock (si hay cantidad_disponible)
+    if ($tipoElegido && $hasCdisp) {
+        $cd = isset($tipoElegido['cantidad_disponible']) ? (int)$tipoElegido['cantidad_disponible'] : 0;
+        if ($cd <= 0) $errores[] = "No hay cupos disponibles para este tipo.";
+    }
+
+    if (!$errores) {
+        $fecha = date('Y-m-d H:i:s');
+
+        // generar código único
+        $maxIntentos = 5;
+        for($i=0;$i<$maxIntentos;$i++){
+            if (function_exists('random_bytes')) {
+                $codigo = bin2hex(random_bytes(5)); // 10 chars
+            } else {
+                $codigo = substr(sha1(uniqid('', true)), 0, 10);
+            }
+
+            try {
+                // Insert dinámico según columnas
+                $cols = array('nombre','email','fecha_registro','codigo','checked_in','checked_in_at','tipo');
+                $vals = array(':nombre',":email",":fecha",":codigo",0,null,":tipo");
+                $params = array(
+                    ':nombre'=>$nombre,
+                    ':email'=>'',
+                    ':fecha'=>$fecha,
+                    ':codigo'=>$codigo,
+                    ':tipo'=>isset($tipoElegido['nombre']) ? $tipoElegido['nombre'] : 'General'
+                );
+
+                if ($hasEventoIdEntradas) {
+                    $cols[]='evento_id'; $vals[]=':eid'; $params[':eid']=$eventoId;
+                }
+                if ($hasMontoPagado) {
+                    $cols[]='monto_pagado'; $vals[]=':monto'; $params[':monto']=$monto;
+                }
+
+                $sqlIns = "INSERT INTO entradas (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
+                $stmtIns = $pdo->prepare($sqlIns);
+                $stmtIns->execute($params);
+
+                // Descontar disponibilidad
+                if ($hasCdisp) {
+                    $updTe = $pdo->prepare("
+                        UPDATE tipos_entrada
+                        SET cantidad_disponible = CASE
+                            WHEN cantidad_disponible IS NULL THEN NULL
+                            WHEN cantidad_disponible>0 THEN cantidad_disponible-1
+                            ELSE 0 END
+                        WHERE id=? AND evento_id=?
+                    ");
+                    $updTe->execute(array($tipoEntradaId,$eventoId));
+                }
+
+                $ok = true;
+                $ticketCodigoNuevo = $codigo;
+
+                // reset form
+                $nombre = '';
+                $pagoRaw = '';
+                $tipoEntradaId = (int)$tipos[0]['id'];
+                break;
+
+            } catch (Exception $e) {
+                if (stripos($e->getMessage(), 'UNIQUE') !== false) {
+                    continue; // colisión
+                }
+                $errores[] = "Error al guardar: ".$e->getMessage();
+                break;
+            }
+        }
+    }
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <a class="btn secondary" href="puerta.php?evento_id=<?php echo $eventoId; ?>">⬅ Volver a Puerta</a>
+  <span style="flex:1 1 auto;"></span>
+  <a class="btn danger" href="login.php?logout=1">Salir</a>
+</div>
+
+<div class="card">
+  <h2>Nueva entrada (Puerta)</h2>
+  <div style="color:var(--muted);font-size:14px;margin-top:4px;">
+    Evento: <strong><?php echo e($evento['nombre']); ?></strong>
+    <?php if(!empty($evento['slug'])): ?> (<?php echo e($evento['slug']); ?>)<?php endif; ?>
+  </div>
+
+  <?php if($ok): ?>
+    <div class="flash ok" style="margin-top:12px;">
+      ✅ Entrada guardada correctamente.
+    </div>
+    <?php if($ticketCodigoNuevo!==''): ?>
+      <div style="margin-top:8px;">
+        <a class="btn secondary" target="_blank"
+           href="ticket.php?c=<?php echo urlencode($ticketCodigoNuevo); ?>">
+          Ver ticket generado
+        </a>
+      </div>
+    <?php endif; ?>
+  <?php endif; ?>
+
+  <?php if($errores): ?>
+    <div class="flash err" style="margin-top:12px;">
+      <?php foreach($errores as $er): ?>
+        <div>• <?php echo e($er); ?></div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+
+  <form method="post" style="margin-top:12px;">
+    <input type="hidden" name="evento_id" value="<?php echo $eventoId; ?>">
+
+    <label>Nombre / alias</label>
+    <input type="text" name="nombre" required value="<?php echo e($nombre); ?>">
+
+    <label>Tipo de entrada</label>
+    <select name="tipo_entrada_id" required>
+      <?php foreach($tipos as $t): ?>
+        <?php
+          $id = (int)$t['id'];
+          $nombreTipo = isset($t['nombre']) ? $t['nombre'] : 'General';
+          $tipoPago = isset($t['tipo']) ? $t['tipo'] : 'free';
+          $precio = isset($t['precio']) ? (int)$t['precio'] : 0;
+          $cd = isset($t['cantidad_disponible']) ? (int)$t['cantidad_disponible'] : null;
+
+          $extra = '';
+          if ($tipoPago==='paga' && $precio>0) $extra .= " — $".$precio;
+          if ($hasCdisp && $cd!==null) $extra .= " (disp: ".$cd.")";
+        ?>
+        <option value="<?php echo $id; ?>" <?php if($id===$tipoEntradaId) echo 'selected'; ?>>
+          <?php echo e($nombreTipo.$extra); ?>
+        </option>
+      <?php endforeach; ?>
+    </select>
+
+    <label>Pago (en pesos)</label>
+    <input type="text" name="pago" placeholder="Ej: 0, 10000..." value="<?php echo e($pagoRaw); ?>">
+    <div style="color:var(--muted);font-size:13px;margin-top:4px;">
+      Dejalo en blanco o 0 si es invitado / FREE.
+    </div>
+
+    <div style="margin-top:12px;">
+      <button class="btn" type="submit" style="background:var(--ok);color:#04150a;">
+        Guardar entrada
+      </button>
+    </div>
+  </form>
+</div>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

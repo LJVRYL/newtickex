@@ -1,0 +1,328 @@
+<!-- ko with: dnsVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/domain"><?php echo $this->get('translator')->trans('Dominios',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Zonas DNS',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Zonas DNS',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+            <div class="span6 right pull-right">
+            <a class="btn btn-primary pull-right" data-bind="click: openModal" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'ModalZonaDns');" style="margin-left: 5px !important;">
+                <?php echo $this->get('translator')->trans('Nuevo registro',array(),'templates'); ?>
+            </a>
+            <button class="btn small" data-bind="click: openModalRestoreDns" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'ModalRestoreDns');"><i class="icon-repeat"></i> <?php echo $this->get('translator')->trans('Restaurar zona DNS',array(),'templates'); ?></button>
+            </div>
+            <div class="span6 right pull-right mr0">
+                <button class="btn small mr5" data-bind="click: openModalConfigureMX" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'ModalMX');"><i class="icon-cog"></i> <?php echo $this->get('translator')->trans('Configurar MX',array(),'templates'); ?></button>
+                <button class="btn small mr5" data-bind="click: openModalConfigureBlogger" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'ModalBlogger');"><i class="icon-cog"></i> <?php echo $this->get('translator')->trans('Configurar Blogger',array(),'templates'); ?></button>
+                <!-- ko if: dkim() -->
+                <a class="btn pull-right" id="remove-dkim-button" data-bind="click: openModalUnSetDkim" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDNS', 'button', 'ZonaDNSUnSetDKIM');"><i class="icon-cog"></i> <?php echo $this->get('translator')->trans('Eliminar DKIM',array(),'templates'); ?></a>
+                <!-- /ko -->
+
+                <!-- ko ifnot: dkim() -->
+                <a class="btn pull-right" id="configure-dkim-button" data-bind="click: openModalSetDkim" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDNS', 'button', 'ZonaDNSSetDKIM');"><i class="icon-cog"></i> <?php echo $this->get('translator')->trans('Configurar DKIM',array(),'templates'); ?></a>
+                <!-- /ko -->
+            </div>
+        </div>
+    </header>
+
+    <div>
+        <div class="row-fluid mb10">
+            <div class="span4">
+                <!-- ko if: comesFromDomain -->
+                    <button class="btn small" data-bind="click: function() {$root.activeSection('domains');}" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'VolverADominios');" ><i class="icon icon-arrow-left"></i> <?php echo $this->get('translator')->trans('Volver al dominio',array(),'templates'); ?></button>
+                <!-- /ko -->
+                <!-- ko ifnot: comesFromDomain -->
+                    <select class="" data-bind="options: domains, optionsText: 'domain', value: domainSelected"></select>
+                <!-- /ko -->
+            </div>
+            <div class="span8 right">
+                
+                
+            </div>
+        </div>
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <a data-bind="click: sortByName.sortData">
+                            <?php echo $this->get('translator')->trans('Nombre',array(),'templates'); ?>
+                            <!-- ko if: sortByName.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByName.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th>
+                        <a data-bind="click: sortByType.sortData">
+                            <?php echo $this->get('translator')->trans('Tipo',array(),'templates'); ?>
+                            <!-- ko if: sortByType.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByType.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th class="hidden-phone ">
+                        <a data-bind="click: sortByContent.sortData">
+                            <?php echo $this->get('translator')->trans('Contenido',array(),'templates'); ?>
+                            <!-- ko if: sortByContent.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByContent.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+
+                    <th class="right">
+                        <?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko if: data().length <= 0  && !inprocess() -->
+                    <tr class="info">
+                        <td colspan="4">
+                            <span><?php echo $this->get('translator')->trans('Ningun registro',array(),'templates'); ?></span>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+
+                <!-- ko if: inprocess() -->
+                    <tr class="info">
+                        <td colspan="4">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+
+                <!-- ko if: !inprocess() -->
+                    <!-- ko foreach: data() -->
+                        <tr class="info">
+                            <td><span data-bind="text: name"></span></td>
+                            <td><span data-bind="text: type"></span></td>
+                            <td class="hidden-phone"><span data-bind="text: contentLess()"></span></td>
+
+
+                            <td class="right">
+                                <div data-bind="template: { name: 'rows-loading'}"></div>
+                                <!-- ko if: regStatus() == 1 -->
+                                    <button class="btn small tlt-toggle" data-bind="click: $parent.openModalEdit.bind($parent)"><i class="icon-edit"></i></button>
+                                    <div data-bind="visible: type() !== 'SOA', template: { name: 'delete-confirm'}" class="delete-confirm"></div>
+                                <!-- /ko -->
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                <!-- /ko -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div id="modal-manage" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'CerrarModalZonaDns');">×</button>
+        <h3><?php echo $this->get('translator')->trans('Registros DNS',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form data-bind="submit: save">
+            <div class="row-fluid">
+                <div>
+                    <label><?php echo $this->get('translator')->trans('Nombre',array(),'templates'); ?></label>
+                    <input type="text" data-bind="value: name" name="name" class="span12" autofocus="autofocus" />
+                    <span class="help-block error animated shake" data-bind="visible: name.errors(), text: name.errors()"></span>
+                </div>
+                <div>
+                    <label><?php echo $this->get('translator')->trans('Contenido',array(),'templates'); ?></label>
+                    <input type="text" data-bind="value: content" name="content" class="span12" />
+                    <span class="help-block error animated shake" data-bind="visible: content.errors(), text: content.errors()"></span>
+                </div>
+            </div>
+            <div class="row-fluid">
+                <div class="span4">
+                    <label><?php echo $this->get('translator')->trans('Tipo',array(),'templates'); ?></label>
+                    <select class="span12" name="type" data-bind="options: $parent.dnsRecordsTypes, value: type"></select>
+                    <span class="help-block error animated shake" data-bind="visible: type.errors(), text: type.errors()"></span>
+                </div>
+                <div class="span4">
+                    <label>TTL</label>
+                    <input type="number" name="ttl" data-bind="value: ttl" class="span12" />
+                    <span class="help-block error animated shake" data-bind="visible: ttl.errors(), text: ttl.errors()"></span>
+                </div>
+                <div class="span4">
+                    <label><?php echo $this->get('translator')->trans('Prioridad',array(),'templates'); ?></label>
+                    <input type="number" name="prio" data-bind="value: prio" class="span12" />
+                    <span class="help-block error animated shake" data-bind="visible: prio.errors(), text: prio.errors()"></span>
+                </div>
+            </div>
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'CancelarModalZonaDns');" ><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'GuardarModalZonaDns');" ><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<div class="modal animated fast pulse hide" id="restore-dns-zone-modal">
+    <div class="modal-header">
+        <h3><?php echo $this->get('translator')->trans('Restaurar zona DNS',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <p class="init-restore-msg">
+            <?php echo $this->get('translator')->trans('Esta seguro que desea restaurar la zona DNS para el dominio',array(),'templates'); ?>
+            <strong data-bind="text: domainSelected() && domainSelected().domain"></strong>?
+        </p>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'CancelarModalRestoreDns');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+        <!-- ko if: inprocess() == 0 -->
+            <button class="btn btn-primary" data-bind="click: restoreDnsZone" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'GuardarModalRestoreDns');" ><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<div class="modal animated fast pulse hide" id="configure-mx">
+    <div class="modal-header">
+        <h3><?php echo $this->get('translator')->trans('Configurar MX',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form data-bind="submit: configureMX">
+            <div>
+                <label><?php echo $this->get('translator')->trans('Proveedor',array(),'templates'); ?></label>
+                <!-- ko foreach: mxProviders -->
+                    <label class="radio mt0">
+                        <input type="radio" name="mxConfig" data-bind="value: value, checked: $parent.mxConfig, checkedValue: value"/>
+                        <span class="text-small" data-bind="text: $(label).html()"></span>
+                    </label>
+                <!-- /ko -->
+                <span class="help-block error animated shake" data-bind="visible: mxConfig.errors(), text: mxConfig.errors()"></span>
+            </div>
+
+            <div data-bind="visible: mxConfig() === 'hotmail'" class="animated fast bounceIn">
+                <label><?php echo $this->get('translator')->trans('Host ID',array(),'templates'); ?></label>
+                <div>
+                    <input type="text" class="full-width" name="mxCode" data-bind="value: mxCode" />
+                    <span class="help-block error animated shake" data-bind="visible: mxCode.errors(), text: mxCode.errors()"></span>
+                </div>
+            </div>
+            <div data-bind="visible: mxConfig() === 'other'">
+                <label><?php echo $this->get('translator')->trans('IP',array(),'templates'); ?> / <?php echo $this->get('translator')->trans('Dominio',array(),'templates'); ?></label>
+                <div>
+                    <input type="text" class="full-width" name="mxCode" data-bind="value: mxCode" />
+                    <span class="help-block error animated shake" data-bind="visible: mxCode.errors(), text: mxCode.errors()"></span>
+                </div>
+            </div>
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'CancelarModalConfigureMX');" ><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+        <!-- ko if: inprocess() == 0 -->
+            <button class="btn btn-primary" data-bind="click: configureMX" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'GuardarModalConfigureMX');"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<div class="modal animated fast pulse hide" id="configure-blogger">
+    <div class="modal-header">
+        <h3><?php echo $this->get('translator')->trans('Configurar Blogger',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form data-bind="submit: configureBlogger">
+            <div class="alert">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php echo $this->get('translator')->trans('warning-text-blogger-1',array(),'templates'); ?>.
+                <?php echo $this->get('translator')->trans('warning-text-blogger-2',array(),'templates'); ?>.
+            </div>
+
+            <div>
+                <label><?php echo $this->get('translator')->trans('Nombre de la aplicacion',array(),'templates'); ?></label>
+                <div>
+                    <input type="text" class="full-width" name="appName" data-bind="value: bloggerConfig.appName" placeholder="blog" autofocus="autofocus" />
+                    <span class="help-block error animated shake" data-bind="visible: bloggerConfig.appName.errors(), text: bloggerConfig.appName.errors()"></span>
+                </div>
+            </div>
+
+            <div>
+                <label><?php echo $this->get('translator')->trans('Nombre',array(),'templates'); ?></label>
+                <div class="input-append">
+                    <input type="text" name="name" data-bind="value: bloggerConfig.name" placeholder="blogspot" />
+                    <span class="add-on">
+                        <span>.</span>
+                    </span>
+                    <span class="add-on">
+                        <span data-bind="text: domainSelected() && domainSelected().domain"></span>
+                    </span>
+                </div>
+                <span class="help-block error animated shake" data-bind="visible: bloggerConfig.name.errors(), text: bloggerConfig.name.errors()"></span>
+            </div>
+
+            <div>
+                <label><?php echo $this->get('translator')->trans('Contenido',array(),'templates'); ?></label>
+                <div>
+                    <input type="text" class="full-width" name="content" data-bind="value: bloggerConfig.content" placeholder="" />
+                    <span class="help-block error animated shake" data-bind="visible: bloggerConfig.content.errors(), text: bloggerConfig.content.errors()"></span>
+                </div>
+            </div>
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'CancelarModalBlogger');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+        <!-- ko if: inprocess() == 0 -->
+            <button class="btn btn-primary" data-bind="click: configureBlogger" onclick="FerozoDhm.sendAnalytics('event', 'ZonaDns', 'Button', 'GuardarModalBlogger');"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<div class="modal animated fast pulse hide" id="unset-dkim-modal">
+    <div class="modal-header">
+        <h3><?php echo $this->get('translator')->trans('Eliminar DKIM',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <p class="init-restore-msg">
+            <?php echo $this->get('translator')->trans('Está seguro que desea eliminar DKIM para el dominio',array(),'templates'); ?>
+            <strong data-bind="text: domainSelected() && domainSelected().domain"></strong>?
+        </p>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+        <!-- ko if: inprocess() == 0 -->
+            <button class="btn btn-primary" data-bind="click: confDkim"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<div class="modal animated fast pulse hide" id="set-dkim-modal">
+    <div class="modal-header">
+        <h3><?php echo $this->get('translator')->trans('Configurar DKIM',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <p class="init-restore-msg">
+            <?php echo $this->get('translator')->trans('Está seguro que desea configurar DKIM para el dominio',array(),'templates'); ?>
+            <strong data-bind="text: domainSelected() && domainSelected().domain"></strong>?
+        </p>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+        <!-- ko if: inprocess() == 0 -->
+            <button class="btn btn-primary" data-bind="click: confDkim"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+<span class="hide" id="trans-dns-mx-restore-default"><?php echo $this->get('translator')->trans('Restaurar MX por defecto',array(),'templates'); ?></span>
+<span class="hide" id="trans-dns-mx-configure-google"><?php echo $this->get('translator')->trans('Configurar MX de Google',array(),'templates'); ?></span>
+<span class="hide" id="trans-dns-mx-configure-live"><?php echo $this->get('translator')->trans('Configurar MX de Windows Live',array(),'templates'); ?></span>
+<span class="hide" id="trans-dns-mx-configure-other"><?php echo $this->get('translator')->trans('Configurar MX de Otro Proveedor',array(),'templates'); ?></span>
+<span class="hide" id="trans-dns-mx-configure-office"><?php echo $this->get('translator')->trans('Configurar MX de Office 365',array(),'templates'); ?></span>
+<!-- /ko -->

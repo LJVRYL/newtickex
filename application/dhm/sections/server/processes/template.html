@@ -1,0 +1,88 @@
+<!-- ko with: processesVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/server"><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Procesos en ejecucion',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Procesos en ejecucion',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+            <a class="btn btn-primary pull-right" data-bind="click: refresh"  onclick="FerozoDhm.sendAnalytics('event', 'Process', 'Button', 'Actualizar' );"><?php echo $this->get('translator')->trans('Refrescar',array(),'templates'); ?></a>
+        </div>
+    </header>
+
+    <div>
+        <table class="table table-hover processes">
+            <thead>
+                <tr>
+                    <th>
+                        <a data-bind="click: sortByPid.sortData">
+                            <?php echo $this->get('translator')->trans('PID',array(),'templates'); ?>
+                            <!-- ko if: sortByPid.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByPid.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th>
+                        <a data-bind="click: sortByUser.sortData">
+                            <?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?>
+                            <!-- ko if: sortByUser.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByUser.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th>
+                        <a data-bind="click: sortByCommand.sortData">
+                            <?php echo $this->get('translator')->trans('Comando',array(),'templates'); ?>
+                            <!-- ko if: sortByCommand.sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortByCommand.sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th><?php echo $this->get('translator')->trans('Tiempo',array(),'templates'); ?></th>
+                    <th><?php echo $this->get('translator')->trans('Prioridad',array(),'templates'); ?></th>
+                    <th><?php echo $this->get('translator')->trans('Estado',array(),'templates'); ?></th>
+                    <th><?php echo $this->get('translator')->trans('Tamaño',array(),'templates'); ?></th>
+                    <th>%<?php echo $this->get('translator')->trans('CPU',array(),'templates'); ?></th>
+                    <th>%<?php echo $this->get('translator')->trans('Memoria',array(),'templates'); ?></th>
+                    <th><?php echo $this->get('translator')->trans('PHMemory',array(),'templates'); ?></th>
+                    <th><?php echo $this->get('translator')->trans('SHMemory',array(),'templates'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko if: data().length <= 0  && !inprocess() -->
+
+                <!-- /ko -->
+
+                <!-- ko if: data().length <= 0  && inprocess() -->
+                    <tr class="info">
+                        <td colspan="11">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+
+                <!-- ko foreach: data() -->
+                    <tr class="info">
+                        <td><span data-bind="text: pid"></span></td>
+                        <td><span data-bind="text: user"></span></td>
+                        <td><span data-bind="text: command"></span></td>
+                        <td><span data-bind="text: time"></span></td>
+                        <td><span data-bind="text: priority"></span></td>
+                        <td><span data-bind="text: status"></span></td>
+                        <td><span data-bind="text: size"></span></td>
+                        <td><span data-bind="text: cpupercent() + '%'"></span></td>
+                        <td><span data-bind="text: memorypercent() + '%'"></span></td>
+                        <td><span data-bind="text: phmemory"></span></td>
+                        <td><span data-bind="text: shmemory"></span></td>
+                    </tr>
+                <!-- /ko -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- /ko -->

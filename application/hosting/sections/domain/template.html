@@ -1,0 +1,40 @@
+<!-- ko with: domainVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Dominios',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="section-head-title"><?php echo $this->get('translator')->trans('Dominios',array(),'templates'); ?></h2>
+    </header>
+
+    <section class="tab-content">
+        <ul class="squarebuttons tab-pane active">
+            <!-- ko foreach: $root.childsOf('domain') -->
+                <!-- ko if: type != "hidden" -->
+                    <li class="span3">
+                        <a class="squarebutton domain" data-bind="attr: {'href': link}">
+                        <i data-bind="attr: {'class': 'icon '+icon}"></i>
+                            <span data-bind="text: value"></span>
+                        </a>
+                    </li>
+                <!-- /ko -->
+            <!-- /ko -->
+            <?php if (! $accountInfo["WhiteLabel"]) { ?>
+                    <li class="span3 ta-c banner"> 
+                        <a class="squarebutton domain banner" style="cursor: default">
+                            <span class="titulo-banner"><?php echo $this->get('translator')->trans('Ya tienes tu hosting',array(),'templates'); ?></span>
+                            <span class="subtitulo-banner"><?php echo $this->get('translator')->trans('Encuentra tu dominio perfecto',array(),'templates'); ?></span>
+                            <button id="banner-reg-domain" data-bind="click: $root.domainRegVM() && $root.domainRegVM().openModal" class="btn-dominios principal small btn-domain" type="button"><?php echo $this->get('translator')->trans('Regístralo ahora',array(),'templates'); ?></button> 
+                        </a> 
+                    </li>                    
+            <?php } ?>        
+        </ul>
+    </section>
+</div>
+<!-- /ko -->

@@ -1,0 +1,163 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Login Admin – TICKEX";
+
+// Logout (compat)
+if (isset($_GET['logout'])) {
+    $_SESSION = array();
+    if (ini_get("session.use_cookies")) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $p["path"], $p["domain"], $p["secure"], $p["httponly"]
+        );
+    }
+    session_destroy();
+    header("Location: login.php");
+    exit;
+}
+
+/**
+ * Detectar si ya está logueado.
+ * Compat: si existe session vieja 'usuario' o session nueva 'user'
+ */
+$isLoggedOld = !empty($_SESSION['usuario']);
+$isLoggedNew = !empty($_SESSION['user']);
+
+if ($isLoggedOld || $isLoggedNew) {
+
+    // Preferimos nueva, si no hay usamos vieja
+    if ($isLoggedNew) {
+        $tg  = isset($_SESSION['user']['rol']) ? $_SESSION['user']['rol'] : '';
+        $re  = isset($_SESSION['user']['rol_evento']) ? $_SESSION['user']['rol_evento'] : '';
+        $eid = isset($_SESSION['user']['evento_id']) ? (int)$_SESSION['user']['evento_id'] : 0;
+    } else {
+        $tg  = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
+        $re  = isset($_SESSION['rol_evento']) ? $_SESSION['rol_evento'] : '';
+        $eid = isset($_SESSION['evento_id']) ? (int)$_SESSION['evento_id'] : 0;
+    }
+
+    if ($eid <= 0) { $eid = 1; }
+
+    if ($tg === 'super_admin' || $tg === 'superadmin') {
+        header("Location: superadmin.php"); exit;
+    }
+    if ($tg === 'admin_evento') {
+        header("Location: panel_admin.php"); exit;
+    }
+    if ($tg === 'staff_evento' && $re === 'puerta') {
+        header("Location: puerta.php?evento_id=".$eid); exit;
+    }
+
+    header("Location: panel_admin.php"); exit;
+}
+
+// ===== Procesar login =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user = isset($_POST['user']) ? trim($_POST['user']) : '';
+    $pass = isset($_POST['pass']) ? (string)$_POST['pass'] : '';
+
+    if ($user === '' || $pass === '') {
+        flash('warn', "Completá usuario y contraseña.");
+    } else {
+
+        try {
+            $pdo = db();
+            $stmt = $pdo->prepare("
+                SELECT id, username, password, tipo_global, rol_evento, evento_id, activo
+                FROM usuarios_admin
+                WHERE username = :u
+                LIMIT 1
+            ");
+            $stmt->execute(array(':u' => $user));
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row || (int)$row['activo'] !== 1) {
+                flash('err', "Usuario no encontrado o inactivo.");
+            } elseif ((string)$row['password'] !== $pass) {
+                flash('err', "Contraseña incorrecta.");
+            } else {
+
+                // ✅ Login OK: sesiones viejas (compat total)
+                $_SESSION['usuario']     = $row['username'];
+                $_SESSION['user_id']     = (int)$row['id'];
+                $_SESSION['tipo_global'] = $row['tipo_global'];
+                $_SESSION['rol_evento']  = $row['rol_evento'];
+                $_SESSION['evento_id']   = isset($row['evento_id']) ? (int)$row['evento_id'] : 0;
+
+                // ✅ Login OK: sesión nueva para helpers/layout
+                $_SESSION['user'] = array(
+                    'id'         => (int)$row['id'],
+                    'username'   => $row['username'],
+                    'nombre'     => $row['username'], // después lo cambiamos por nombre real si existe
+                    'rol'        => $row['tipo_global'],  // super_admin / admin_evento / staff_evento
+                    'rol_evento' => $row['rol_evento'],
+                    'evento_id'  => isset($row['evento_id']) ? (int)$row['evento_id'] : 0,
+                );
+
+                $tipo = strtolower(trim($row['tipo_global']));
+                $rol  = strtolower(trim((string)$row['rol_evento']));
+                $eid  = (int)$_SESSION['evento_id'];
+                if ($eid <= 0) { $eid = 1; }
+
+                if ($tipo === 'super_admin')  { header("Location: superadmin.php"); exit; }
+                if ($tipo === 'admin_evento') { header("Location: panel_admin.php"); exit; }
+
+                if ($tipo === 'staff_evento') {
+                    if ($rol === 'puerta') {
+                        header("Location: puerta.php?evento_id=".$eid); exit;
+                    }
+                    header("Location: panel_admin.php"); exit;
+                }
+
+                header("Location: panel_admin.php"); exit;
+            }
+
+        } catch (Exception $ex) {
+            flash('err', "Error DB: ".$ex->getMessage());
+        }
+    }
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+
+<style>
+/* solo para centrar login */
+.login-wrap{
+  max-width:420px;
+  margin:60px auto;
+}
+.login-title{
+  text-align:center;
+  margin-bottom:6px;
+}
+.login-sub{
+  text-align:center;
+  color:var(--muted);
+  margin-bottom:14px;
+  font-size:14px;
+}
+</style>
+
+<div class="login-wrap">
+  <div class="card">
+    <h2 class="login-title">Login Admin – TICKEX</h2>
+    <div class="login-sub">Ingresá tu usuario y contraseña.</div>
+
+    <form method="post" action="login.php">
+      <div style="margin-bottom:12px;">
+        <label>Usuario</label>
+        <input type="text" name="user" autocomplete="off" required />
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label>Contraseña</label>
+        <input type="password" name="pass" autocomplete="off" required />
+      </div>
+
+      <button class="btn" type="submit" style="width:100%;">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>

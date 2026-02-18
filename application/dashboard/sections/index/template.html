@@ -1,0 +1,35 @@
+<!-- ko with: indexVM -->
+    <section class="clearfix animated superfast fadeIn">
+
+        <nav class="section-breadcrum row-fluid">
+            <ul class="breadcrumb">
+              <li class="active"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></li>
+            </ul>
+            <hr class="mb0" />
+        </nav>
+        
+        <section class="tab-content">
+            <ul class="squarebuttons tab-pane active">
+                <li class="span3">
+                    <a class="squarebutton email" href="#/panelalert/panelalerts">
+                        <i class="icon icon-warning-sign"></i>
+                        <span><?php echo $this->get('translator')->trans('Alertas',array(),'templates'); ?></span>
+                    </a>
+                    <div class="squarebutton-info-title email">
+                        <span data-bind="text: newPanelAlerts"></span> <?php echo $this->get('translator')->trans('Alertas Abiertas',array(),'templates'); ?>
+                    </div>
+                </li>                
+                <li class="span3">
+                    <a class="squarebutton website" href="#/panelalert/alertsgraph">
+                        <i class="icon icon-globe"></i>
+                        <span><?php echo $this->get('translator')->trans('Distribución de alertas',array(),'templates'); ?></span>
+                    </a>
+                    <div class="squarebutton-info-title website">
+                        -----------------------------------------
+                    </div>
+                </li>                
+            </ul>
+        </section>
+        
+    </section>
+<!-- /ko -->

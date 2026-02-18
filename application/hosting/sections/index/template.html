@@ -1,0 +1,324 @@
+<!-- ko with: indexVM -->
+    <style>
+        .hosting .contenedor-buscar-dominios .col-img-banner {
+           position: relative;
+        }
+        .hosting .contenedor-buscar-dominios .col-img-banner img{
+            position: absolute;
+            right: 30px;
+            top: 15px;
+            height: 210px;
+        }
+        .hosting .contenedor-buscar-dominios input{
+            background: transparent;
+            box-shadow: 0 0.5px 0 0 black !important;
+            border-radius: 0px;
+            padding: 4px 0px 0px 4px;
+            margin: 0px 0px 10px 0px;
+        }
+        .hosting .contenedor-buscar-dominios i{
+            font-size: 2.3rem;
+        }
+        .hosting .titulo-productos{
+            font-size: 29px;
+            margin: 50px auto 0px auto;
+            color: #848484;
+        }
+        .hosting .row-productos.redes{
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            justify-content: space-around;
+            align-items: stretch;
+            align-content: stretch;
+            padding: 40px 0px;
+        }
+        .hosting .row-productos.redes .bloque-superior{
+            background-color: #ffffff;
+            max-width: 30%;
+            width: 350px;
+            padding: 20px 15px;
+            text-align: center;
+            border-radius: 5px;
+            box-sizing: border-box;
+            border: 1px solid #e9e9e9;
+            margin: 10px auto;
+        }
+        .hosting .row-productos.redes .bloque-superior .cabecera{
+            display: flex;
+            flex-direction: column;
+            flex-wrap: wrap-reverse;
+            justify-content: flex-end;
+            align-items: center;
+            align-content: stretch;
+            height: 190px;
+            margin: 0px 0px 20px 0px;
+        }
+        .hosting .row-productos.redes .bloque-superior .cabecera img{
+            max-width: 90%;
+        }
+        .hosting .row-productos.redes .bloque-superior .contenido-productos{
+            width: 100% !important;
+        }
+        .hosting .row-productos.redes .bloque-superior .titulo-producto{
+            color: #676767;
+            font-size: 15px;
+            margin: 30px 0px 10px 0px;
+        }
+        .hosting .row-productos.redes .bloque-superior .texto-producto{
+            margin: 0px;
+            text-align: center;
+            padding: 0px 10px;
+            width: auto;
+            font-size: 16px;
+            height: 70px;
+        }
+        .hosting .row-productos.redes .bloque-superior .btn-secondary{
+            padding: 10px 20px;
+            margin: 5px 0px;
+            background: transparent;
+            border-radius: 4px;
+            color: #909090;
+        }
+        .hosting .row-productos.redes .bloque-superior .btn-secondary:hover{
+            background: #eaeaea;
+        }
+
+        @media (max-width: 1200px) {
+            .hosting .row-productos.redes .bloque-superior .cabecera{
+                height: 180px;
+                margin: 0px;
+            }
+            .hosting .row-productos.redes .bloque-superior .texto-producto{
+                height: 90px; 
+            }
+            .hosting .row-productos.redes .bloque-superior{
+                max-width: 33%;
+            }
+        }
+
+        @media (max-width: 980px) {
+            .hosting .row-productos.redes{
+                display: flex;
+                flex-direction: column;
+                flex-wrap: wrap-reverse;
+                justify-content: flex-end;
+                align-items: center;
+                align-content: stretch;
+            }
+            .hosting .row-productos.redes .bloque-superior{
+                max-width: 100%;
+            }
+        }
+    </style>
+    <section class="clearfix animated superfast fadeIn">
+
+        <nav class="section-breadcrum row-fluid">
+            <ul class="breadcrumb">
+              <li class="active"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></li>
+            </ul>
+            <hr class="mb0" />
+        </nav>
+
+        <!-- ko with: $root.profileVM() -->
+            <!-- ko with: user() -->
+            <section class="tab-content">
+                <ul class="squarebuttons tab-pane active">
+                <?php if(in_array("domains",$accountInfo["FeaturesEnabled"]) || in_array("dnsZone",$accountInfo["FeaturesEnabled"])): ?>
+                    <li class="span3">
+                        <a class="squarebutton domain"  href="#/domain">
+                            <i class="icon icon-globe"></i>
+                            <span><?php echo $this->get('translator')->trans('Dominios',array(),'templates'); ?></span>
+                        </a>
+                        <div class="squarebutton-info-title domain">
+                            <span data-bind="text: Domains().length"></span> <?php echo $this->get('translator')->trans('Dominios apuntados',array(),'templates'); ?>
+                        </div>
+                        <!-- ko if: Domains().length -->
+                            <div class="squarebutton-info domain">
+                                <ul class="unstyled">
+                                    <!-- ko foreach: Domains() -->
+                                        <!-- ko if: $index() <= "2" -->
+                                            <li data-bind="text: Name"></li>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                 </ul>
+                            </div>
+                        <!-- /ko -->
+                    </li>
+                <?php endif; ?>
+                <?php if(in_array("ftp",$accountInfo["FeaturesEnabled"]) || in_array("filesAdministrator",$accountInfo["FeaturesEnabled"]) || in_array("uploadSite",$accountInfo["FeaturesEnabled"]) || in_array("phpConfig",$accountInfo["FeaturesEnabled"]) || in_array("backup",$accountInfo["FeaturesEnabled"]) || in_array("errorPage",$accountInfo["FeaturesEnabled"]) || in_array("optimize",$accountInfo["FeaturesEnabled"])): ?>
+                    <li class="span3">
+                        <a class="squarebutton website" href="#/website">
+                            <i class="icon icon-laptop"></i>
+                            <span><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates');?> </span>
+                        </a>
+                        <div class="squarebutton-info-title website">
+                            <span data-bind="text: FtpAccounts().length"></span> <?php echo $this->get('translator')->trans('FtpAccounts',array(),'templates'); ?>
+                        </div>
+                        <!-- ko if: FtpAccounts().length -->
+                            <div class="squarebutton-info website">
+                                <ul class="unstyled">
+                                    <!-- ko foreach: FtpAccounts() -->
+                                        <!-- ko if: $index() <= "2" -->
+                                            <li data-bind="text: 'ftp://' + Name()"></li>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                 </ul>
+                            </div>
+                        <!-- /ko -->
+                    </li>
+                <?php endif; ?>
+                <?php if(in_array("emails",$accountInfo["FeaturesEnabled"])): ?>
+                    <li class="span3">
+                        <a class="squarebutton email" href="#/email">
+                            <i class="icon icon-envelope"></i>
+                            <span><?php echo $this->get('translator')->trans('Email',array(),'templates'); ?></span>
+                        </a>
+                        <div class="squarebutton-info-title email">
+                            <span data-bind="text: EmailsCount()"></span> <?php echo $this->get('translator')->trans('Cuentas de correo',array(),'templates'); ?>
+                        </div>
+                        <!-- ko if: Emails().length -->
+                            <div class="squarebutton-info email">
+                                <ul class="unstyled">
+                                    <!-- ko foreach: Emails() -->
+                                        <!-- ko if: $index() <= "2" -->
+                                            <li data-bind="text: Name"></li>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                 </ul>
+                            </div>
+                        <!-- /ko -->
+                    </li>
+                <?php endif; ?>
+                <?php if(in_array("PackAmigo",$accountInfo["FeaturesEnabled"])): ?>
+                    <li class="span3">
+                        <?php if($accountInfo["Server"]["Type"] == "Shared"){ ?>
+                            <a class="squarebutton packamigo" href="#/wordpress">
+                                <i class="icon icon-new fa-cube"></i>
+                                <span ><?php echo $this->get('translator')->trans('Wordpress',array(),'templates'); ?></span>
+                            </a>
+                            <div class="squarebutton-info-title packamigo">
+                                <span data-bind="text: WebApps().length"></span> <?php echo $this->get('translator')->trans('Wordpress Instalados',array(),'templates'); ?>
+                            </div>
+                        <?php } ?>
+                        <?php if($accountInfo["Server"]["Type"] != "Shared"){ ?>
+                            <a class="squarebutton packamigo" href="#/wordpress">
+                                <i class="icon icon-new fa-cube"></i>
+                                <span ><?php echo $this->get('translator')->trans('Wordpress & Apps',array(),'templates'); ?></span>
+                            </a>
+                            <div class="squarebutton-info-title packamigo">
+                                <span data-bind="text: WebApps().length"></span> <?php echo $this->get('translator')->trans('Aplicaciones Instaladas',array(),'templates'); ?>
+                            </div>
+                        <?php } ?>
+                        <!-- ko if: WebApps().length -->
+                            <div class="squarebutton-info packamigo">
+                                <ul class="unstyled">
+                                    <!-- ko foreach: WebApps() -->
+                                        <!-- ko if: $index() <= "2" -->
+                                            <li data-bind="text: Name() + ' ('+ Domain() +')'"></li>
+                                        <!-- /ko -->
+                                    <!-- /ko -->
+                                 </ul>
+                            </div>
+                        <!-- /ko -->
+                    </li>
+                <?php endif; ?>
+                </ul>
+            </section>
+            <!-- /ko -->
+        <!-- /ko -->
+
+        <?php if (! $accountInfo["WhiteLabel"]) { ?>
+            <?php if ($accountInfo["FreeDomainTlds"]) { ?>
+            <a href="#" style="color: #5cb85c;font-weight: bold;" ><?php echo $this->get('translator')->trans('Tienes un dominio gratis disponible',array(),'templates'); ?></a>
+            <?php } ?>
+            <section class="row-fluid hosting mb-3x">
+                <nav class="section-breadcrum">
+                    <ul class="breadcrumb">
+                      <li class="active"><i class="icon-thumbs-up mr5"></i><?php echo $this->get('translator')->trans('Haz crecer tu sitio',array(),'templates'); ?></li>
+                    </ul>
+                    <hr class="mb0" />
+                </nav>
+
+<div class="contenedor-buscar-dominios">
+                        <div class="col-input-domain pl-1x ">
+                                <h3 class="titulo-buscar-dominios fw-300"><?php echo $this->get('translator')->trans('Ya tienes tu hosting',array(),'templates'); ?></h3>
+                                <h2 class="fw-300"><?php echo $this->get('translator')->trans('Encuentra tu dominio perfecto',array(),'templates'); ?></h2>
+                                <div class="input-dominios-field" id="contenedor-user">
+                                        <input id="tbxDominio" data-bind="value: domainReg, event:{keypress: checkEnterRegDomain}" type="text" class="input-dominios" placeholder="Ej.: pizza24hs.com"/>
+                                        <i data-bind="click: goRegDomain" class="icon-search icono-busqueda"></i>
+                                </div>
+                                
+                                <h5 class="fw-600 fs-15"><img src="/application/assets/img/blue-check-icon.png" class="icono-check" alt=""/>  <?php echo $this->get('translator')->trans('Asegúrate que sea simple y fácil de recordar',array(),'templates'); ?></h5>
+                        </div>
+                        <div class="col-img-banner">
+                                <img src="/application/assets/img/ferozo_banner_01.png" class="img-hidden img-hidden-tablet"/>
+                        </div>
+                </div>
+
+                <div class="contenedor-productos" style="padding-top: 0em;" >
+                        <div class="row-productos ta-c" >
+                                <h3 class="titulo-productos fw-300"><?php echo $this->get('translator')->trans('Lleva más clientes a tu web',array(),'templates'); ?></h3>
+                                
+                        </div>
+                        <div class="row-productos redes">
+                                <div class="bloque-superior">
+                                        <div class="cabecera">
+                                            <img src="/application/assets/img/ferozo_banner_02.png" alt=""/>
+                                        </div>                                        
+                                        <div class="contenido-productos">
+                                            <p class="titulo-producto"><?php echo $this->get('translator')->trans('Email marketing efectivo',array(),'templates'); ?></p>
+                                            <p class="texto-producto">
+                                                <strong><?php echo $this->get('translator')->trans('Crea y envía impactantes emails',array(),'templates'); ?></strong> 
+                                                <br/>
+                                                <?php echo $this->get('translator')->trans('en cuestión de minutos',array(),'templates'); ?>
+                                            </p>
+                                        </div>
+                                        <a class="btn btn-secondary" href="https://envialosimple.com/?utm_source=panel_ferozo&utm_medium=banner&utm_campaign=cs-ferozo-envialosimple" target="_blank">
+                                            <?php echo $this->get('translator')->trans('COMIENZA HOY',array(),'templates'); ?>
+                                        </a>
+                                </div>
+                                
+                                <div class="bloque-superior">
+                                        <div class="cabecera">
+                                            <img src="/application/assets/img/ferozo_banner_03.png" alt="" />
+                                        </div>
+
+                                        <div class="contenido-productos">
+                                            <p class="titulo-producto"><?php echo $this->get('translator')->trans('Seguridad y prestigio para tu web',array(),'templates'); ?></p>
+                                            <p class="texto-producto">
+                                                <?php echo $this->get('translator')->trans('Sin un ',array(),'templates'); ?>
+                                                <strong><?php echo $this->get('translator')->trans('Certificado SSL',array(),'templates'); ?></strong>, 
+                                                <?php echo $this->get('translator')->trans('Google Chrome mostrará que tu sitio no es seguro',array(),'templates'); ?>
+                                            </p>
+                                        </div>
+
+                                        <a class="btn btn-secondary" href="https://donweb.com/certificados-ssl?utm_source=panel_ferozo&utm_medium=banner&utm_campaign=cs-ferozo-ssl" target="_blank">
+                                            <?php echo $this->get('translator')->trans('SABER MÁS',array(),'templates'); ?>
+                                        </a>
+
+                                </div>
+                                
+                                <div class="bloque-superior">
+                                        <div class="cabecera">
+                                            <img src="/application/assets/img/ferozo_banner_04.png" alt="" />
+                                        </div>
+                                        <div class="contenido-productos">
+                                            <p class="titulo-producto"><?php echo $this->get('translator')->trans('Cloud servers',array(),'templates'); ?></p>
+                                            <p class="texto-producto">
+                                                <?php echo $this->get('translator')->trans('Mejora tu página o aplicación con el',array(),'templates'); ?>
+                                                <strong><?php echo $this->get('translator')->trans('poder de la nube',array(),'templates'); ?></strong>
+                                            </p>
+                                        </div>
+                                        <a class="btn btn-secondary" href="https://donweb.com/hosting-cloud-servers-vps?utm_source=panel_ferozo&utm_medium=banner&utm_campaign=cs-ferozo-cloud" target="_blank">
+                                            <?php echo $this->get('translator')->trans('MÁS INFO',array(),'templates'); ?>
+                                        </a>
+                                </div>
+                        </div>
+                        
+                </div>
+            </section>
+        <?php } ?>
+
+    </section>
+<!-- /ko -->

@@ -1,0 +1,127 @@
+<?php
+// registro.php – API de registro desde el formulario público
+header('Content-Type: application/json; charset=utf-8');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+    exit;
+}
+
+$raw   = file_get_contents('php://input');
+$input = json_decode($raw, true);
+
+if (!is_array($input)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'JSON inválido']);
+    exit;
+}
+
+// Campos
+$nombre    = trim(isset($input['nombre']) ? $input['nombre'] : '');
+$email     = trim(isset($input['email']) ? $input['email'] : '');
+$timestamp = isset($input['timestamp']) ? $input['timestamp'] : null;
+
+// Validación básica
+if ($nombre === '' || $email === '') {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Falta nombre o email']);
+    exit;
+}
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Email inválido']);
+    exit;
+}
+
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // Creamos la tabla con la columna tipo incluida (por si alguna vez no existe)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS entradas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            email TEXT NOT NULL,
+            fecha_registro TEXT NOT NULL,
+            codigo TEXT NOT NULL UNIQUE,
+            checked_in INTEGER NOT NULL DEFAULT 0,
+            checked_in_at TEXT,
+            tipo TEXT NOT NULL DEFAULT 'FREE'
+        )
+    ");
+
+    // Fecha/hora AR
+    $dt = new DateTime('now', new DateTimeZone('America/Argentina/Buenos_Aires'));
+    $fechaRegistro = $dt->format('Y-m-d H:i:s');
+
+    // Código único
+    if (function_exists('random_bytes')) {
+        $codigo = bin2hex(random_bytes(5)); // 10 caracteres hex
+    } else {
+        $codigo = substr(sha1(uniqid('', true)), 0, 10);
+    }
+
+    // IMPORTANTE: todo lo que viene de acá va como FREE
+    $stmt = $pdo->prepare("
+        INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo)
+        VALUES (:nombre, :email, :fecha_registro, :codigo, 0, 'FREE')
+    ");
+
+    $stmt->execute(array(
+        ':nombre'         => $nombre,
+        ':email'          => $email,
+        ':fecha_registro' => $fechaRegistro,
+        ':codigo'         => $codigo,
+    ));
+
+    $id = $pdo->lastInsertId();
+
+    // ===========================
+    //   ENVÍO DE EMAIL AUTOMÁTICO
+    // ===========================
+    $baseUrl   = 'https://str.tickex.com.ar';
+    $ticketUrl = $baseUrl . '/ticket.php?c=' . urlencode($codigo);
+
+    $to      = $email;
+    $subject = 'Tu entrada #' . (int)$id . ' para Save The Rave';
+
+    $body  = 'Hola ' . $nombre . ',' . "\n\n";
+    $body .= "Te dejo tu entrada para Save The Rave:\n\n";
+    $body .= 'Número de entrada: #' . (int)$id . "\n";
+    $body .= 'Nombre / alias: ' . $nombre . "\n";
+    $body .= 'Email registrado: ' . $email . "\n\n";
+    $body .= "Abrí este link para ver tu QR de acceso:\n";
+    $body .= $ticketUrl . "\n\n";
+    $body .= "En la puerta vamos a escanear ese QR para validar tu entrada.\n";
+    $body .= "Guardá este mensaje hasta la fecha del evento.\n\n";
+    $body .= "¡Gracias por ser parte de Save The Rave!\n";
+
+    $headers  = "From: Save The Rave <no-reply@tickex.com.ar>\r\n";
+    $headers .= "Reply-To: no-reply@tickex.com.ar\r\n";
+    $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
+
+    // Importante: -f para que el envelope sender sea tickex.com.ar
+    $mailOk = @mail($to, $subject, $body, $headers, '-f no-reply@tickex.com.ar');
+
+    echo json_encode(array(
+        'ok'           => true,
+        'id'           => (int)$id,
+        'codigo'       => $codigo,
+        'fecha'        => $fechaRegistro,
+        'tipo'         => 'FREE',
+        'mail_enviado' => $mailOk ? 1 : 0
+    ));
+
+} catch (T
+    http_response_code(500);
+    echo json_encode(array(
+        'ok'      => false,
+        'error'   => 'Error en el servidor',
+        'detalle' => $e->getMessage()
+    ));
+}

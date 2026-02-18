@@ -1,0 +1,141 @@
+<?php
+// registro.php – API de registro desde el formulario público
+header('Content-Type: application/json; charset=utf-8');
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+// Solo POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(array('ok' => false, 'error' => 'Método no permitido'));
+    exit;
+}
+
+// Leer JSON crudo
+$raw   = file_get_contents('php://input');
+$input = json_decode($raw, true);
+
+if (!is_array($input)) {
+    http_response_code(400);
+    echo json_encode(array('ok' => false, 'error' => 'JSON inválido'));
+    exit;
+}
+
+// Campos
+$nombre    = trim(isset($input['nombre']) ? $input['nombre'] : '');
+$email     = trim(isset($input['email']) ? $input['email'] : '');
+$timestamp = isset($input['timestamp']) ? $input['timestamp'] : null;
+
+// Validación básica
+if ($nombre === '' || $email === '') {
+    http_response_code(400);
+    echo json_encode(array('ok' => false, 'error' => 'Falta nombre o email'));
+    exit;
+}
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    http_response_code(400);
+    echo json_encode(array('ok' => false, 'error' => 'Email inválido'));
+    exit;
+}
+
+// Función para enviar el mail de entrada usando tickex.com.ar
+function enviar_mail_entrada($to, $nombre, $codigo, $id, $fechaRegistro, $tipo = 'FREE')
+{
+    $fromEmail = 'no-reply@tickex.com.ar';
+    $fromName  = 'Save The Rave';
+    $from      = $fromName . ' <' . $fromEmail . '>';
+
+    $ticketUrl = 'https://str.tickex.com.ar/ticket.php?c=' . urlencode($codigo);
+    $subject   = 'Tu entrada #' . (int)$id . ' para Save The Rave';
+
+    $body  = "Hola " . $nombre . ",\n\n";
+    $body .= "¡Gracias por registrarte en SAVE THE RAVE!\n\n";
+    $body .= "Datos de tu entrada:\n";
+    $body .= "  - Número de entrada: #" . (int)$id . "\n";
+    $body .= "  - Nombre / alias: " . $nombre . "\n";
+    $body .= "  - Email registrado: " . $to . "\n";
+    $body .= "  - Tipo: " . $tipo . "\n";
+    $body .= "  - Fecha de registro: " . $fechaRegistro . "\n\n";
+    $body .= "Para ver tu QR de acceso, abrí este link:\n";
+    $body .= $ticketUrl . "\n\n";
+    $body .= "En la puerta vamos a escanear ese QR para validar tu entrada.\n";
+    $body .= "Guardá este mensaje hasta la fecha del evento.\n\n";
+    $body .= "Save The Rave\n";
+    $body .= "tickex.com.ar\n";
+
+    $headers  = "From: " . $from . "\r\n";
+    $headers .= "Reply-To: " . $fromEmail . "\r\n";
+    $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
+
+    return mail($to, $subject, $body, $headers);
+}
+
+$dbFile = __DIR__ . '/save_the_rave.sqlite';
+
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // Aseguramos que la tabla exista (si ya existe, no la toca)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS entradas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            email TEXT NOT NULL,
+            fecha_registro TEXT NOT NULL,
+            codigo TEXT NOT NULL UNIQUE,
+            checked_in INTEGER NOT NULL DEFAULT 0,
+            checked_in_at TEXT,
+            tipo TEXT NOT NULL DEFAULT 'FREE',
+            monto_pagado INTEGER NOT NULL DEFAULT 0,
+            evento_id INTEGER NOT NULL DEFAULT 1
+        )
+    ");
+
+    // Fecha/hora AR
+    $dt = new DateTime('now', new DateTimeZone('America/Argentina/Buenos_Aires'));
+    $fechaRegistro = $dt->format('Y-m-d H:i:s');
+
+    // Código único
+    if (function_exists('random_bytes')) {
+        $codigo = bin2hex(random_bytes(5)); // 10 caracteres hex
+    } else {
+        $codigo = substr(sha1(uniqid('', true)), 0, 10);
+    }
+
+    // Insertar entrada, tipo hardcodeado a 'FREE' y evento_id = 1 (STR)
+    $stmt = $pdo->prepare("
+        INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, evento_id)
+        VALUES (:nombre, :email, :fecha_registro, :codigo, 0, 'FREE', 1)
+    ");
+
+    $stmt->execute(array(
+        ':nombre'         => $nombre,
+        ':email'          => $email,
+        ':fecha_registro' => $fechaRegistro,
+        ':codigo'         => $codigo
+    ));
+
+    $id   = (int)$pdo->lastInsertId();
+    $tipo = 'FREE';
+
+    // Enviar mail con la entrada
+    $mailOk = enviar_mail_entrada($email, $nombre, $codigo, $id, $fechaRegistro, $tipo);
+
+    echo json_encode(array(
+        'ok'           => true,
+        'id'           => $id,
+        'codigo'       => $codigo,
+        'fecha'        => $fechaRegistro,
+        'tipo'         => $tipo,
+        'mail_enviado' => $mailOk ? 1 : 0
+    ));
+
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(array(
+        'ok'      => false,
+        'error'   => 'Error en el servidor',
+        'detalle' => $e->getMessage()
+    ));
+}

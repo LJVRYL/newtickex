@@ -1,0 +1,456 @@
+<!-- ko with: backupVM -->
+<div class="clearfix animated superfast fadeIn">
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/website"><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Copias de Seguridad',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Copias de Seguridad',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix ">
+            <a class="btn btn-primary pull-right" data-bind="click: openCreate" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalCrearBackup');"><?php echo $this->get('translator')->trans('Crear nueva',array(),'templates'); ?></a>
+            <a class="btn pull-right mr5" data-bind="click: openUpload" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalUploadBackup');"><?php echo $this->get('translator')->trans('Subir un backup',array(),'templates'); ?></a>
+        </div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-backups',array(),'templates'); ?>.</p>
+    </header>
+    <section >
+
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <a data-bind="click: sortData">
+                            <?php echo $this->get('translator')->trans('Fecha',array(),'templates'); ?>
+                            <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th>
+                        <?php echo $this->get('translator')->trans('Nombre',array(),'templates'); ?>
+                    </th>
+                    <th>
+                        <?php echo $this->get('translator')->trans('Tipo',array(),'templates'); ?>
+                    </th>
+                    <th class="right">
+                        <?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko if: data().length <= 0 && inprocess() > 0 -->
+                    <tr class="info">
+                        <td colspan="4">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+                    <!-- ko if: data().length <= 0 && inprocess() <= 0 -->
+                    <tr class="info">
+                        <td colspan="4">
+                            <span><?php echo $this->get('translator')->trans('Ningun backup creado',array(),'templates'); ?></span>
+                        </td>
+                    </tr>
+                    <!-- /ko -->
+
+                <!-- ko foreach: data() -->
+                    <tr class="info">
+                        <td>
+                            <span data-bind="text: created"></span>
+                        </td>
+                        <td>
+                            <span data-bind="html: name() ? name : '<img src=\'application/assets/img/loading-well.svg\' alt=\'\' />'"></span>
+                            <button class="btn small" data-bind="click: getBackupVM().init, visible: !name() && regStatus() === 1"><?php echo $this->get('translator')->trans('Refrescar nombre',array(),'templates'); ?></button>
+                        </td>
+                        <td>
+                            <span data-bind="text: type"></span>
+                        </td>
+                        <td>
+                            <div class="right">
+                                <!-- ko if: regStatus() == 1 -->
+                                    <div data-bind="template: { name: 'delete-confirm'}" class="delete-confirm" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'EliminarBackup');"></div>
+                                    <a class="btn small" target="_blank" data-bind="visible: name(), attr: { href: '/hosting/tools/backup/download/'+id() }" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'DownloadBackup');">
+                                        <i class="icon-download-alt"></i> <span class="hidden-phone"><?php echo $this->get('translator')->trans('Descargar',array(),'templates'); ?></span>
+                                    </a>
+                                    <a class="btn small" data-bind="visible: name(), click: $parent.restoreConfirm" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'RestoreBackup');">
+                                        <i class="icon icon-new fa-upload"></i>
+                                        <span class="hidden-phone"><?php echo $this->get('translator')->trans('Restaurar',array(),'templates'); ?></span>
+                                    </a>
+                                    <?php if (false && $accountInfo["Server"]["OpSystem"] != "Linux") { ?>
+                                        <a class="btn small" data-bind="visible: /\.(sql|bak)$/.test(name()), click: function() {$parent.restoreConfirm($data, {}, true);}">
+                                            <i class="icon icon-new fa-upload"></i>  <span class="hidden-phone">
+                                            <?php echo $this->get('translator')->trans('Restaurar',array(),'templates'); ?>
+                                        </a>
+                                    <?php } ?>
+                                <!-- /ko -->
+                                <div data-bind="template: { name: 'rows-loading'}"></div>
+                            </div>
+                        </td>
+                    </tr>
+                <!-- /ko -->
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<span class="hide" id="backup-msg-restore-launched"><?php echo $this->get('translator')->trans('Se restaurara la copia de seguridad indicada en unos instantes',array(),'templates'); ?></span>
+<span class="hide" id="backup-msg-restore-error"><?php echo $this->get('translator')->trans('Ocurrio un problema al restaurar la copia de seguridad',array(),'templates'); ?></span>
+<span class="hide" id="backup-msg-restore-launched-file"><?php echo $this->get('translator')->trans('Se intentara restaurar el backup en unos instantes y se enviara por mail el detalle de la operacion',array(),'templates'); ?></span>
+<span class="hide" id="backup-msg-upload-success"><?php echo $this->get('translator')->trans('Archivo subido correctamente',array(),'templates'); ?> </span>
+<span class="hide" id="backup-msg-error-upload"><?php echo $this->get('translator')->trans('Error al subir el archivo',array(),'templates'); ?></span>
+
+<div id="modal-create-backup" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'CerrarModalCrearBackup');">×</button>
+        <h3><?php echo $this->get('translator')->trans('Crear copia de seguridad',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <div class="alert">
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                <?php echo $this->get('translator')->trans('warning-text-createBackup',array(),'templates'); ?>.
+            <?php } else { ?>
+                <?php echo $this->get('translator')->trans('La generación de la copia de seguridad puede requerir unos minutos, dependiendo del tamaño de sus BD. Recuerde que puede descargar los archivos de backup también vía FTP',array(),'templates'); ?>.
+            <?php } ?>
+        </div>
+        <form class="form">
+            <label><?php echo $this->get('translator')->trans('Tipo',array(),'templates'); ?></label>
+            <div>
+                <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                    <!-- ko foreach: linuxTypes -->
+                        <label class="radio mt0">
+                            <input type="radio" name="type" data-bind="value: value, checked: $parent.type, checkedValue: value"/>
+                            <span class="text-small" data-bind="text: label"></span>
+                        </label>
+                    <!-- /ko -->
+                <?php } else { ?>
+                    <!-- ko foreach: windowsTypes -->
+                        <label class="radio mt0">
+                            <input type="radio" name="type" data-bind="value: value, checked: $parent.type, checkedValue: value"/>
+                            <span class="text-small" data-bind="text: label"></span>
+                        </label>
+                    <!-- /ko -->
+                <?php } ?>
+                <span class="help-block error"></span>
+            </div>
+
+            <?php if ($accountInfo["Server"]["OpSystem"] != "Linux") { ?>
+                <ko data-bind="visible: type()">
+                    <label><?php echo $this->get('translator')->trans('Bases de datos',array(),'templates'); ?></label>
+                    <div>
+                        <!-- ko foreach: $parent.dbsAvailableByFilter() -->
+                            <label class="radio mt0 animated fast fadeIn">
+                                <input type="checkbox" name="dbsSelected" data-bind="checkedValue: name, value: name, checked: $parents[1].dbsSelected"/>
+                                <span class="text-small" data-bind="text: name"></span>
+                                <span class="text-small" data-bind="text: ' - (' + databaseTypeName() + ')'"></span>
+                            </label>
+                        <!-- /ko -->
+                        <!-- ko if: !$parent.dbsAvailableByFilter().length -->
+                            <label class="radio mt0 animated fast fadeIn">
+                                <span class="text-small"><?php echo $this->get('translator')->trans('No hay bases de datos de este tipo',array(),'templates'); ?></span>
+                            </label>
+                        <!-- /ko -->
+                        <span><span id="dbNames"></span></span>
+                        <span class="help-block error"></span>
+                    </div>
+                </ko>
+            <?php } ?>
+
+            <?php if ($accountInfo["Server"]["OpSystem"] != "Linux") { ?>
+                <ko data-bind="visible: type() && type() !== 'MySql' && type() !== 'SqlServer2012' && type() !== 'SqlServer2016'">
+                    <label><?php echo $this->get('translator')->trans('Modo',array(),'templates'); ?></label>
+                    <?php if ($accountInfo["Server"]["OsVersion"] != 2019) { ?>
+                        <div>
+                            <!-- ko foreach: backupModes -->
+                                <label class="radio mt0">
+                                    <input type="radio" name="sqlBackupMode" data-bind="value: value, checked: $parent.sqlBackupMode, checkedValue: value"/>
+                                    <span class="text-small" data-bind="text: label"></span>
+                                </label>
+                            <!-- /ko -->
+                            <span class="help-block error"></span>
+                        </div>
+                    <?php } ?>
+                    <?php if ($accountInfo["Server"]["OsVersion"] == 2019) { ?>
+                        <div>
+                            <!-- ko foreach: backupModes2019 -->
+                                <label class="radio mt0">
+                                    <input type="radio" name="sqlBackupMode" data-bind="value: value, checked: $parent.sqlBackupMode, checkedValue: value"/>
+                                    <span class="text-small" data-bind="text: label"></span>
+                                </label>
+                            <!-- /ko -->
+                            <span class="help-block error"></span>
+                        </div>
+                    <?php } ?>
+                </ko>
+            <?php } ?>
+
+            <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                <label><?php echo $this->get('translator')->trans('Notificar por email',array(),'templates'); ?> <small>(<?php echo $this->get('translator')->trans('no requerido',array(),'templates'); ?>)</small></label>
+                <div>
+                    <div>
+                        <input type="text" class="full-width" name="notifyEmail" data-bind="value: notifyEmail"/>
+                        <span class="help-block error"></span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="checkbox mt0">
+                        <input type="checkbox" name="includeLogs" data-bind="checked: includeLogs"/>
+                        <span class="text-small"><?php echo $this->get('translator')->trans('Incluir registros de acceso web',array(),'templates'); ?></span>
+                    </label>
+                </div>
+            <?php } ?>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalBackupCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+
+            <button class="btn btn-primary" data-bind="click: save <?php if ($accountInfo["Server"]["OpSystem"] != "Linux") { ?>, enable: $parent.dbsSelected().length<?php } ?>" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalBackupGenerar');"><?php echo $this->get('translator')->trans('Generar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+</div>
+
+
+<div id="modal-restore-backup" class="modal animated fast pulse hide" data-bind="with: temp">
+    <form class="form" method="post" name="uploadForm" id="uploadForm" enctype="multipart/form-data" data-bind="submit: restoreFromFile">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalRestoreCerrar');">×</button>
+            <h3><?php echo $this->get('translator')->trans('Subir copia de seguridad',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <div class="alert">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                    <?php echo $this->get('translator')->trans('warning-text-restoreBackup',array(),'templates'); ?>.
+                <?php } else { ?>
+                    <?php echo $this->get('translator')->trans('warning-text-upload-backup-win',array(),'templates'); ?>
+                <?php } ?>
+            </div>
+            <div class="alert alert-danger">
+                <b><?php echo $this->get('translator')->trans('Atencion!',array(),'templates'); ?>:</b>
+                <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                    <?php echo $this->get('translator')->trans('Se cerrará la sesión del panel al comenzar',array(),'templates'); ?>.
+                <?php } else { ?>
+                    <?php echo $this->get('translator')->trans('Al cargar una copia de seguridad, la misma no se restaurara automaticamente, solo será subida al servidor y estará disponible en la lista para restaurar',array(),'templates'); ?>.
+                <?php } ?>
+            </div>
+            <label><?php echo $this->get('translator')->trans('Archivo de backup',array(),'templates'); ?></label>
+            <div>
+                <label class="radio mt0">
+                    <input type="file" name="file" data-bind="value: file, event: { change: function(data, event) { $parent.maxFile(false); } }"/>
+                </label>
+                <!-- ko if: $parent.maxFile -->
+                    <span class="help-block error" style="margin-bottom: 3%;"><?php echo $this->get('translator')->trans('El archivo supera el máximo permitido de 100MB',array(),'templates'); ?></span>
+                    <div>
+                        <span class="text-small"><?php echo $this->get('translator')->trans('Si deseas subir este archivo puedes hacelo vía FTP en la carpeta correspondiente al tipo de backup:',array(),'templates'); ?></span><br>
+                        <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                            <!-- ko if: $parent.temp().type() == 'Full' -->
+                                <code style="width: 335px;">backup/full</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'Emails' -->
+                                <code style="width: 335px;">backup/email</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'MySql' -->
+                                <code style="width: 335px;">backup/db</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() != 'Full' && $parent.temp().type() != 'MySql' && $parent.temp().type() != 'Emails' -->
+                                <code style="width: 335px;">
+                                    backup/full
+                                </code><br>
+                                <code style="width: 335px;">
+                                    backup/db
+                                </code><br>
+                                <code style="width: 335px;">
+                                    backup/email
+                                </code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() -->
+                            <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Copiar al portapapeles',array(),'templates'); ?>" data-bind="click: $parent.copyToClipboard" onclick="FerozoHosting.sendAnalytics('event', 'Backups', 'button', 'CopyToClipboard');"><i class="icon icon-new fa-copy"></i></a>
+                            <!-- /ko -->
+                        <?php } else { ?>
+                            <!-- ko if: $parent.temp().type() == 'SqlServer2000' -->
+                                <code style="width: 335px;">backup/mssql2000</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'SqlServer2005' -->
+                                <code style="width: 335px;">backup/mssql2005</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'SqlServer2008' -->
+                                <code style="width: 335px;">backup/mssql2008</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'SqlServer2012' -->
+                            <code style="width: 335px;">backup/mssql2012</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'SqlServer2016' -->
+                                <code style="width: 335px;">backup/mssql2016</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() == 'MySql' -->
+                                <code style="width: 335px;">backup/mysql50</code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() != 'SqlServer2000' && $parent.temp().type() != 'SqlServer2005' && $parent.temp().type() != 'SqlServer2008' && $parent.temp().type() != 'MySql' && $parent.temp().type() != 'SqlServer2012' && $parent.temp().type() != 'SqlServer2016' -->
+                                <code style="width: 335px;">
+                                    backup/full
+                                </code><br>
+                                <code style="width: 335px;">
+                                    backup/db
+                                </code><br>
+                                <code style="width: 335px;">
+                                    backup/email
+                                </code>
+                            <!-- /ko -->
+                            <!-- ko if: $parent.temp().type() -->
+                            <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Copiar al portapapeles',array(),'templates'); ?>" data-bind="click: $parent.copyToClipboard" onclick="FerozoHosting.sendAnalytics('event', 'Backups', 'button', 'CopyToClipboard');"><i class="icon icon-new fa-copy"></i></a>
+                            <!-- /ko -->    
+                        <?php } ?>            
+                    </div>
+                <!-- /ko -->
+            </div>
+            <label><?php echo $this->get('translator')->trans('Tipo',array(),'templates'); ?></label>
+            <div>
+                <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                    <!-- ko foreach: linuxTypes -->
+                        <label class="radio mt0">
+                            <input type="radio" name="backupType" data-bind="value: value, checked: $parent.type, checkedValue: value"/>
+                            <span class="text-small" data-bind="text: label"></span>
+                        </label>
+                    <!-- /ko -->
+                <?php } else { ?>
+                    <!-- ko foreach: windowsTypes -->
+                        <label class="radio mt0">
+                            <input type="radio" name="backupType" data-bind="value: value, checked: $parent.type, checkedValue: value"/>
+                            <span class="text-small" data-bind="text: label"></span>
+                        </label>
+                    <!-- /ko -->
+                <?php } ?>            
+            </div>
+            <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                <label><?php echo $this->get('translator')->trans('Notificar por email',array(),'templates'); ?> <small>(<?php echo $this->get('translator')->trans('requerido',array(),'templates'); ?>)</small></label>
+                <div>
+                    <div>
+                        <input type="text" class="full-width" name="notifyEmail" data-bind="value: notifyEmail"/>
+                        <span class="help-block error"></span>
+                    </div>
+                </div>
+            <?php } ?>
+        </div>
+        <div class="modal-footer">
+            <!-- ko if: $parent.inprocess() == 0 -->
+                <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalRestoreCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" type="submit" data-bind="enable: file" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'ModalRestoreStart');"><?php echo $this->get('translator')->trans('Subir',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+    </form>
+</div>
+
+<div id="modal-restore-backup-confirm" class="modal animated fast pulse hide" data-bind="with: temp">
+
+    <div class="modal-header pb0 mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Restaurar copia de seguridad',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <!-- ko if: winBehaviour.loadingDetailsBackup() || winBehaviour.loadingDetailsZip() || $parent.inprocess() -->
+            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+        <!-- /ko -->
+
+        <!-- ko if: !winBehaviour.loadingDetailsBackup() && !winBehaviour.loadingDetailsZip() && !$parent.inprocess() -->
+        <div class="row-fluid">
+            <ko data-bind="if: !($parent.displayBehaviour() || $parent.displayDetails())">
+                <div class="alert alert-danger">
+                    <b><?php echo $this->get('translator')->trans('Atencion!',array(),'templates'); ?>:</b> <?php echo $this->get('translator')->trans('Se cerrará la sesión del panel al comenzar',array(),'templates'); ?>.
+                </div>
+                <p class="init-restore-msg">
+                    <?php echo $this->get('translator')->trans('warning-text-restoreBackup',array(),'templates'); ?>.
+                    <?php echo $this->get('translator')->trans('Desea realmente restaurar el archivo',array(),'templates'); ?> <strong data-bind="text: name"></strong>?
+                </p>
+            </ko>
+            <ko data-bind="if: $parent.displayBehaviour()">
+                <!-- ko if: !winBehaviour.loadingDetailsZip() && winBehaviour.contentOfZip().length -->
+                    <div class="mb5"><?php echo $this->get('translator')->trans('Seleccione el backup dentro del ZIP a restaurar',array(),'templates'); ?></div>
+                    <div class="clearfix">
+                        <div class="span12">
+                            <select class="span12" data-bind="enable: !$parent.inprocess() && !winBehaviour.loadingDetailsBackup(), options: winBehaviour.contentOfZip, optionsText: 'BackupFileName', optionsValue: 'BackupFileName', value: winBehaviour.fileNameSelected"></select>
+                        </div>
+                    </div>
+                <!-- /ko -->
+                <!-- ko if: !winBehaviour.loadingDetailsZip() && winBehaviour.contentOfZip().length <= 0 -->
+                <div class="alert alert-error mb0"><?php echo $this->get('translator')->trans('No se encontró contenido valido en este archivo',array(),'templates'); ?></div>
+                <!-- /ko -->
+            </ko>
+            <ko data-bind="if: $parent.displayBehaviour() || $parent.displayDetails()">
+                <div class="clearfix">
+                    <div data-bind="visible: !$parent.inprocess() && winBehaviour.fileNameSelected()">
+                        <div class="well well-small mb0 clearfix">
+                            <div class="span9" style="line-height:28px">
+                                <span class="label label-warning"><?php echo $this->get('translator')->trans('Archivo seleccionado',array(),'templates'); ?> <b data-bind="text: winBehaviour.fileNameSelected"></b></span>
+                            </div>
+                            <div class="span3">
+                                <button class="btn small pull-right" data-bind="enable: !winBehaviour.loadingDetailsBackup(), click: listDetailsOfBackup"><?php echo $this->get('translator')->trans('Ver detalles',array(),'templates'); ?></button>
+                            </div>
+                        </div>
+                    
+                        <div class="fz-blockquote text-small mb0 mt7" data-bind="visible: !winBehaviour.loadingDetailsBackup() && winBehaviour.detailsOfBackup()">
+                            <!--ko if: winBehaviour.detailsOfBackup() && winBehaviour.detailsOfBackup().CompatibilityLevel != null  -->
+                            <ko data-bind="foreach: winBehaviour.detailsOfBackupList()">
+                                <div>
+                                    <b data-bind="text: key"></b> <span data-bind="text: value"></span>
+                                </div>
+                            </ko>
+                            <!-- /ko -->
+                            <!-- ko if: winBehaviour.detailsOfBackup() && winBehaviour.detailsOfBackup().CompatibilityLevel == null -->
+                            <div class="alert alert-info mb0">No se pudo leer la información del archivo de Backup. Es posible que el Backup no sea compatible con la versión de SqlServer seleccionada o el mismo contenga un formato no válido.</div>
+                            <!-- /ko -->
+                        </div>
+                    
+
+                        <div class="mt10"><?php echo $this->get('translator')->trans('Especifique la base de datos donde desea restaurar la copia de seguridad',array(),'templates'); ?></div>
+                        <div style="padding:5px 5px 10px 10px">
+                            <!-- ko foreach: $parent.dbsAvailableByFilter() -->
+                                <a class="label" data-bind="text: name(), css: $parent.winBehaviour.restoreTodbName() == rawName() ? 'label-warning':'', click: function() {$parent.winBehaviour.restoreTodbName(rawName());}"></a>
+                            <!-- /ko -->
+                        </div>
+                        <div class="input-prepend">
+                            <span class="span2 add-on" data-bind="text: $root.profileVM().user().UserPrefix()+'_'"></span>
+                            <input class="span10" type="text" data-bind="value: winBehaviour.restoreTodbName, valueUpdate: 'afterkeydown'" />
+                        </div>
+                        <span class="help-block error animated shake" data-bind="visible: winBehaviour.restoreTodbName.errors(), text: winBehaviour.restoreTodbName.errors()"></span>
+                    </div>
+
+                </div>
+            </ko>
+        </div>
+        <!-- /ko -->
+        <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+        <form class="form">
+            <label><?php echo $this->get('translator')->trans('Notificar por email',array(),'templates'); ?></label>
+            <div>
+                <div>
+                    <input type="text" class="full-width" name="notifyEmail" data-bind="value: notifyEmail"/>
+                    <span class="help-block error"></span>
+                </div>
+            </div>
+        </form>
+        <?php } ?>        
+    </div>
+
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'RestoreBkpCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <ko data-bind="if: !($parent.displayBehaviour() || $parent.displayDetails())">
+                <button class="btn btn-primary" data-bind="click: restore" onclick="FerozoHosting.sendAnalytics('event', 'Backup', 'button', 'RestoreBkpConfirmar');"><?php echo $this->get('translator')->trans('Confirmar y restaurar',array(),'templates'); ?></button>
+            </ko>
+            <ko data-bind="if: ($parent.displayBehaviour() || $parent.displayDetails()) && winBehaviour.fileNameSelected() && winBehaviour.restoreTodbName()">
+                <button class="btn btn-primary" data-bind="click: restoreWindowsBeahaviour"><?php echo $this->get('translator')->trans('Confirmar y restaurar',array(),'templates'); ?></button>
+            </ko>
+        <!-- /ko -->
+        <span data-bind="template: { name: 'loading-button'}"></span>
+    </div>
+
+</div>
+
+<!-- /ko -->

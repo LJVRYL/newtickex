@@ -1,0 +1,95 @@
+<!-- ko with: ipsblockVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Bloqueo de IP',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Bloqueo de IP',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix ">
+            <a class="btn btn-primary pull-right" href="#apuntar-nuevo" accesskey="n" data-toggle="modal" rel="tooltip"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+            <!--div data-bind="template: {name: 'inline-search'}"></div-->
+        </div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-ipBlock',array(),'templates'); ?>.</p>
+    </header>
+    <section >
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <a data-bind="click: sortData">
+                            <?php echo $this->get('translator')->trans('Direccion IP',array(),'templates'); ?>
+                            <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th class="span4 align-right"></th>
+                    <th class="span2 align-right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko if: data().length < 1 -->
+                <tr class="info">
+                    <td colspan="3">
+                        <?php echo $this->get('translator')->trans('Ningún registro creado',array(),'templates'); ?>
+                    </td>
+                </tr>
+                <!-- /ko -->
+                <!-- ko foreach: data() -->
+                <tr class="info">
+                    <td class="span2">
+                        <span data-bind="text: ip().content()"></span>
+                    </td>
+                    <td class="span2">
+                        <!--span data-bind="text: regStatus.description"></span-->
+
+                    </td>
+                    <td class="right">
+                        <div data-bind="template: { name: 'rows-loading'}"></div>
+                        <!-- ko if: regStatus() == 1 -->
+                                    <div  data-bind="template: { name: 'delete-confirm'}" class="delete-confirm"></div>
+                        <!-- /ko -->
+                    </td>
+                </tr>
+                <!-- /ko -->
+                <tr class="info">
+                    <td colspan="3">
+                        <a href="#apuntar-nuevo " data-toggle="modal"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<div id="apuntar-nuevo" class="modal animated fast pulse hide" data-bind="with: temp()">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('newBlockIp',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <label><?php echo $this->get('translator')->trans('Direccion IP',array(),'templates'); ?></label>
+        <div  data-bind="with: ip()">
+            <input maxlength="15" type="text" data-bind="value: $data.content" placeholder="192.168.1.1" class="full-width" autofocus="autofocus" />
+            <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+        </div>
+        <!-- /input-append -->
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save"><?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->

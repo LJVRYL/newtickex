@@ -1,0 +1,79 @@
+<!-- ko with: alertsgraphVM -->
+<div class="clearfix animated superfast fadeIn">
+  <div id="container">
+        <div id="left-container">
+
+
+
+        <div class="text">
+        <h4>
+        Información
+        </h4> 
+            <div data-bind="html: leftInfo"></div>
+
+        </div>
+
+        <div id="id-list"></div>
+        
+        </div>
+
+        <div id="center-container">
+            <div id="infovis"></div>    
+        </div>
+
+        <div id="right-container">
+
+            
+        <div id="inner-details">
+            <div id="_inner-details"></div>
+            <div data-bind="foreach: details">
+                <br> <a data-bind="click:$parent.editAlert"><span data-bind="text: $data"></span> </a>
+            </div>
+        </div>    
+        
+
+        </div>
+
+        <div id="log"></div>
+    </div>
+</div>
+
+<div id="edit" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Editar Alerta',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form class="form" id="editalert" data-bind="submit: function() { $data.edit(); }">
+            <div>
+                <label><?php echo $this->get('translator')->trans('Mensaje',array(),'templates');?></label>
+                <textarea data-bind="value: message" class="full-width" readonly="true" />
+            </div>
+            <div>
+                <label><?php echo $this->get('translator')->trans('Estado',array(),'templates');?></label>
+                <select class="full-width" name="status" data-bind="options: $parent.statuses, optionsText: 'label', optionsValue: 'value', value: status"></select>
+            </div>
+            <div>
+                <label><?php echo $this->get('translator')->trans('Asignado a',array(),'templates');?></label>
+                <select class="full-width" data-bind="options: $parent.panelAlertUsers, optionsValue: 'id' ,optionsText: 'name', value: panelAlertUser, optionsCaption: '<?php echo $this->get('translator')->trans('Seleccionar',array(),'templates');?>...'"></select>
+            </div>
+            <div>
+                <label><?php echo $this->get('translator')->trans('Notas',array(),'templates');?></label>
+                <textarea data-bind="value: notes" class="full-width" placeholder="<?php echo strtolower($this->get('translator')->trans('Notas',array(),'templates')); ?>" />
+                <span class="help-block error animated shake" data-bind="visible: notes.errors(), text: notes.errors()"></span>
+            </div>                
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: edit"> <?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" data-dismiss="modal" disabled="disabled" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"  ></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->

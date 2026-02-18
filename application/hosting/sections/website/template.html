@@ -1,0 +1,42 @@
+<!-- ko with: websiteVM -->
+<section class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="section-head-title"><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates'); ?></h2>
+    </header>
+
+    <section class="tab-content">
+        <ul class="colblocks squarebuttons tab-pane active">
+            <!-- ko foreach: $root.childsOf('website') -->
+                <!-- ko if: type != "hidden" -->
+                    <!-- ko if: value == "Administrador de archivos" -->
+                        <li class="blocks span3">
+                            <a class="squarebutton website" target="_BLANK" data-bind="attr: {'href': link}" onclick="FerozoHosting.sendAnalytics('event', 'SitioWeb', 'button', 'AbrirFileAdmin');">
+                            <i data-bind="attr: {'class': 'icon '+icon}"></i>
+                                <span data-bind="text: value"></span>
+                            </a>
+                        </li>
+                    <!-- /ko -->
+
+                    <!-- ko if: value != "Administrador de archivos" -->
+                        <li class="blocks span3">
+                            <a class="squarebutton website" data-bind="attr: {'href': link}">
+                            <i data-bind="attr: {'class': 'icon '+icon}"></i>
+                                <span data-bind="text: value"></span>
+                            </a>
+                        </li>
+                    <!-- /ko -->
+                <!-- /ko -->
+            <!-- /ko -->
+        </ul>
+    </section>
+</section>
+<!-- /ko -->

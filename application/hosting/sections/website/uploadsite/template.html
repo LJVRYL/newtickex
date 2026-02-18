@@ -1,0 +1,224 @@
+<!-- ko with: uploadsiteVM -->
+<div class="clearfix animated superfast fadeIn">
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/website"><?php echo $this->get('translator')->trans('Mi Sitio Web',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Subir mi sitio',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Subir mi sitio',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix">
+        </div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-uploadSite',array(),'templates'); ?>.</p>
+    </header>
+    <section class="well clearfix">
+        <div class="well clearfix">
+            <h4><?php echo $this->get('translator')->trans('Paso',array(),'templates'); ?> 1</h4>
+            <div class="row-fluid">
+                <div class="span12 ml0">
+                    <button class="btn pull-right" data-bind="enable: !inprocess(), click: showModalSelectFile" onclick="FerozoHosting.sendAnalytics('event', 'Upload', 'button', 'ModalSelectFile');"><i class="icon icon-new fa-crosshairs"></i> <?php echo $this->get('translator')->trans('Seleccionar archivo previamente subido',array(),'templates'); ?></button>
+                    <button class="btn btnwebsite pull-right mr10" data-bind="enable: !inprocess(), click: showModalUploadFile" onclick="FerozoHosting.sendAnalytics('event', 'Upload', 'button', 'ModalUploadFile');"><i class="icon icon-new fa-upload"></i> <?php echo $this->get('translator')->trans('Subir archivo',array(),'templates'); ?></button>
+                    <?php if(in_array("ftp",$accountInfo["FeaturesEnabled"])): ?>
+                    <button class="btn btnwebsite pull-right mr10" data-bind="enable: !inprocess(), click: showModalFtp" onclick="FerozoHosting.sendAnalytics('event', 'Upload', 'button', 'ModalUploadFTP');"><i class="icon icon-new fa-cloud-upload"></i> <?php echo $this->get('translator')->trans('Subir por FTP',array(),'templates'); ?></button>
+                    <?php endif; ?>
+                    <div class="pull-left"><?php echo $this->get('translator')->trans('Sube y/o selecciona un archivo para extraer',array(),'templates'); ?></div>
+                </div>
+                <div class="span12 ml0 mt10 mb0 alert">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <?php echo $this->get('translator')->trans('Las extensiones de archivo permitidas para extraer el sitio son',array(),'templates'); ?>:
+                    [<?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>tar, gz, zip<?php } else { ?>zip<?php } ?>]
+                </div>
+                <div class="span12 ml0 mt10 mb0 alert alert-success" data-bind="visible: treeNavigationSelect.selected()">
+                    <i class="icon icon-new fa-check-circle-o"></i> <?php echo $this->get('translator')->trans('Archivo seleccionado',array(),'templates'); ?>: <b><span data-bind="text: treeNavigationSelect.selected"></span></b>
+                </div>
+            </div>
+        </div>
+
+        <div class="well clearfix">
+            <h4><?php echo $this->get('translator')->trans('Paso',array(),'templates'); ?> 2</h4>
+            <div class="row-fluid">
+                <div class="span12 ml0">
+                    <button class="btn pull-right" data-bind="enable: !inprocess(), click: showModalExtractFile" onclick="FerozoHosting.sendAnalytics('event', 'Upload', 'button', 'SelectDestino');"><i class="icon icon-new fa-crosshairs"></i> <?php echo $this->get('translator')->trans('Seleccionar destino de extraccion',array(),'templates'); ?></button>
+                    <div class="pull-left"><?php echo $this->get('translator')->trans('Especifica el destino de la extraccion',array(),'templates'); ?></div>
+                </div>
+
+                <div class="span12 ml0 mt10 mb0 alert">
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                    <?php echo $this->get('translator')->trans('warning-text-uploadSite',array(),'templates'); ?>.
+                </div>
+                <div class="span12 ml0 mt10 mb0 alert alert-success" data-bind="visible: treeNavigationExtract.selected()">
+                    <i class="icon icon-new fa-check-circle-o"></i> <?php echo $this->get('translator')->trans('Carpeta de extracción',array(),'templates'); ?>: <b><span data-bind="text: treeNavigationExtract.selected"></span></b>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn pull-right btn-primary" data-bind="enable: !inprocess() && treeNavigationSelect.selected() && treeNavigationExtract.selected(), click:extractFile" onclick="FerozoHosting.sendAnalytics('event', 'Upload', 'button', 'ExtractFiles');"><i class="icon icon-new fa-dropbox"></i> <?php echo $this->get('translator')->trans('Extraer',array(),'templates'); ?></button>
+    </section>
+</div>
+<span class="hide" id="trans-invalid-file-extension"><?php echo $this->get('translator')->trans('El tipo de archivo es invalido, solo se permiten extensiones',array(),'templates'); ?>: [<?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>tar, gz, zip<?php } else { ?>zip<?php } ?>]</span>
+<span class="hide" id="trans-error-uploading-file"><?php echo $this->get('translator')->trans('Error al subir el archivo',array(),'templates'); ?>.</span>
+<span class="hide" id="trans-upload-success"><?php echo $this->get('translator')->trans('Archivo subido correctamente',array(),'templates'); ?>.</span>
+<span class="hide" id="trans-unexpected-error-extracting"><?php echo $this->get('translator')->trans('Ocurrio un error con el archivo a extraer',array(),'templates'); ?>.</span>
+<span class="hide" id="trans-extraction-started"><?php echo $this->get('translator')->trans('Se comenzara la extraccion en la carpeta <b>%s</b> en unos instantes',array(),'templates'); ?>.</span>
+
+<div id="fileNavigator" class="modal animated fast pulse hide" data-bind="with: currentModal">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 data-bind="visible: $parent.treeNavigationSelect === $parent.currentModal()"><?php echo $this->get('translator')->trans('Seleccione un archivo previamente subido',array(),'templates'); ?></h3>
+        <h3 data-bind="visible: $parent.treeNavigationExtract === $parent.currentModal()"><?php echo $this->get('translator')->trans('Seleccione una carpeta donde extraer',array(),'templates'); ?></h3>
+        <section class="section-breadcrum">
+            <ul class="breadcrumb mb0">
+                <li><i class="icon-folder-open"></i></li>
+                    <!-- ko foreach: currentArray -->
+                        <li>
+                            <a data-bind="text: $data, click: $parent.gotoDir.bind(null, $index())"></a>
+                            <span class="divider">/</span>
+                        </li>
+                    <!-- /ko -->
+                <li>
+                    <!-- ko if: inprocess() == 1 || actualFolder() === "/public_html" -->
+                        <button disabled="disabled" class="btn btn-small"><i class="icon-arrow-up"></i></button>
+                    <!-- /ko -->
+                    <!-- ko if: inprocess() == 0 &&  actualFolder() !== "/public_html"  -->
+                        <button class="btn btn-small" data-bind="click: upDir"><i class="icon-arrow-up"></i></button>
+                    <!-- /ko -->
+                </li>
+            </ul>
+        </section>
+    </div>
+    <div class="modal-body">
+        <section>
+            <div class="alert mt0">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <?php echo $this->get('translator')->trans('Las extensiones de archivo permitidas para extraer el sitio son',array(),'templates'); ?>:
+                [<?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>tar, gz, zip<?php } else { ?>zip<?php } ?>]
+            </div>
+            <table class="table table-hover mb0">
+                <thead>
+                    <tr>
+                        <th><?php echo $this->get('translator')->trans('Nombre de carpeta',array(),'templates'); ?> </th>
+
+                        <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- ko foreach: data() -->
+                        <tr class="info">
+                            <td >
+                                <span  data-bind="visible:$data.type !== 'dir'">
+                                    <i class="icon icon-file"></i>
+                                    <span data-bind="text: $data.name"></span>
+                                </span>
+                                <a  data-bind="visible:$data.type === 'dir',click: $parent.selectThis">
+                                    <i class="icon icon-folder-close"></i>
+                                    <span data-bind="text: $data.name"></span>
+                                </a>
+                            </td>
+
+                            <td class="right">
+                                <a data-bind="visible: $parent.isSelected($data), click: $parent.selectItem.bind($data, $parents[1].onFileSelection)" class="btn small pull-right"><i class="icon-hand-up"></i> <?php echo $this->get('translator')->trans('Seleccionar',array(),'templates'); ?></a>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                    <!-- ko if: inprocess() >= 1 && data().length <= 0 -->
+                        <tr>
+                            <td colspan="2">
+                                <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                    <!-- ko if: inprocess() == 0 && data().length <= 0 -->
+                        <tr>
+                            <td colspan="2">
+                                <?php echo $this->get('translator')->trans('No se encontró contenido en esta carpeta',array(),'templates'); ?>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+    <div class="modal-footer">
+        <div class="pull-left">
+            <!-- ko if: inprocess() == 0 -->
+                <button class="btn" data-bind="visible: !createFolderName() && $parent.treeNavigationExtract === $parent.currentModal(), click: createFolderName.bind($data, '<?php echo $this->get('translator')->trans('nueva-carpeta',array(),'templates'); ?>')"><i class="icon-folder-open"></i> <?php echo $this->get('translator')->trans('Crear carpeta',array(),'templates'); ?></button>
+                <div data-bind="visible: createFolderName">
+                    <input type="text" class="span2" style="margin:0" data-bind="value: createFolderName"/>
+                    <button class="btn" data-bind="click: createFolder"><?php echo $this->get('translator')->trans('Crear',array(),'templates'); ?></button>
+                </div>
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+        <button class="btn" data-bind="visible: $parent.treeNavigationExtract === $parent.currentModal(), click: $parent.useRootDir"><i class="icon-hand-up"></i> <?php echo $this->get('translator')->trans('Usar directorio raíz',array(),'templates'); ?> <b>public_html</b></button>
+    </div>
+</div>
+
+<div id="uploadFile" class="modal animated fast pulse hide">
+    <form class="form" method="post" enctype="multipart/form-data" data-bind="submit: uploadFile, attr: { action: uploadFileUrl }">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            <h3><?php echo $this->get('translator')->trans('Subir un archivo',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <div class="alert">
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                <div><?php echo $this->get('translator')->trans('El proceso de subida de archivo puede demorar mucho tiempo, dependiendo del tamaño del archivo',array(),'templates'); ?>.</div>
+                <div><?php echo $this->get('translator')->trans('El mismo sera ubicado en la carpeta public_html del sitio',array(),'templates'); ?>.</div>
+                <div><?php echo $this->get('translator')->trans('El tamaño maximo del archivo no puede superar los',array(),'templates'); ?> <b>50MB</b>.</div>
+            </div>
+
+            <label><?php echo $this->get('translator')->trans('Archivo de backup',array(),'templates'); ?></label>
+            <div>
+                <label class="radio mt0">
+                    <input type="file" name="file" data-bind="value: file, event: { change: function() { validateFile($element); } }"/>
+                </label>
+                <span class="help-block error"></span>
+            </div>
+
+            <div class="alert alert-error mt10 mb0" data-bind="visible: uploadFileErrorMsg(), text: uploadFileErrorMsg"></div>
+        </div>
+        <div class="modal-footer">
+            <!-- ko if: inprocess() == 0 -->
+                <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" type="submit" data-bind="enable: file()"><?php echo $this->get('translator')->trans('Subir',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <span data-bind="template: { name: 'loading-button'}"></span>
+        </div>
+    </form>
+</div>
+<?php if(in_array("ftp",$accountInfo["FeaturesEnabled"])): ?>
+<div id="ftpInfo" class="modal animated fast pulse hide" data-bind="with: ftpInfo">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 ><?php echo $this->get('translator')->trans('Informacion del usuario FTP',array(),'templates'); ?> </h3>
+    </div>
+    <div class="modal-body">
+         <div class="row-fluid">
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?></span>
+                <span class="class-info-tec" data-bind="text: account().user"></span>
+            </div>
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?>:</span>
+                <span class="class-info-tec" data-bind="text: account().password"></span>
+            </div>
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Servidor',array(),'templates'); ?>:</span>
+                <span class="class-info-tec" data-bind="text: 'ftp://'+$parent.getHostingPpalDomain()"></span>
+            </div>
+            <div class="row-information">
+                <span class="class-info-tit"><?php echo $this->get('translator')->trans('Puerto',array(),'templates'); ?>:</span>
+                <span class="class-info-tec">21</span>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+    </div>
+</div>
+<?php endif; ?>
+<!-- /ko -->

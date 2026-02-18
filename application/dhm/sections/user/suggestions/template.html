@@ -1,0 +1,44 @@
+<!-- ko with: suggestionsVM -->
+
+    <div id="modal-suggestions" class="modal animated fast pulse hide">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+            <h3><i class="icon icon-new fa-comments-o"></i> <?php echo $this->get('translator')->trans('Danos tu opinion o sugerencia',array(),'templates'); ?></h3>
+        </div>
+        <div class="modal-body">
+            <form class="form-horizontal" data-bind="visible: !sent()">
+                <label><?php echo $this->get('translator')->trans('Mensaje',array(),'templates'); ?></label>
+                <div>
+                    <textarea class="full-width" maxlength="5000" name="message" data-bind="value: message" autofocus="autofocus"></textarea>
+                    <span class="help-block error"></span>
+                </div>
+
+                <label><?php echo $this->get('translator')->trans('Calificacion del panel',array(),'templates'); ?></label>
+                <ul class="unstyled inline clearfix">
+                    <!-- ko foreach: stars -->
+                        <li class="pull-left" data-bind="click: $parent.starClick.bind($parent)">
+                            <i class="star" data-bind="css: $parent.starSelected() >= $data ? 'icon icon-new fa-star' : 'icon icon-new fa-star-o'"></i>
+                        </li>
+                    <!-- /ko -->
+                </ul>
+
+            </form>
+            <div data-bind="visible: sent()">
+                <div class="alert alert-success mb0 animated fadeIn">
+                    <i class="icon icon-new fa-thumbs-o-up"></i> <?php echo $this->get('translator')->trans('Gracias, tu opinion ha sido enviada',array(),'templates'); ?>.
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+             <!-- ko if: inprocess() == 0 -->
+                <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" data-bind="click: send, visible: !sent()"><?php echo $this->get('translator')->trans('Enviar sugerencia',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <!-- ko if: inprocess() == 1 -->
+                <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+                <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Enviando...',array(),'templates'); ?>"></button>
+            <!-- /ko -->
+        </div>
+    </div>
+
+<!-- /ko -->

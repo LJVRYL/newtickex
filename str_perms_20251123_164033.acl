@@ -1,0 +1,1276 @@
+# file: str
+# owner: apache
+# group: webusers
+# flags: -s-
+user::rwx
+group::rwx
+other::r-x
+
+# file: str/README.txt
+# owner: root
+# group: root
+user::rw-
+group::r--
+other::r--
+
+# file: str/flyer-save-the-rave.png
+# owner: root
+# group: root
+user::rw-
+group::r--
+other::r--
+
+# file: str/index.html
+# owner: root
+# group: root
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php
+# owner: root
+# group: root
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave.sqlite
+# owner: apache
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave_backup_antes_checkin.sqlite
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/checkin.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/email_template.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/entrada.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/lista_nombres.txt
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/import_lista.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave_antes_reimport.sqlite
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/import_listas_tipos.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/ticket.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/delete.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/import_extras.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave_antes_monto.sqlite
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/nueva_entrada.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.bak-2025-11-16-2010
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-2025-11-16-2015
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.bak-2025-11-16-2022
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.bak-2025-11-16-2024
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.bak-2025-11-16-2026
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.bak-2025-11-16-2029
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_original.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.broken-2025-11-16-2042
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-2025-11-16-2050
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin_core.php.bak-2025-11-16-2050
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-2025-11-16-2104
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-2025-11-16-2108
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/entradas_eliminadas.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/test_mail.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/test_mail_tickex.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php.bak-2025-11-16-2210
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php.bak-2025-11-16-2213
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php.bak-2025-11-16-2224
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php.bak-2025-11-16-2228
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php.bak-2025-11-16-2233
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/phpinfo_sendmail.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/test_mail_web.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/test_mail_web_2.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/send_ticket_cli.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/test_php_sendmail.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-multiuser-20251117-033925
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-multiuser-20251117-034508
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_login.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_redirect_puerta.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_counters.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-20251117-190316
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-undo-colores-20251117-192357
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_undo_from_puerta.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_undo_link.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-undo-fix-20251117-194908
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-undo-fix-20251117-194908
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/undo_checkin.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_undo_link.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_undo_link2.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-full-20251117-203252
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-inline-undo-20251117-210004
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_add_undo_block.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_undo_href_inline.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-sin-atras-20251118-105330
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/eventos.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/usuarios.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_nav.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/usuarios.php.bak-listado-20251120-131220
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/superadmin.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_superadmin_redirect.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_str.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/event_flyers
+# owner: apache
+# group: webusers
+# flags: -s-
+user::rwx
+group::rwx
+other::r-x
+
+# file: str/event_flyers/1763674458_Tarjetas_fin_de_a__o.png
+# owner: apache
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/event_flyers/1763674514_Tarjetas_fin_de_a__o.png
+# owner: apache
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/event_flyers/1763675136_Tarjetas_fin_de_a__o.png
+# owner: apache
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/event_flyers/1763682945_Tarjetas_fin_de_a__o.png
+# owner: apache
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/crear_evento.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/crear_evento.php.bak-parse-20251120-170930
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/crear_evento.php.bak-fixed-20251120-174601
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_add_panel_str_link.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/eventos.php.bak-listado-20251120-183123
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/crear_evento.php.bak-sin-creador-20251120-184414
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_crear_evento_sin_creador.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/crear_evento.php.bak-full-20251120-195516
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/crear_evento.php.bak-stmt-20251120-200234
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_fix_stmtEv.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_evento.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_str.php.bak-20251120-215815
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/eventos.php.bak-admin-20251120-215820
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/eventos.php.bak-parse-20251120-220256
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_eventos_fh.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/registro.php.bak-evento-20251120-234543
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_registro_evento.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/mi_perfil.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-fix-20251121-005242
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/mi_perfil.php.bak-fix-20251121-005302
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/mi_perfil.php.bak-parse-20251121-005623
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_mi_perfil_array.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-session-20251121-011125
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_set_usuario.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-session2-20251121-011635
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_admin_set_usuario2.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-secundarios-20251121-012731
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-secundarios-20251121-013000
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-secundarios-20251121-013345
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-secundarios-20251121-144455
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-phpold-20251121-160440
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_phpold.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-auth-20251121-195409
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-debug-20251121-203917
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_debug.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-debug2-20251121-204621
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_debug_screen.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-fixroles-20251121-210436
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_fixroles.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-fixroles-simple-20251121-212345
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_fixroles_simple.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-fixcheck-20251121-231409
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_fix_checkins.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-staff-20251122-003552
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-staff-evento-20251122-003611
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_staff_evento.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-evento-filter-20251122-003624
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_evento_filter.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-fixstaff-20251122-004933
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_force_staff.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-redirector-20251122-010906
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-fixstaff-eid-20251122-013132
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_fixstaff_eventoid.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-add-eventoid-20251122-014842
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_login_add_eventoid_select.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-staff-20251122-021016
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-staff-evento-20251122-021030
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-staff-evento-20251122-021118
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-evento-filter-20251122-021142
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-rewrite-20251122-030047
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-rewrite2-20251122-031211
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/login.php.bak-rewrite-phpold-20251122-031824
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-fixcheck-20251122-095926
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-cssfix-20251122-100005
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_secundarios_cssfix.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/puerta.php.bak-showevent-20251122-115643
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_puerta_show_event.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-showeventcol-20251122-122052
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_secundarios_show_eventcol.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-showeventcol2-20251122-124526
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_secundarios_show_eventcol2.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/admin.php.bak-wrapper-20251122-143342
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-ui-20251122-152225
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-flyerfix-20251122-155845
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_panel_admin_flyer.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-flyerfix2-20251122-164413
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_panel_admin_flyer2.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-flyerfix-line-20251122-164936
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.tmp
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-antes-restaurar-20251122-165346
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-ROTO-20251122-165717
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-rewrite-20251122-170323
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-rewrite-phpold-20251122-172830
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-titlefix-20251122-175151
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_panel_admin_title.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-titlefix-20251122-180717
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_admin.php.bak-titlefix2-20251122-181523
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-killbad-20251122-193426
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-killgood-20251122-193436
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/secundarios.php.bak-REEMPLAZO-20251122-194516
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_evento.php.bak-REEMPLAZO-20251122-200503
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_evento.php.bak-nocoalesce-20251122-201054
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_panel_evento_php5.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_evento.php.bak-nocoalesce2-20251122-203046
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_panel_evento_remove_qm.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_evento.php.bak-fixline61-20251122-203802
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/patch_panel_evento_fixline61.php
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/panel_evento.php.bak-BROKEN-20251122-230957
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave.sqlite.bak-20251123_164014
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave_dump_20251123_164030.sqlite
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+
+# file: str/save_the_rave_dump_20251123_164030.sql
+# owner: root
+# group: webusers
+user::rw-
+group::r--
+other::r--
+

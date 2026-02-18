@@ -1,0 +1,168 @@
+<!-- ko with: emailaliasVM-->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/email"><?php echo $this->get('translator')->trans('Email',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Alias de Email',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Alias de Email',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix ">
+             <!-- ko if: emails().length > 0 && existEmailActive() -->
+                <a class="btn btn-primary pull-right" data-bind="click: openNew" accesskey="n" title="<?php echo $this->get('translator')->trans('Crear nuevo alias',array(),'templates'); ?> (Alt + N)" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'button', 'ModalCrearAlias');"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+            <!-- /ko -->
+        </div>
+        <p class="descScreens"><?php echo $this->get('translator')->trans('main-text-emailAlias',array(),'templates'); ?></p>
+    </header>
+    <section >
+        <div class="row-fluid">
+           <!-- ko if: readyView() == "LOADING" -->
+                <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+            <!-- /ko -->
+            
+            <!-- ko if: readyView() == "WO-DOMAINS" -->
+                <div class="vm-emtpy-records well clearfix">
+                    <div class="pull-left mr20">
+                        <img src="/application/assets/img/vm-icons/png/globe.png" alt=""/>
+                    </div>
+                    <div class="pull-left">
+                        <h3><?php echo $this->get('translator')->trans('Primero apunta un dominio',array(),'templates');?></h3>
+                        <p>
+                            <?php echo $this->get('translator')->trans('Para utilizar esta funcionalidad debes tener por lo menos un dominio apuntado',array(),'templates'); ?>.
+                            <a href="#/domain/domains"><?php echo $this->get('translator')->trans('Apuntar dominio',array(),'templates'); ?></a>
+                        </p>
+                    </div>
+                </div>
+            <!-- /ko --> 
+            
+            <!-- ko if: readyView() == "W-DOMAINS" -->
+                <!-- ko if: emails().length <= 0 && inprocess() < 1 && data().length <= 0 -->
+                    <div class="vm-emtpy-records well clearfix">
+                        <div class="pull-left mr20">
+                            <img src="/application/assets/img/vm-icons/png/envelope.png" alt=""/>
+                        </div>
+                        <div class="pull-left">
+                            <h3><?php echo $this->get('translator')->trans('Primero crea tu primer cuenta de email',array(),'templates');?></h3>
+                            <p>
+                                <?php echo $this->get('translator')->trans('Para crear alias de email primero crea una cuenta de email',array(),'templates'); ?>.
+                                <a href="/#/action/email/emailaccounts/newmail"><?php echo $this->get('translator')->trans('Ir a crear Email',array(),'templates'); ?></a>
+                            </p>
+                        </div>
+                    </div>
+                <!-- /ko -->
+                <!-- ko if: emails().length > 0  && data().length <= 0  && inprocess() < 1-->
+                    <div class="vm-emtpy-records well clearfix">
+                        <div class="pull-left mr20">
+                            <img src="/application/assets/img/vm-icons/png/envelope.png" alt=""/>
+                        </div>
+                        <div class="pull-left">
+                            <h3><?php echo $this->get('translator')->trans('Sin alias configurados',array(),'templates');?></h3>
+                            <p>
+                                <?php echo $this->get('translator')->trans('main-text-emailAlias-2',array(),'templates'); ?>.
+                                <a data-bind="click: openNew" accesskey="n" title="<?php echo $this->get('translator')->trans('Crear nuevo alias',array(),'templates'); ?> (Alt + N)" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'Link', 'CrearNuevo');"><?php echo $this->get('translator')->trans('Crear nuevo',array(),'templates'); ?></a>
+                            </p>
+                        </div>
+                    </div>
+                <!-- /ko -->
+                <!-- ko if: data().length > 0 -->
+                <table class="processes table table-hover">
+                    <thead>
+                        <tr>
+                            <th >
+                                <a data-bind="click: sortData">
+                                    <?php echo $this->get('translator')->trans('Cuenta de email',array(),'templates'); ?>
+                                    <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                                    <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                                </a>
+                            </th>
+                            <th >
+                                <a data-bind="click: sortDataAlias">
+                                    <?php echo $this->get('translator')->trans('Alias',array(),'templates'); ?>
+                                    <!-- ko if: sortDirectionAlias() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                                    <!-- ko if: sortDirectionAlias() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                                </a>
+                            <th ></th>
+                            <th class=" right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?> </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- ko foreach: data -->
+                        <tr data-bind="attr: { 'class': rowstatus()== 1 ? 'rowDelete': 'info'}">
+                            <td >
+                                <!-- ko with: emailAccount -->
+                                <span data-bind="text: account.user()"></span>
+                                <!-- /ko -->
+                            </td>
+                            <td >
+                                <span data-bind="text:emailAlias()"></span>
+                            </td>
+                            <td >
+                            </td>
+                            <td class="right">
+                                <div data-bind="template: { name: 'rows-loading'}"></div>
+                                <!-- ko if: regStatus() == 1 -->
+                                    <div  data-bind="template: { name: 'delete-confirm'}" class="delete-confirm" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'button', 'EliminarAlias');"></div>
+                                <!-- /ko -->
+                            </td>
+                        </tr>
+                        <!-- /ko-->
+                        <tr class="info">
+                            <td colspan="4">
+                                <a data-bind="click: openNew" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'button', 'CrearNuevoAlias');"> <?php echo $this->get('translator')->trans('Crear nuevo alias',array(),'templates'); ?></a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <!-- /ko-->
+            <!-- /ko-->
+        </div>
+    </section>
+</div>
+
+<div id="crearCuentaEmail" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'button', 'CerrarModalAlias');">×</button>
+        <h3><?php echo $this->get('translator')->trans('Nuevo alias de email',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form data-bind="submit: save">
+        <label><?php echo $this->get('translator')->trans('Ingresa la direccion que recibe',array(),'templates'); ?></label>
+        <div class="input-append">
+            <!-- ko with: emailAlias -->
+                <input type="text" data-bind="value: $data.content" placeholder="info" autofocus="autofocus"/>
+            <!-- /ko -->
+            <span class="add-on">@</span>
+            <select class="add-on" data-bind="value: subdomainDomain">
+                    <optgroup data-bind="attr: {label:'Dominios'}, foreach: $parent.subdomainsDomains.domains(),visible:$parent.subdomainsDomains.domains().length > 0">
+                        <option data-bind="text: name, option: $data, value: $data"></option>
+                    </optgroup>
+                    <optgroup data-bind="attr: {label:'Subdominios'}, foreach: $parent.subdomainsDomains.subdomains(),visible:$parent.subdomainsDomains.subdomains().length > 0">
+                        <option data-bind="text: name, option: $data, value: $data"></option>
+                    </optgroup>
+
+            </select>
+            <!-- ko with: emailAlias -->
+                <span class="help-block error" data-bind="visible: $data.error, text: $data.error"></span>
+            <!-- /ko -->
+        </div>
+        <label><?php echo $this->get('translator')->trans('Selecciona la direccion de destino:',array(),'templates'); ?></label>
+        <select class="full-width" data-bind="options: $parent.emails, optionsValue: 'id' ,optionsText: 'completeAccount', value: idEmailAccount"></select>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() < 1 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'button', 'CancelarCrearAlias');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: save" onclick="FerozoHosting.sendAnalytics('event', 'EmailAlias', 'button', 'GuardarAlias');"><?php echo $this->get('translator')->trans('Crear ahora',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() > 0 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<!-- /ko -->

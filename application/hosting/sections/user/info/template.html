@@ -1,0 +1,126 @@
+<!-- ko with: infoVM-->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Informacion',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Informacion',array(),'templates'); ?></h2>
+    </header>
+    <section>
+        <div class="row-fluid clearfix">
+            <div class="well clearfix">
+
+                <div class="row-fluid">
+                    <div class="span6">
+                        <h4><?php echo $this->get('translator')->trans('Informacion del servidor',array(),'templates'); ?></h4>
+                        <p><?php echo $this->get('translator')->trans('Detalle del entorno del servidor y software instalado',array(),'templates'); ?></p>
+                        <div data-bind="visible:listServerInfo().length <=0" class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        <!-- ko foreach: listServerInfo() -->
+                            <div class="row-information clearfix" >
+                                <span data-bind="text: $data.key +':'" class="class-info-tit"> </span>
+                                <span data-bind="text: $data.value" class="class-info-tec"></span>
+                            </div>
+                        <!-- /ko -->
+                    </div>
+                    <div class="span6 pull-right">
+                        <h4><?php echo $this->get('translator')->trans('Informacion de la cuenta',array(),'templates'); ?></h4>
+                        <p><?php echo $this->get('translator')->trans('Detalle de los recursos y usos de la cuenta',array(),'templates'); ?></p>
+                        <div  data-bind="visible:listServerInfo().length <=0" class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        <!-- ko foreach: listAccountInfo() -->
+                            <div class="row-information">
+                                <span data-bind="text: $data.key +':'" class="class-info-tit"> </span>
+                                <span data-bind="html: $data.value" class="class-info-tec"></span>
+                            </div>
+                            
+                        <!-- /ko -->
+                    </div>
+                </div>
+
+                
+                <hr />
+                <div class="row-fluid visible-desktop">
+                <?php if (in_array("dataBase",$accountInfo["FeaturesEnabled"])) { ?>
+                    <div class="span4">
+                        <h4><?php echo $this->get('translator')->trans('Informacion de bases de datos',array(),'templates'); ?></h4>
+                        <div id="chart-dbinfo" class="accntinfo-chart">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                            <span class="alert alert-warning span11 hide ml0"><?php echo $this->get('translator')->trans('No hay bases de datos',array(),'templates'); ?></span>
+                        </div>
+                    </div>
+                <?php } ?>
+                <?php if ($accountInfo["Server"]["OpSystem"] == "Linux") { ?>
+                    <!-- <div class="span4">
+                        <h4><?php echo $this->get('translator')->trans('Consumo de ancho de banda',array(),'templates'); ?></h4>
+                        <div id="chart-bwinfo" class="accntinfo-chart">
+                                <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </div>
+                    </div> -->
+                    <div class="span4">
+                        <h4><?php echo $this->get('translator')->trans('Informacion de espacio usado',array(),'templates'); ?></h4>
+                        <div id="chart-diskinfo" class="accntinfo-chart">
+                            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        </div>
+                    </div>
+                    <div class="span4">
+                        <?php if($accountInfo["Server"]["Type"] != "Shared"){ ?>
+                            <?php
+                                $espacioUsado = $accountInfo["UsedSpaceHome"];
+                                $espacioAsignado = $accountInfo["AsignedSpace"];
+                                $espacioRestante = $espacioAsignado - $espacioUsado;
+                                $porcentajeUsado = ($espacioUsado * 100) / $espacioAsignado;
+                            ?>
+                            <?php if ($espacioAsignado != -1 && $porcentajeUsado >= 80) { ?>
+                                <div class="alert alert-danger mt10 mb0">
+                                    <i class="icon icon-new fa-exclamation-triangle"></i>
+                                    <?php if ($espacioRestante < 10) { ?>
+                                        <?php echo $this->get('translator')->trans('No tienes más espacio disponible para correos. Tu cuenta tiene menos de 10MB disponibles. Si no liberas espacio de inmediato, dejarás de recibir correos electrónicos', array(), 'templates'); ?>
+                                    <?php } else { ?>
+                                        <?php echo $this->get('translator')->trans('Advertencia: estás alcanzando el máximo espacio disponible para emails. Quedan disponibles', array(), 'templates'); ?>
+                                        <?php echo number_format($espacioRestante, 2); ?>
+                                        <?php echo $this->get('translator')->trans(' MB.', array(), 'templates'); ?>
+                                    <?php } ?>
+                                </div><br />
+                            <?php } ?>
+                        <?php } ?>
+                        
+                        <?php if($accountInfo["Server"]["Type"] == "Shared"){ ?>
+                            <?php
+                                $espacioUsado = $accountInfo["UsedSpaceEmail"];
+                                $espacioAsignado = $accountInfo["AsignedSpaceEmail"];
+                                $espacioRestante = $espacioAsignado - $espacioUsado;
+                                $porcentajeUsado = ($espacioUsado * 100) / $espacioAsignado;
+                            ?>
+                            <?php if ($espacioAsignado != -1 && $porcentajeUsado >= 80) { ?>
+                                <div class="alert alert-danger mt10 mb0">
+                                    <i class="icon icon-new fa-exclamation-triangle"></i>
+                                    <?php if ($espacioRestante < 1) { ?>
+                                        <?php echo $this->get('translator')->trans('No tienes más espacio disponible para correos. Tu cuenta tiene menos de 10MB disponibles. Si no liberas espacio de inmediato, dejarás de recibir correos electrónicos', array(), 'templates'); ?>
+                                    <?php } else { ?>
+                                        <?php echo $this->get('translator')->trans('Advertencia: estás alcanzando el máximo espacio disponible para emails. Quedan disponibles', array(), 'templates'); ?>
+                                        <?php echo number_format($espacioRestante, 2); ?>
+                                        <?php echo $this->get('translator')->trans(' MB.', array(), 'templates'); ?>
+                                    <?php } ?>
+                                </div><br />
+                            <?php } ?>
+                        <?php } ?>
+                    </div>
+                <?php } else { ?>
+                        <div class="span4" style="margin-left: 20%;">
+                            <h4><?php echo $this->get('translator')->trans('Informacion de espacio usado',array(),'templates'); ?></h4>
+                            <div id="chartwin-diskinfo" class="accntinfo-chart">
+                                <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                            </div>
+                        </div>
+                    <?php } ?>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+<!-- /ko -->

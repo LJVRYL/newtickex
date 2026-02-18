@@ -1,0 +1,14 @@
+<?php
+$tg = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
+?>
+<nav class="nav">
+  <?php if($tg==='super_admin'): ?>
+    <a href="superadmin.php">SuperAdmin</a>
+  <?php endif; ?>
+  <?php if(in_array($tg, array('admin_evento','super_admin'), true)): ?>
+    <a href="panel_admin.php">Panel</a>
+    <a href="crear_evento.php">Crear evento</a>
+    <a href="plantillas_entrada.php">Mis Entradas</a>
+    <a href="secundarios.php">Mi staff</a>
+  <?php endif; ?>
+</nav>

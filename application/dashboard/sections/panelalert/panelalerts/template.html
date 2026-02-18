@@ -1,0 +1,286 @@
+<!-- ko with: panelalertsVM -->
+<div class="clearfix animated superfast fadeIn" id="alertlist">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/panelalert/panelalerts"><?php echo $this->get('translator')->trans('Alertas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Listado de Alertas',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Alertas',array(),'templates'); ?></h2>
+    </header>
+    <section class="row">
+
+        <!-- ko if: (inprocess() >= 1 && data().length <= 0) || pagination.paginationRequesting() -->
+            <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+        <!-- /ko -->
+        <!-- ko if: data().length <= 0  && !inprocess() && !pagination.paginationRequesting() -->
+            <div class="vm-emtpy-records well clearfix">
+                <div class="pull-left mr20">
+                    <img src="/application/assets/img/vm-icons/png/sign-check.png" alt=""/>
+                </div>
+                <div class="pull-left">
+                    <h3><?php echo $this->get('translator')->trans('No hay Alertas Vigentes',array(),'templates');?></h3>
+                    <p>
+                        <?php echo $this->get('translator')->trans('No existen alertas vigentes en el panel de control',array(),'templates');?>.
+                    </p>
+                </div>
+            </div>
+        <!-- /ko -->
+        <!-- ko if: data().length > 0 -->
+        <div class="fz-input-prepend">  <span class="add-on"><i class="icon-search"></i></span> <input class="pull-left" placeholder="Buscar …" type="text" data-bind="value: query, valueUpdate: 'keyup'" autocomplete="off"> <a class="clear-search animated fast fadeIn pull-left" data-bind="click: function() { query(''); search(); }" style="display: none;"><i class="icon-remove"></i></a> <a class="btn btn-primary animated fast fadeIn pull-left" data-bind="" style="display: none;"><i class="icon-search"></i></a>  
+        </div>
+        <div  style="float:right;">
+                <select data-bind="value: fillState"><option value="">--TODOS--</option><option value="NEW">NEW</option><option value="ASSIGNED">ASSIGNED</option><option value="IN PROGRESS">IN PROGRESS</option><option value="FIXED">FIXED</option></select>
+                <select data-bind="value: fillUser"><option value="">--TODOS--</option><option value="Facundo">Facundo</option><option value="Pablo">Pablo</option></select>
+        </div>
+        <!-- ko ifnot: pagination.paginationRequesting -->
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th><?php echo $this->get('translator')->trans('Mensaje',array(),'templates'); ?></th>
+                    <th>
+                        <a data-bind="click: sortData">
+                            <?php echo $this->get('translator')->trans('Fecha',array(),'templates'); ?>
+                            <!-- ko if: sortDirection() == 'asc' --><i class="icon-chevron-up"> </i><!-- /ko -->
+                            <!-- ko if: sortDirection() == 'des' --><i class="icon-chevron-down"> </i><!-- /ko -->
+                        </a>
+                    </th>
+                    <th><?php echo $this->get('translator')->trans('Estado',array(),'templates'); ?></th>
+                    <th class="no-wrap"><?php echo $this->get('translator')->trans('Asignado a',array(),'templates'); ?></th>
+                    <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ko foreach: data() -->
+                <tr data-bind="visible: $parent.isSearch($data)">
+                    <td >
+                        <span data-bind="text: message"></span> (<span data-bind="text: $parent.getUsername($data)"></span>)
+                    </td>
+                    <td class="no-wrap">
+                        <span data-bind="text: auditCreation"></span>
+                    </td>
+                    <td >
+                        <!--ko if: status() == "NEW" -->
+                        <span class="badge badge-error" data-bind="text: status"></span>
+                        <!-- /ko -->
+                        <!--ko if: status() == "ASSIGNED" || status() == "IN PROGRESS"-->
+                        <span class="badge badge-warning" data-bind="text: status"></span>
+                        <!-- /ko -->
+                        <!--ko if: status() == "FIXED" || status() == "CANCELED"-->
+                        <span class="badge badge-success" data-bind="text: status"></span>
+                        <!-- /ko -->
+                    </td>
+                    <td class="no-wrap">
+                        <!--ko if: panelAlertUserName -->
+                        <span data-bind="text: panelAlertUserName"></span>
+                        <!-- /ko -->
+                        <!--ko ifnot: panelAlertUserName -->
+                        <span>--</span>
+                        <!-- /ko -->
+                        
+                        
+                    </td>                    
+                    <td class="right no-wrap">
+                        <div data-bind="template: { name: 'rows-loading'}"></div>
+                        <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Eliminar',array(),'templates'); ?>" data-bind="click: $parent.deletePanelAlert">
+                            <i class="icon-remove-sign"></i>
+                        </a>                        
+                        <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Ver mas Info',array(),'templates'); ?>" data-bind="click: $parent.showInfo">
+                            <i class="icon-info-sign"></i>
+                        </a>                        
+<!--                        <a class="btn small" title="<?php echo $this->get('translator')->trans('Ver mas Info',array(),'templates'); ?>" data-bind="click: $parent.showInfo">
+                            <i class="icon-eye-open"></i>
+                        </a>-->
+                        <a class="btn small" data-bind="click: $parent.editAlert.bind($parent)" title="<?php echo $this->get('translator')->trans('Editar Alerta',array(),'templates'); ?>">
+                            <i class="icon-edit"></i>
+                        </a>
+                    </td>
+                </tr>
+                <!-- /ko --> <!-- Foreach end -->
+                <tr class="info">
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td>
+                        <div class="btn-toolbar pull-right"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <!-- /ko -->
+        <div data-bind="template: { name: 'pagination-ajax'}"></div>
+        <!-- /ko -->
+    </section>
+</div>
+
+<div id="edit" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Editar Alerta',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <form class="form" id="editalert" data-bind="submit: function() { $data.edit(); }">
+            <div>
+                <label><?php echo $this->get('translator')->trans('Mensaje',array(),'templates');?></label>
+                <textarea data-bind="value: message" class="full-width" readonly="true" />
+            </div>
+            <div>
+                <label><?php echo $this->get('translator')->trans('Estado',array(),'templates');?></label>
+                <select class="full-width" name="status" data-bind="options: $parent.statuses, optionsText: 'label', optionsValue: 'value', value: status"></select>
+            </div>
+            <div>
+                <label><?php echo $this->get('translator')->trans('Asignado a',array(),'templates');?></label>
+                <select class="full-width" data-bind="options: $parent.panelAlertUsers, optionsValue: 'id' ,optionsText: 'name', value: panelAlertUser, optionsCaption: '<?php echo $this->get('translator')->trans('Seleccionar',array(),'templates');?>...'"></select>
+            </div>
+            <div>
+                <label><?php echo $this->get('translator')->trans('Notas',array(),'templates');?></label>
+                <textarea data-bind="value: notes" class="full-width" placeholder="<?php echo strtolower($this->get('translator')->trans('Notas',array(),'templates')); ?>" />
+                <span class="help-block error animated shake" data-bind="visible: notes.errors(), text: notes.errors()"></span>
+            </div>                
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: edit"> <?php echo $this->get('translator')->trans('Guardar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" data-dismiss="modal" disabled="disabled" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"  ></button>
+        <!-- /ko -->
+    </div>
+</div>
+
+<div id="alertinfo-modal" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Información de la Alerta',array(),'templates'); ?></h3>
+    </div>
+    <div class="modal-body">
+        <div class="row-information">
+           <label><?php echo $this->get('translator')->trans('Mensaje',array(),'templates');?></label>
+            <textarea data-bind="value: message" class="full-width" readonly="true" />
+        </div> 
+        <div class="row-information">
+            <span class="class-info-tit"><?php echo $this->get('translator')->trans('Estado',array(),'templates'); ?>: </span>
+            <!--ko if: status() == "NEW" -->
+            <span class="label label-error" data-bind="text: status"></span>
+            <!-- /ko -->
+            <!--ko if: status() == "ASSIGNED" || status() == "IN PROGRESS"-->
+            <span class="label label-warning" data-bind="text: status"></span>
+            <!-- /ko -->
+            <!--ko if: status() == "FIXED" || status() == "CANCELED"-->
+            <span class="label label-success" data-bind="text: status"></span>
+            <!-- /ko -->
+        </div>
+        <div class="row-information">
+            <span class="class-info-tit" ><?php echo $this->get('translator')->trans('Asignado a',array(),'templates'); ?>: </span>
+            <!--ko if: panelAlertUserName -->
+            <span class="class-info-tec" data-bind="text: panelAlertUserName"></span>
+            <!-- /ko -->
+            <!--ko ifnot: panelAlertUserName -->
+            <span class="class-info-tec">--</span>
+            <!-- /ko -->
+        </div>        
+        <div class="row-information">
+            <span class="class-info-tit"><?php echo $this->get('translator')->trans('RequestID',array(),'templates'); ?></span>
+            <span class="class-info-tec" data-bind="text: requestId"></span>
+        </div>
+        <div class="row-information">
+            <label><?php echo $this->get('translator')->trans('Contenido',array(),'templates');?></label>
+            <textarea data-bind="value: content" class="full-width" readonly="true" />
+        </div>                
+        <div class="row-information">
+            <label><?php echo $this->get('translator')->trans('Notas',array(),'templates');?></label>
+            <textarea data-bind="value: notes" class="full-width" readonly="true" />
+        </div>                
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: $parent.editAlert.bind($parent)"> <?php echo $this->get('translator')->trans('Editar Alerta',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" data-dismiss="modal" disabled="disabled" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"  ></button>
+        <!-- /ko -->
+    </div>
+</div>    
+
+<div id="alertinfo" class="clearfix animated superfast fadeIn hide" data-bind="with: temp">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+            <li><a href="#" data-bind="click: $parent.hideInfo"><i class="icon-arrow-left mr5"></i><?php echo $this->get('translator')->trans('Listado de Alertas',array(),'templates'); ?></a></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+    
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Información de la Alerta',array(),'templates'); ?></h2>
+    </header>
+    
+    <section class="row">
+        <div class="row-information">
+           <h4><?php echo $this->get('translator')->trans('Mensaje',array(),'templates');?></h4>
+            <textarea data-bind="value: message" class="full-width" readonly="true" />
+        </div> 
+        <div class="row-information">
+            <span class="class-info-tit"><?php echo $this->get('translator')->trans('Fecha',array(),'templates'); ?>: </span>
+            <span class="class-info-tec" data-bind="text: auditCreation"></span>
+        </div>        
+        <div class="row-information">
+            <span class="class-info-tit"><?php echo $this->get('translator')->trans('Estado',array(),'templates'); ?>: </span>
+            <!--ko if: status() == "NEW" -->
+            <span class="label label-error class-info-tec mt7" data-bind="text: status"></span>
+            <!-- /ko -->
+            <!--ko if: status() == "ASSIGNED" || status() == "IN PROGRESS"-->
+            <span class="label label-warning  class-info-tec mt7" data-bind="text: status"></span>
+            <!-- /ko -->
+            <!--ko if: status() == "FIXED" || status() == "CANCELED"-->
+            <span class="label label-success  class-info-tec mt7" data-bind="text: status"></span>
+            <!-- /ko -->
+        </div>
+        <div class="row-information">
+            <span class="class-info-tit" ><?php echo $this->get('translator')->trans('Asignado a',array(),'templates'); ?>: </span>
+            <!--ko if: panelAlertUserName -->
+            <span class="class-info-tec" data-bind="text: panelAlertUserName"></span>
+            <!-- /ko -->
+            <!--ko ifnot: panelAlertUserName -->
+            <span class="class-info-tec">--</span>
+            <!-- /ko -->
+        </div>        
+        <div class="row-information">
+            <span class="class-info-tit"><?php echo $this->get('translator')->trans('RequestID',array(),'templates'); ?>: </span>
+            <span class="class-info-tec" data-bind="text: requestId"></span>
+        </div>
+        <div class="row-information">
+            <h4><?php echo $this->get('translator')->trans('Contenido',array(),'templates');?></h4>
+            <textarea data-bind="value: content" class="full-width" readonly="true" style="min-height: 300px" />
+        </div>                
+        <div class="row-information">
+            <h4><?php echo $this->get('translator')->trans('Notas',array(),'templates');?></h4>
+            <textarea data-bind="value: notes" class="full-width" readonly="true" />
+        </div>                
+    
+    <div class="footer right mt10">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" data-bind="click: $parent.hideInfo"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: $parent.editAlert.bind($parent)"> <?php echo $this->get('translator')->trans('Editar Alerta',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" data-dismiss="modal" disabled="disabled" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" disabled="disabled"> <img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"  ></button>
+        <!-- /ko -->
+    </div>  
+    </section>
+</div>
+
+<!-- /ko -->

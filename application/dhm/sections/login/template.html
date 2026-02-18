@@ -1,0 +1,80 @@
+<!-- ko with: loginVM -->
+<div class="modal-backdrop in" data-bind="visible: $root.connection.needlogin()"  style="display:none"></div>
+<div class="modal animated fast pulse " data-bind="visible: $root.connection.needlogin()"  style="display:none">
+    <div class="modal-header">
+        <h3><?php echo $this->get('translator')->trans('Iniciar sesion para continuar',array(),'templates'); ?></h3>
+    </div>
+
+    <div class="modal-body">
+        <div class="row-fluid">
+            <div class="span12">
+                <form role="form" id="form-login" data-bind="submit: login">
+                    <fieldset>
+                        <div class="fz-input-prepend clearfix">
+                            <span class="add-on"><i class="icon-user"></i></span>
+                            <input class="span12" type="text" autofocus="autofocus" placeholder="<?php echo $this->get('translator')->trans('Usuario',array(),'templates'); ?>" data-bind="value: user" />
+                        </div>
+                        <div class="fz-input-prepend clearfix">
+                            <span class="add-on"><i class="icon-lock"></i></span>
+                            <input class="span12" type="password" placeholder="<?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?>" data-bind="value: password" />
+                        </div>
+
+                        <div class="clearfix alert alert-error mb0" data-bind="visible: errors">
+                            <i class="icon icon-warning-sign"></i> <span data-bind="text: errors"></span>
+                        </div>
+
+                        <!-- ko if: $root.connection.needlogin() -->
+                            <!-- ko if: typeof grecaptcha !== "undefined" || typeof turnstile !== "undefined"  -->
+                                <button data-bind="autoTrigger: initCaptcha, visible: false" class="hide"></button>
+                                <div id="recaptcha-login"></div>
+                            <!-- /ko -->
+                        <!-- /ko -->
+
+                        <div class="mb0">
+                            <a class="forgot-password pull-right" href="/login?restore"><?php echo $this->get('translator')->trans('Olvido su contrasena?',array(),'templates'); ?></a>
+                        </div>
+                    </fieldset>
+                    <input type="submit" class="hide" />
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <div class="right">
+            <a href="/dhm" class="btn"><?php echo $this->get('translator')->trans('Salir',array(),'templates'); ?></a>
+            <!-- ko if: inprocess() <= 0 -->
+                <button type="submit" data-bind="click: login" class="btn btn-primary"><?php echo $this->get('translator')->trans('Ingresar',array(),'templates'); ?></button>
+            <!-- /ko -->
+            <!-- ko if: inprocess() >= 1 -->
+                <button class="btn btn-primary" disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+            <!-- /ko -->
+        </div>
+    </div>
+</div>
+<!-- /ko -->
+
+<ko data-bind="with: $root.profileVM">
+    <div class="modal-backdrop in" data-bind="visible: showModalMaxHosting"  style="display:none"></div>
+    <div class="modal animated fast pulse " data-bind="visible: showModalMaxHosting"  style="display:none">
+            <div class="modal-header mb0" style="background: #CF5959;">
+                <h3><i class="icon icon-warning-sign"></i> <?php echo $this->get('translator')->trans('Panel de control bloqueado',array(),'templates'); ?></h3>
+            </div>
+            <div class="modal-body">
+                <div class="row-fluid">
+                    <div class="span12">
+                        <div><?php echo $this->get('translator')->trans('El panel de control permanecerá bloqueado porque posee más cuentas de hosting que las permitidas por su licencia',array(),'messages'); ?>.</div>
+                        <p></p>
+                        <div><?php echo $this->get('translator')->trans('Deberá eliminar',array(),'templates'); ?> <span data-bind="text: numTotalHosting() - numMaxHosting()"></span>  <?php echo $this->get('translator')->trans('cuentas de hosting para recuperar todas las funcionalidades de los Paneles de Hosting y DHM.',array(),'templates'); ?></div>
+                        <p></p>
+                        <div><a href="#/account/hostings" data-bind="click: hideAndPreventMaxHosting"><?php echo $this->get('translator')->trans('Cuentas de hosting',array(),'templates'); ?></a></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="right">
+                    <button data-bind="click: hideAndPreventMaxHosting" class="btn btn-primary" style="background: #CF5959 !important;"><?php echo $this->get('translator')->trans('Aceptar',array(),'templates'); ?></button>
+                </div>
+            </div>
+    </div>
+</ko>
+

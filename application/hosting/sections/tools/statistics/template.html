@@ -1,0 +1,112 @@
+<!-- ko with: statisticsVM -->
+<div class="clearfix animated superfast fadeIn">
+
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li><a href="#/tools"><?php echo $this->get('translator')->trans('Herramientas',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Estadisticas',array(),'templates'); ?></li>
+        </ul>
+        <hr class="mb0" />
+    </nav>
+
+    <header class="clearfix">
+        <h2 class="pull-left section-head-title"><?php echo $this->get('translator')->trans('Estadisticas',array(),'templates'); ?></h2>
+        <div class="btn-toolbar btn-toolbar-docs clearfix "></div>
+    </header>
+
+    <section data-bind="visible: isDefault()">
+        <div class="vm-emtpy-records well">
+            <div class="clearfix">
+                <div class="pull-left mr20">
+                    <img src="/application/assets/img/vm-icons/png/dashboard-alt.png" alt=""/>
+                </div>
+                <div class="pull-left">
+                    <h3><?php echo $this->get('translator')->trans('Empiece a utilizar Analytics',array(),'templates');?></h3>
+                    <p>
+                        <?php echo $this->get('translator')->trans('Visite el sitio web de Google Analytics para registrarse con una cuenta',array(),'templates'); ?>.
+                        <a href="http://www.google.com/analytics/" target="_blank"><?php echo $this->get('translator')->trans('Ir a Google Analytics',array(),'templates'); ?>.</a>
+                    </p>
+                </div>
+            </div>
+            <p><?php echo $this->get('translator')->trans('Google Analytics es herramienta de Analítica Web de la empresa Google. Ofrece información agrupada del tráfico que llega a los sitios web según la audiencia, la adquisición, el comportamiento y las conversiones que se llevan a cabo en el sitio web',array(),'templates');?>.</p>
+            <p><?php echo $this->get('translator')->trans('Se pueden obtener informes como el seguimiento de usuarios exclusivos, el rendimiento del segmento de usuarios, los resultados de las diferentes campañas de marketing online, las sesiones por fuentes de tráfico, tasas de rebote, duración de las sesiones, contenidos visitados, conversiones (para ecommerce), etc',array(),'templates');?>.</p>
+        </div>
+    </section>
+
+    <section data-bind="visible: !isDefault()">
+        <div class="well clearfix">
+            <h3><?php echo $this->get('translator')->trans('Habilitacion de la generacion de estadisticas',array(),'templates'); ?></h3>
+            <p><?php echo $this->get('translator')->trans('Desde aqui puede especificar si el sistema debe generar las estadisticas de uso para los dominios de esta cuenta o no',array(),'templates'); ?></p>
+            <label class="radio">
+                <input value="0" type="radio" data-bind="value: 0, checkedValue: 0, enable: !inprocess() && (statisticsStatus() == 1 || statisticsStatus() == 6), checked: statisticsEnableMode, event: { change: saveStatisticsStatus }" /> <?php echo $this->get('translator')->trans('Deshabilitar generacion de estadisticas',array(),'templates'); ?>
+            </label>
+            <label class="radio">
+                <input value="2" type="radio" data-bind="value: 2, checkedValue: 2, enable: !inprocess() && (statisticsStatus() == 1 || statisticsStatus() == 6), checked: statisticsEnableMode, event: { change: saveStatisticsStatus }" /> <?php echo $this->get('translator')->trans('Habilitar generacion de estadisticas consolidadas',array(),'templates'); ?>
+            </label>
+            <div class="mt7">
+                <!-- ko if: statisticsStatus() == 6 -->
+                    <span class="label label-important animated bounceIn"><?php echo $this->get('translator')->trans('Esta configuracion tiene conflictos',array(),'templates'); ?></span>
+                <!-- /ko -->
+            </div>
+
+            <!-- ko if: $root.profileVM().user().Server.OpSystem() != "Linux" -->
+                <div class="clearfix mt10" data-bind="visible: !inprocess() && statisticsEnableMode()">
+                    <button class="btn btn-success mr5 pull-left" data-bind="visible: statisticWindowsSummary(), click: downloadSummary"><i class="icon icon-new fa-link"></i> <?php echo $this->get('translator')->trans('Ver resumen',array(),'templates'); ?></button>
+
+                    <div class="input-append pull-left" data-bind="visible: statisticWindowsFiles().length">
+                        <select data-bind="options: statisticWindowsFiles, optionsText: function(e) { return e.dateyear +'-'+ e.datemonth +' ('+ e.datemonthdesc+')'; }, value: statisticWindowsFileSelected"></select>
+                        <button class="btn btn-primary" data-bind="click: downloadFile"><i class="icon icon-new fa-link"></i> <?php echo $this->get('translator')->trans('Ver archivo',array(),'templates'); ?></button>
+                    </div>
+                </div>
+            <!-- /ko -->
+
+            <!-- ko if: $root.profileVM().user().Server.OpSystem() == "Linux" -->
+                <div data-bind="visible: (statisticsStatus() == 1 || statisticsStatus() == 6) && getWebalizerLink() && getWebalizerLink().action">
+                    <div data-bind="with: getWebalizerLink()">
+                        <form method="post" target="_blank" data-bind="attr: { action: $data.action }" class="mb0">
+                            <input type="hidden" name="fzlogin" value="1" />
+                            <input type="hidden" name="username" data-bind="value: $data.username"/>
+                            <input type="hidden" name="fzpassword" data-bind="value: $data.fzpassword"/>
+                            <button type="submit" class="btn mt10"><i class="icon icon-new fa-link"></i> <?php echo $this->get('translator')->trans('Ir a las estadisticas',array(),'templates'); ?></button>
+                        </form>
+                    </div>
+                </div>
+            <!-- /ko -->
+        </div>
+
+        <!-- ************************************************************************ -->
+
+        <!-- ko if: $root.profileVM().user().Server.OpSystem() == "Linux" -->
+            <div class="well clearfix">
+                <div class="clearfix">
+                    <h3><?php echo $this->get('translator')->trans('Administracion de los registros de acceso',array(),'templates'); ?></h3>
+                    <label class="radio">
+                        <input type="checkbox" data-bind="enable: !inprocess() && !accessRecord().hasErrors(), checked: accessRecord().saveInHome"/> <?php echo $this->get('translator')->trans('Archivar registros en su directorio inicial al final de cada mes',array(),'templates'); ?>
+                    </label>
+                    <label class="radio">
+                        <input type="checkbox" data-bind="enable: !inprocess() && !accessRecord().hasErrors(), checked: accessRecord().removePrevious"/> <?php echo $this->get('translator')->trans('Eliminar registros del mes anterior al final de cada mes',array(),'templates'); ?>
+                    </label>
+                    <label class="radio">
+                        <input type="checkbox" data-bind="enable: !inprocess() && !accessRecord().hasErrors(), checked: accessRecord().includeRegAccess"/> <?php echo $this->get('translator')->trans('Incluir registros de acceso en backup',array(),'templates'); ?>
+                    </label>
+
+                    <div class="mt10">
+                        <!-- ko if: inprocess() -->
+                            <button class="btn btn-primary " disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="" /></button>
+                        <!-- /ko -->
+                        <!-- ko if: !inprocess() && !accessRecord().hasErrors() -->
+                            <button class="btn btn-primary" data-bind="click: accessRecord().save"><?php echo $this->get('translator')->trans('Configurar',array(),'templates'); ?></button>
+                        <!-- /ko -->
+                        <!-- ko if: accessRecord().regStatus() == 6 -->
+                            <span class="label label-important animated bounceIn"><?php echo $this->get('translator')->trans('Esta configuracion tiene conflictos',array(),'templates'); ?></span>
+                        <!-- /ko -->
+                        <button data-bind="click: downloadAccessRecords" class="btn"><i class="icon icon-download-alt"></i> <?php echo $this->get('translator')->trans('Descargar registros',array(),'templates'); ?></button>
+                    </div>
+                </div>
+            </div>
+        <!-- /ko -->
+
+    </section>
+</div>
+<!-- /ko -->

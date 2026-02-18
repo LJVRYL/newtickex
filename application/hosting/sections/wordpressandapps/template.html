@@ -1,0 +1,665 @@
+<!-- ko with: wordpressandappsVM -->
+<section class="packamigo clearfix animated superfast fadeIn">
+    <nav class="section-breadcrum row-fluid">
+        <ul class="breadcrumb">
+          <li><a href="#/index"><i class="icon-home mr5"></i><?php echo $this->get('translator')->trans('Inicio',array(),'templates'); ?></a> <span class="divider">/</span></li>
+          <li class="active"><?php echo $this->get('translator')->trans('Wordpress & Apps',array(),'templates'); ?></li>
+        </ul>
+        <hr  />
+    </nav>
+
+<!-- ko if: readyView() == "WO-DOMAINS" -->
+    <div class="vm-emtpy-records well clearfix">
+        <div class="pull-left mr20">
+            <img src="/application/assets/img/vm-icons/png/globe.png" alt=""/>
+        </div>
+        <div class="pull-left">
+            <h3><?php echo $this->get('translator')->trans('Primero apunta un dominio',array(),'templates');?></h3>
+            <p>
+                <?php echo $this->get('translator')->trans('Para utilizar esta funcionalidad debes tener por lo menos un dominio apuntado',array(),'templates'); ?>.
+                <a href="#/domain/domains"><?php echo $this->get('translator')->trans('Apuntar dominio',array(),'templates'); ?></a>
+            </p>
+        </div>
+    </div>
+<!-- /ko -->
+    
+
+<!-- ko if: readyView() == "LOADING" -->
+    <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+<!-- /ko -->
+                    
+<!-- ko if: readyView() == "W-DOMAINS" -->
+    <?php if ((in_array("wpImporter",$accountInfo["FeaturesEnabled"]))): ?>
+        <!-- <div class="btn-toolbar btn-toolbar-docs clearfix">
+            <a class="btn btn-primary pull-right" accesskey="i" rel="tooltip" title="<?php echo $this->get('translator')->trans('Importar WordPress',array(),'templates'); ?> (Alt + I )" data-bind="click: importWP" onclick="FerozoHosting.sendAnalytics('event', 'Import', 'button', 'ImportWP');"><?php echo $this->get('translator')->trans('Importar WordPress',array(),'templates'); ?></a>
+        </div> -->
+    <?php endif; ?>
+    <div class="tabbable">
+      <ul class="nav nav-tabs">
+        <li class="active"><a href="#tab1" data-toggle="tab" id="app-list" data-bind="click: function() { query('');}" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'link', 'ListadoApps');"><?php echo $this->get('translator')->trans('Listado de Apps',array(),'templates'); ?></a></li>
+        <li><a href="#tab2" data-toggle="tab" id="app-installed" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'link', 'AppsInstaladas');"><?php echo $this->get('translator')->trans('Apps Instaladas',array(),'templates'); ?></a></li>
+        <?php if ((in_array("wpStaging",$accountInfo["FeaturesEnabled"]) && $accountInfo["wpStaging"] == 1) || (in_array("wpStaging",$accountInfo["FeaturesEnabled"]) && $accountInfo["wpStaging"] == 0 && $accountInfo["Server"]["Type"] == 'Shared' && $accountInfo["WhiteLabel"] == false)): ?>
+            <li data-bind="visible: $root.profileVM().user().Server.OpSystem() == 'Linux'"><a href="#tab3" data-toggle="tab" id="wp-stage" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'link', 'AppsInstaladas');"><?php echo $this->get('translator')->trans('WordPress Stage',array(),'templates'); ?>  <span class="badge badge-success invisible-badge"><?php echo $this->get('translator')->trans('¡Nuevo!',array(),'templates'); ?></span></a></li>  
+        <?php endif; ?>
+      </ul>
+      <div class="tab-content tab-content-white">
+        <div class="tab-pane active animated fadeIn" id="tab1">
+            <div class="row-fluid">
+                <div class="span12">
+                    
+
+
+                    <ul class="squarecontents tab-pane active" data-bind="visible: inprocess() < 1">
+                        <!-- ko foreach: availableApps -->
+
+                        <li class="span3 animated superfast fadeIn">
+                            <div class="squarecontent clearfix">
+                                <div class="ds-icon-container" data-bind="click: $parent.openModalInfo.bind($parent), attr: { title: description() + ' - <?php echo $this->get('translator')->trans('Click para mas info',array(),'templates'); ?>' }" style="cursor: help">
+                                    <div data-bind="css: nameKey() && 'ds-icon ' + nameKey().toLowerCase()"></div>
+                                </div>
+                                <div class="mt7">
+                                    <button data-bind="click: $parent.openModalInstall.bind($parent), css: installed() ? ' pull-left':' full-width'" style="width:77%" class="btn" title="<?php echo $this->get('translator')->trans('Instalar aplicacion',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'InstalarAplicacion');"><i class="icon icon-new fa-cube"></i> <?php echo $this->get('translator')->trans('Instalar',array(),'templates'); ?> <span data-bind="visible: installed()"><?php echo $this->get('translator')->trans('otra',array(),'templates'); ?></span></button>
+                                    <button data-bind="click: $parent.switchInstalled.bind($parent), visible: installed" class="btn pull-right" style="width:21%" title="<?php echo $this->get('translator')->trans('Configurar aplicacion',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'ConfigurarApp');"><i class="icon icon-cog"></i></button>
+                                </div>
+                                <span data-bind="visible: installed, click: $parent.switchInstalled.bind($parent)" class="label label-warning pull-right installed-label"><?php echo $this->get('translator')->trans('Instalada',array(),'templates'); ?></span>
+                            </div>
+                        </li>
+                        <!-- /ko -->
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+        <div class="tab-pane animated fadeIn" id="tab2">
+
+            <div class="fz-input-prepend clearfix">
+                <div class="email-filter">
+                    <span class="add-on"><i class="icon-search"></i></span>
+                    <input class="pull-left" placeholder="<?php echo $this->get('translator')->trans('Buscar',array(),'templates');?> …" type="text" data-bind="value: query, valueUpdate: 'afterkeydown'" autocomplete="off">
+                    <a class="clear-search animated fast fadeIn pull-left" data-bind="visible: query, click: function() { query(''); search(); }"><i class="icon-remove"></i></a>
+                </div>
+            </div>
+
+            <table class="table table-hover mb0" id="table-installed">
+                <thead>
+                    <tr>
+                        <th><?php echo $this->get('translator')->trans('Aplicacion',array(),'templates'); ?></th>
+                        <th><?php echo $this->get('translator')->trans('Directorio',array(),'templates'); ?></th>
+                        <th><?php echo $this->get('translator')->trans('Dominio',array(),'templates'); ?></th>
+                        <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- ko if: data().length <= 0  && !inprocess() -->
+                        <tr class="info">
+                            <td colspan="5">
+                                <span><?php echo $this->get('translator')->trans('No hay aplicaciones instaladas',array(),'templates'); ?></span>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+
+                    <!-- ko if: data().length <= 0  && inprocess() -->
+                        <tr class="info">
+                            <td colspan="5">
+                                <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+
+                    <!-- ko foreach: data() -->
+                        <tr class="info" data-bind="visible: visible()">
+                            <td><span data-bind="text: webApp().name()"></span></td>
+                            <td><span data-bind="text: folderPath"></span></td>
+                            <td><span data-bind="text: domainDisplay"></span></td>
+                            <td class="right">
+                                <div style="display: inline-block" data-bind="template: { name: 'rows-loading'}"></div>
+
+                                <!-- ko if: regStatus() == 1 -->
+
+                                    <!-- ko if: webApp().allowSyncPass() == true -->
+                                        <a class="btn small" data-bind="click: $parent.openModalEditPass.bind($parent)"  title="<?php echo $this->get('translator')->trans('Cambiar Contrasena',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'CambiarContraseña');"><i class="icon-key"></i></a>
+                                    <!-- /ko -->
+                                    <!-- ko if: webApp().allowSyncPass() == false -->
+                                        <a class="btn small" rel="tooltip" disabled="disabled" title="<?php echo $this->get('translator')->trans('Esta aplicacion no admite Resetear Contrasena',array(),'templates'); ?>">Reset Pass</a>
+                                    <!-- /ko -->
+                                    <!-- ko if: webApp().allowSyncPass() != '' -->
+                                        <a class="btn small" data-bind="click: $parent.openModalWpRedirect.bind($parent)" rel="tooltip" title="<?php echo $this->get('translator')->trans('Ingresar a la administracion de la aplicacion',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'IngresarAdministracion');">
+                                            <i class="icon-signin"></i>
+                                        </a>
+                                    <!-- /ko -->
+                                    <!-- ko if: webApp().allowSyncPass() == '' -->
+                                        <a class="btn small" rel="tooltip" title="<?php echo $this->get('translator')->trans('Ingresar a la administracion de la aplicacion',array(),'templates'); ?>" disabled="disabled">
+                                            <i class="icon-signin"></i>
+                                        </a>
+                                    <!-- /ko -->
+                                    <a class="btn small" rel="tooltip" href="" title="<?php echo $this->get('translator')->trans('Cambiar dominio de instalacion',array(),'templates'); ?>" data-bind="click: $parent.openModalEdit.bind($parent)" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'EditarDominioInstalacion');">
+                                        <i class="icon-edit"></i>
+                                    </a>
+                                    <div data-bind="template: { name: 'delete-confirm'}" class="delete-confirm" title="<?php echo $this->get('translator')->trans('Desinstalar aplicacion',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'DesinstalarApp');"></div>
+                                <!-- /ko -->
+                            </td>
+                        </tr>
+                    <!-- /ko -->
+                </tbody>
+            </table>
+
+        </div>
+        <div class="tab-pane animated fadeIn" id="tab3">
+            <?php if ($accountInfo["wpStaging"] == 0 && $accountInfo["Server"]["Type"] == 'Shared' && $accountInfo["WhiteLabel"] == false): ?>
+                <div class="vm-emtpy-records well clearfix">
+                    <div class="pull-left mr20">
+                        <img src="/application/assets/img/vm-icons/png/window-system.png" alt=""/>
+                    </div>
+                    <div class="pull-left">
+                        <h3><?php echo $this->get('translator')->trans('WordPress Stage: Haz cambios sin afectar tu web real',array(),'templates');?></h3>
+                        <p><?php echo $this->get('translator')->trans('¡Ahora puedes hacer pruebas en staging!',array(),'templates'); ?>.</p>
+                        <ul>
+                            <li><?php echo $this->get('translator')->trans('Edita código, diseño y contenido',array(),'templates'); ?></li>
+                            <li><?php echo $this->get('translator')->trans('Instala plugins',array(),'templates'); ?></li>
+                            <li><?php echo $this->get('translator')->trans('Testea funcionalidades',array(),'templates'); ?></li>
+                        </ul>
+                        <p><?php echo $this->get('translator')->trans('Tu decides cuando salir a producción. Más tranquilidad, menos riesgos',array(),'templates'); ?>.</p>
+                        
+                        <!-- ko if: serviceId() != 0000 -->
+                            <a class="btn btn-primary" data-bind="click: redirectMc" rel="tooltip" title="<?php echo $this->get('translator')->trans('Contratar',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'WordPress', 'button', 'Buy');"><?php echo $this->get('translator')->trans('Contratar',array(),'templates'); ?></a>
+                        <!-- /ko -->
+                    </div>
+                </div>
+            <?php endif; ?>
+            <?php if (in_array("wpStaging",$accountInfo["FeaturesEnabled"]) && $accountInfo["wpStaging"] == 1): ?>
+                <div class="fz-input-prepend clearfix">
+                    <span><?php echo $this->get('translator')->trans('Aprovecha este espacio para hacer pruebas antes de salir a producción y evitar problemas en tu web',array(),'templates');?></span><br>
+                    <br>
+                    <span><a href="https://soporte.donweb.com/hc/es/articles/24384889670164-Wordpress-Stage-desde-Ferozo" target="_blank"><?php echo $this->get('translator')->trans('¿Qué es WordPress Stage y cómo usarlo?',array(),'templates');?></a></span>
+                </div>
+
+                <div class="btn-toolbar btn-toolbar-docs clearfix">
+                    <a class="btn btn-primary pull-right" href="" accesskey="n" rel="tooltip" title="<?php echo $this->get('translator')->trans('Crear Stage',array(),'templates'); ?> (Alt + N )" data-bind="click: openModalNewStage, visible: wpStages().length <= 0" onclick="FerozoHosting.sendAnalytics('event', 'WordPress', 'button', 'CreateStage');"><?php echo $this->get('translator')->trans('Crear Stage',array(),'templates'); ?></a>
+                </div>
+
+                <table class="table table-hover mb0" id="table-stages">
+                    <thead>
+                        <tr>
+                            <th><?php echo $this->get('translator')->trans('Stage',array(),'templates'); ?></th>
+                            <th><?php echo $this->get('translator')->trans('Creado el',array(),'templates'); ?></th>
+                            <th><?php echo $this->get('translator')->trans('Publicado el',array(),'templates'); ?></th>
+                            <th class="right"><?php echo $this->get('translator')->trans('Acciones',array(),'templates'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- ko if: !wpStages().length -->
+                            <tr class="info">
+                                <td colspan="5">
+                                    <span><?php echo $this->get('translator')->trans('Todavía no creaste uno',array(),'templates'); ?></span>
+                                </td>
+                            </tr>
+                        <!-- /ko -->
+
+                        <!-- ko if: !wpStages() && inprocess() -->
+                            <tr class="info">
+                                <td colspan="5">
+                                    <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                                </td>
+                            </tr>
+                        <!-- /ko -->
+
+                        <!-- ko foreach: wpStages() -->
+                            <tr class="info">
+                                <td><a data-bind="text: subdomain, attr: {href: 'http://' + subdomain()}" target="_blank"></a></td>
+                                <td><span data-bind="text: created"></span></td>
+                                <!-- ko if: published() -->
+                                    <td><span data-bind="text: published"></span></td>
+                                <!-- /ko -->
+                                <!-- ko if: !published() -->
+                                <td><span>-</span></td>
+                                <!-- /ko -->
+                                <td class="right">
+                                    <div style="display: inline-block" data-bind="template: { name: 'rows-loading'}"></div>
+
+                                    <!-- ko if: regStatus() == 1 -->
+                                        <a class="btn small" rel="tooltip" href="" title="<?php echo $this->get('translator')->trans('Acceder como WordPress Admin',array(),'templates'); ?>" target="_blank" data-bind="attr: { 'href': '/hosting/webapp/autologinstaging/'+id()}" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'IngresarAdministracion');">
+                                            <i class="icon-signin"></i>
+                                        </a>
+                                        <a class="btn small" data-bind="click: $parent.stagePublishConfirm.bind($parent)"  title="<?php echo $this->get('translator')->trans('Publicar Stage',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'PublicarStage');"><i class="icon icon-new fa-upload"></i></a>
+                                        <div data-bind="template: { name: 'staging-delete-confirm'}" class="delete-confirm" title="<?php echo $this->get('translator')->trans('Eliminar Stage',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'EliminarStage');"></div>
+                                    <!-- /ko -->
+                                </td>
+                            </tr>
+                        <!-- /ko -->
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+      </div>
+    </div>
+<!-- /ko -->    
+</section>
+
+
+<div id="editapp" style="min-width: 475px; width:auto!important" class="modal animated fast pulse in hide" data-bind="with: tempEdit">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3>
+            <?php echo $this->get('translator')->trans('Cambiar dominio de instalacion',array(),'templates'); ?>
+        </h3>
+    </div>
+    <div class="modal-body">
+        <label><?php echo $this->get('translator')->trans('Dominio de la instalacion',array(),'templates'); ?>:</label>
+        <select style="width: 98%;" data-bind="options: $parent.domains, optionsText: function(e) {return e.domain.content();}, value: domain"></select>
+
+        <!-- ko if: flagSsl -->
+            <!-- ko foreach: sslTypes -->
+            <label class="radio mt0" style="display: inline;">
+                
+                <input type="radio" name="sslType" data-bind="value: value, checked: $parent.sslType, checkedValue: value"/>
+                <span class="text-small" data-bind="text: $(label).html()"></span>
+            </label>
+            <!-- /ko -->     
+        <!-- /ko -->
+        
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'CancelarCambioDominio');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: editDomain" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'CambiarDominio');"><?php echo $this->get('translator')->trans('Cambiar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+<span class="hide" id="trans-select-regenerar"><?php echo $this->get('translator')->trans('Resetear',array(),'templates'); ?></span>
+<span class="hide" id="trans-select-cambiar"><?php echo $this->get('translator')->trans('Cambiar',array(),'templates'); ?></span>
+<div id="editpass" class="modal animated fast pulse in hide" data-bind="with: tempEdit">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3>
+            <?php echo $this->get('translator')->trans('Cambiar contraseña de la aplicación',array(),'templates'); ?>
+        </h3>
+    </div>
+    <div class="modal-body">
+        <form data-bind="submit: resetPass">
+            <div class="row-fluid">
+                <label><?php echo $this->get('translator')->trans('Operación',array(),'templates'); ?>:</label>
+                <select name="resetType" data-bind="options: $parent.resetTypeList, optionsText: 'label', optionsValue: 'value', value: $parent.resetType">
+                </select>
+            </div>
+            <div class="row-fluid">
+                <!-- ko if: $parent.resetType() == 0-->
+                <label><?php echo $this->get('translator')->trans('Nueva contrasena',array(),'templates'); ?>:</label>
+                <input type="text" class="span12" data-bind="value: password" name="password" placeholder="<?php echo $this->get('translator')->trans('Contrasena',array(),'templates'); ?>" />
+                <span class="help-block error animated shake" data-bind="visible: password.errors(), text: password.errors()"></span>
+                <!-- /ko -->
+                <input type="submit" class="hide" />
+            </div>
+            <div class="alert alert-info mb0">
+                <i class="icon-new fa fa-info-circle"></i>
+                <!-- ko if: $parent.resetType() == 1-->
+                <?php echo $this->get('translator')->trans('Si selecciona esta opción la contraseña quedará igual al acceso del Panel Ferozo.',array(),'templates'); ?> 
+                <!-- /ko -->
+                <!-- ko if: $parent.resetType() == 0-->
+                <?php echo $this->get('translator')->trans('Esta opción le permitirá setear una nueva contraseña.',array(),'templates'); ?> 
+                <!-- /ko -->
+                <?php echo $this->get('translator')->trans('El nombre de usuario administrador de la aplicacion es ',array(),'templates'); ?> <b data-bind="text: loginUser"></b>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'CancelarCambioPass');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: resetPass" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'CambiarPass');"><?php echo $this->get('translator')->trans('Cambiar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+
+<div id="create-stage" class="modal animated fast pulse hide" data-bind="with: tempStaging">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" data-bind="click: $parent.resetStep" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Nuevo Stage',array(),'templates'); ?></h3>
+    </div>
+    <form data-bind="event: { keypress: absorbEnter }, submit: createStage">
+        <section id="step1" class="slideInSection" data-bind="visible: $parent.step() === 1">
+            <div class="modal-body">
+                <!-- ko if: $parent.wpInstallations().length > 0 -->
+                    <div>
+                        <p><?php echo $this->get('translator')->trans('Paso 1 de 4',array(),'templates'); ?></p>
+                        <h4><?php echo $this->get('translator')->trans('Elige tu WordPress',array(),'templates'); ?></h4>
+                        <p><?php echo $this->get('translator')->trans('El stage será una copia exacta y ocupará el mismo espacio',array(),'templates'); ?>.</p>
+                    </div>
+                    <table class="table table-hover mb0" id="table-wp">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th><?php echo $this->get('translator')->trans('Raíz del WordPress',array(),'templates'); ?></th>
+                                <th><?php echo $this->get('translator')->trans('Dominio',array(),'templates'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- ko foreach: $parent.wpInstallations() -->
+                                <tr class="info" data-bind="visible: visible()">
+                                    <td><input type="radio" name="hostoption" value="domainDisplay" data-bind="value: folderPath()+'@'+domainDisplay(), checked: $parent.pathorigin"/></td>
+                                    <td><span data-bind="text: folderPath"></span></td>
+                                    <td><span data-bind="text: domainDisplay"></span></td>
+                                </tr>
+                            <!-- /ko -->
+                        </tbody>
+                    </table>
+                <!-- /ko -->
+                <!-- ko ifnot: $parent.wpInstallations().length > 0 -->
+                    <div>
+                        <p><?php echo $this->get('translator')->trans('Necesitas apuntar un dominio o instalar un WordPress para crear un stage.',array(),'templates'); ?></p>
+                        <ul>
+                            <li>
+                                <span><?php echo $this->get('translator')->trans('Para iniciar la instalación de WordPress haz click',array(),'templates'); ?> </span><a data-bind="click: $parent.goToInstall"><?php echo $this->get('translator')->trans('aquí',array(),'templates'); ?></a>
+                            </li>
+                            <li>
+                                <span><?php echo $this->get('translator')->trans('Para apuntar un dominio haz click',array(),'templates'); ?> </span><a href="#/action/domain/domains/newdomain"><?php echo $this->get('translator')->trans('aquí',array(),'templates'); ?></a>
+                            </li>
+                        </ul>
+                        <br>
+                    </div>
+                <!-- /ko -->
+                <!-- ko if: $parent.hasAlterDomain() == 1 -->
+                    <div class="alert mt10 mb0">
+                        <i class="icon icon-new fa-info-circle"></i> <?php echo $this->get('translator')->trans('Si no ves tu WordPress en la lista, recuerda asegurarte que no se encuentre instalado en un dominio temporal.',array(),'templates'); ?>
+                    </div>
+                <!-- /ko -->
+            </div>
+            <!-- ko if: $parent.wpInstallations().length > 0 -->
+                <div class="modal-footer">
+                    <!-- ko if: $parent.inprocess() <= 0 -->
+                        <button class="btn" data-dismiss="modal" data-bind="click: $parent.resetStep" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                        <button class="btn btn-primary" data-bind="click: $parent.changeStepFwd, enable: pathorigin"><?php echo $this->get('translator')->trans('Continuar',array(),'templates'); ?></button>
+                    <!-- /ko -->
+                    <!-- ko if: $parent.inprocess() == 1 -->
+                        <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                        <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                    <!-- /ko -->
+                </div>
+            <!-- /ko -->
+            <!-- ko ifnot: $parent.wpInstallations().length > 0 -->
+                <div class="modal-footer">
+                    <!-- ko if: $parent.inprocess() <= 0 -->
+                        <button class="btn" data-dismiss="modal" data-bind="click: $parent.resetStep" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                    <!-- /ko -->
+                    <!-- ko if: $parent.inprocess() == 1 -->
+                        <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                        <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                    <!-- /ko -->
+                </div>
+            <!-- /ko -->
+        </section>
+        <section id="step2" class="slideInSection" data-bind="visible: $parent.step() === 2">
+            <div class="modal-body">
+                <div>
+                    <p><?php echo $this->get('translator')->trans('Paso 2 de 4',array(),'templates'); ?></p>
+                    <h4><?php echo $this->get('translator')->trans('Revisa tu espacio disponible',array(),'templates'); ?></h4>
+                    <p><?php echo $this->get('translator')->trans('Así evitas que el hosting se llene y afecte el rendimiento de tu web',array(),'templates'); ?>.</p>
+                </div>
+                <div>
+                    <div id="chart-spaceinfo" class="accntinfo-chart" style="width: 520px;">
+                        <div class="loading-data text-center well well-small mb0"><img src="/application/assets/img/loading-well.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>" /> <?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?></div>
+                        <span class="alert alert-warning span11 hide ml0"><?php echo $this->get('translator')->trans('No hay datos disponibles',array(),'templates'); ?></span>
+                    </div>
+                </div>
+                <!-- ko if: availableSpace() == null -->
+                    <div class="alert mt10 mb0">
+                        <i class="icon icon-new fa-info-circle"></i> <?php echo $this->get('translator')->trans('El stage ocupa más espacio del que tienes. Cambia tu plan para continuar.',array(),'templates'); ?>
+                        <!-- ko if: $parent.serviceId() != 0000 -->
+                        <a data-bind="click: $parent.redirectMcSpace" rel="tooltip" title="<?php echo $this->get('translator')->trans('Adquirir espacio',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'WordPress', 'button', 'Buy');"><?php echo $this->get('translator')->trans('Adquirir espacio',array(),'templates'); ?></a>
+                        <!-- /ko -->
+                    </div>
+                <!-- /ko -->
+                <br>
+            </div>
+            <div class="modal-footer">
+                <!-- ko if: $parent.inprocess() <= 0 -->
+                    <button class="btn"  data-bind="click: $parent.changeStepBwd" aria-hidden="true"><?php echo $this->get('translator')->trans('Volver',array(),'templates'); ?></button>
+                    <button class="btn btn-primary" data-bind="click: $parent.changeStepFwd, enable: availableSpace"><?php echo $this->get('translator')->trans('Continuar',array(),'templates'); ?></button>
+                <!-- /ko -->
+                <!-- ko if: $parent.inprocess() == 1 -->
+                    <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                    <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                <!-- /ko -->
+            </div>
+        </section>
+        <section id="step3" class="slideInSection" data-bind="visible: $parent.step() === 3">
+            <div class="modal-body">
+                <div>
+                    <p><?php echo $this->get('translator')->trans('Paso 3 de 4',array(),'templates'); ?></p>
+                    <h4><?php echo $this->get('translator')->trans('Crea un subdominio',array(),'templates'); ?></h4>
+                    <p><?php echo $this->get('translator')->trans('Allí se alojará el stage',array(),'templates'); ?>.</p>
+                </div>
+                <div>
+                    <label><?php echo $this->get('translator')->trans('Subdominio',array(),'templates'); ?></label>
+                    <div class="input-prepend">
+                        <input type="text" name="subdomain" data-bind="value: subdomain" placeholder="<?php echo strtolower($this->get('translator')->trans('subdominio',array(),'templates')); ?>" autofocus="autofocus" class="span3" aria-hidden="true" rel="tooltip" data-placement="right" data-trigger="focus"/>
+                        <span class="add-on" data-bind="text: domainName"></span>
+                        <a class="btn small" style="margin-left: 2%;" title="<?php echo $this->get('translator')->trans('Verificar Disponibilidad',array(),'templates'); ?>" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'Verify');"><i class="icon icon-new fa-check-circle"></i></a>
+                        <span class="help-block error"></span>
+                    </div>
+                    <br>
+                    <p><?php echo $this->get('translator')->trans('Esto tardará unos minutos según el tamaño y complejidad de tu web',array(),'templates'); ?>.</p>
+                    <!-- ko if: domainSearch -->
+                        <!-- ko ifnot: availableSubdomain -->
+                            <div class="alert mt10 mb0">
+                                <i class="icon icon-new fa-info-circle"></i> <?php echo $this->get('translator')->trans('El subdominio seleccionado ya existe. Elige otro para continuar.',array(),'templates'); ?>
+                            </div>
+                        <!-- /ko -->
+                    <!-- /ko -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <!-- ko if: $parent.inprocess() <= 0 -->
+                    <button class="btn"  data-bind="click: $parent.changeStepBwd" aria-hidden="true"><?php echo $this->get('translator')->trans('Volver',array(),'templates'); ?></button>
+                    <!-- ko if: domainSearch -->
+                        <!-- ko if: availableSubdomain -->
+                            <button class="btn btn-primary" data-bind="click: $parent.changeStepFwd, enable: subdomain"><?php echo $this->get('translator')->trans('Continuar',array(),'templates'); ?></button>
+                        <!-- /ko -->
+                        <!-- ko ifnot: availableSubdomain -->
+                            <button class="btn btn-primary" data-bind="click: $parent.changeStepFwd, enable: false"><?php echo $this->get('translator')->trans('Continuar',array(),'templates'); ?></button>
+                        <!-- /ko -->
+                    <!-- /ko -->
+                    <!-- ko ifnot: domainSearch -->
+                        <button class="btn btn-primary" data-bind="click: $parent.changeStepFwd, enable: false"><?php echo $this->get('translator')->trans('Continuar',array(),'templates'); ?></button>
+                    <!-- /ko -->
+                <!-- /ko -->
+                <!-- ko if: $parent.inprocess() == 1 -->
+                    <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                    <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                <!-- /ko -->
+            </div>
+        </section>
+        <section id="step4" class="slideInSection" data-bind="visible: $parent.step() === 4">
+            <div class="modal-body">
+                <div>
+                    <p><?php echo $this->get('translator')->trans('Paso 4 de 4',array(),'templates'); ?></p>
+                    <h4><?php echo $this->get('translator')->trans('Ingresa un email (opcional)',array(),'templates'); ?></h4>
+                    <p><?php echo $this->get('translator')->trans('Te avisaremos por ahí cuando el stage esté listo',array(),'templates'); ?>.</p>
+                </div>
+                <label><?php echo $this->get('translator')->trans('E-mail',array(),'templates'); ?></label>
+                <div>
+                    <input type="text" name="email" data-bind="value: email.content" placeholder="<?php echo strtolower($this->get('translator')->trans('example@domain.com',array(),'templates')); ?>" autofocus="autofocus" class="span3"  rel="tooltip" data-placement="right" data-trigger="focus"/>
+                    <span class="help-block error" data-bind="text: email.error"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <!-- ko if: $parent.inprocess() <= 0 -->
+                    <button class="btn" data-bind="click: $parent.changeStepBwd" aria-hidden="true"><?php echo $this->get('translator')->trans('Volver',array(),'templates'); ?></button>
+                    <button class="btn btn-primary" data-bind="click: createStage"><?php echo $this->get('translator')->trans('Finalizar',array(),'templates'); ?></button>
+                <!-- /ko -->
+                <!-- ko if: $parent.inprocess() == 1 -->
+                    <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+                    <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+                <!-- /ko -->
+            </div>
+        </section>
+        <input type="submit" class="hide" />
+    </form>
+</div>
+
+<div id="staging-confirm-publish" class="modal animated fast pulse hide" data-bind="with: tempStaging">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3><?php echo $this->get('translator')->trans('Publicar Stage',array(),'templates'); ?> </h3>
+    </div>
+    <div class="modal-body">
+        <p>
+            <strong><?php echo $this->get('translator')->trans('Estás por salir a producción: tu sitio se publicará con los cambios que hiciste en el stage.', array(),'templates'); ?></strong>
+        </p>
+        <p>
+            <label><?php echo $this->get('translator')->trans('Puedes opcionalmente añadir un email, te avisaremos una vez que el stage sea publicado.', array(),'templates'); ?></label>
+        </p>
+        <div>
+            <input type="text" name="email" data-bind="value: email.content" placeholder="<?php echo strtolower($this->get('translator')->trans('example@domain.com',array(),'templates')); ?>" autofocus="autofocus" class="span3"  rel="tooltip" data-placement="right" data-trigger="focus"/>
+            <span class="help-block error" data-bind="text: email.error"></span>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true"  onclick="FerozoHosting.sendAnalytics('event', 'Domain', 'button', 'PublicarStageCancelar');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+        <button class="btn btn-primary" data-bind="click: publish" onclick="FerozoHosting.sendAnalytics('event', 'Domain', 'button', 'PublicarStageConfirmar');"> <?php echo $this->get('translator')->trans('Confirmar',array(),'templates'); ?></button>
+    </div>
+</div>
+
+
+
+<div id="installapp" style="min-width: 475px; width:auto!important" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 data-bind="text: $data.name && 'Instalar ' + name()"></h3>
+    </div>
+    <div class="modal-body">
+        <form data-bind="submit: install">
+
+            <div class="ds-icon-container">
+                <div data-bind="css: nameKey() && 'ds-icon ' + nameKey().toLowerCase()"></div>
+            </div>
+
+            <div>
+                <label><?php echo $this->get('translator')->trans('Directorio de la instalacion',array(),'templates'); ?>:</label>
+                <div class="input-prepend clearfix mb0">
+<!--                    <select class="add-on" data-bind="options: $parent.protocols, optionsText: 'label', optionsValue: 'value', value: protocol"></select>-->
+                    <select class="add-on" data-bind="options: $parent.domains, optionsText: function(e) {return e.domain.content();}, value: domain"></select>
+                    <span class="add-on">/</span>
+                    <?php if ($accountInfo["Server"]["OpSystem"] == 'Linux'): ?>
+                          <!-- ko if: !$parent.flagFolder() -->
+                          <input type="text" data-bind="value: folder" maxlength="7" class="required span3" name="folder" placeholder="blog" />
+                          <!-- /ko -->
+                          <!-- ko if: $parent.flagFolder() -->
+                              <input type="text" data-bind="value: folder" maxlength="23" class="required span3" name="folder" placeholder="blog" />
+                          <!-- /ko -->
+                    <?php endif; ?>
+                    <?php if ($accountInfo["Server"]["OpSystem"] != 'Linux'): ?>
+                        <input type="text" data-bind="value: folder" class="required span3" name="folder" placeholder="blog" />
+                    <?php endif; ?>
+                    <div class="clear clearfix"></div>
+                    <span class="help-block error" style="float:right; width: 272px;"></span>
+                </div>
+            </div>
+            
+            <!-- ko if: flagSsl -->
+                <!-- ko foreach: $parent.sslTypes -->
+                <label class="radio mt0" style="display: inline;">
+                    <input type="radio" name="sslType" data-bind="value: value, checked: $parent.sslType, checkedValue: value"/>
+                    <span class="text-small" data-bind="text: $(label).html()"></span>
+                </label>
+                <!-- /ko -->
+            <!-- /ko -->
+
+            <!-- ko if: $parent.emails().length > 0 -->
+            <div class="mt10">
+                <label><?php echo $this->get('translator')->trans('Email del administrador',array(),'templates'); ?>:</label>
+                <select class="full-width" autofocus="autofocus" data-bind="options: $parent.emails, optionsValue: 'completeAccount' ,optionsText: 'completeAccount', value: webappemail"></select>
+            </div>
+            <!-- /ko -->
+            
+            <!-- ko if: !isWellWithCurrentPHP() -->
+                <div class="alert mt7">
+                    <?php echo $this->get('translator')->trans('La version de PHP configurada no es compatible con la aplicacion',array(),'templates'); ?>
+                </div>
+                <a href="/#/website/phpconfig" style="padding-left: 2%;"> 
+                    <?php echo $this->get('translator')->trans('Ir a configuración PHP ',array(),'templates'); ?>
+                </a>
+            <!-- /ko -->
+
+            <input type="submit" class="hide" />
+        </form>
+    </div>
+    <div class="modal-footer">
+        <!-- ko if: $parent.inprocess() == 0 -->
+            <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary" data-bind="click: install, enable: !$parent.installFlag()"><?php echo $this->get('translator')->trans('Instalar',array(),'templates'); ?></button>
+        <!-- /ko -->
+        <!-- ko if: $parent.inprocess() == 1 -->
+            <button class="btn" disabled="disabled"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <button class="btn btn-primary"  disabled="disabled"><img src="/application/assets/img/loading-buttons.svg" alt="<?php echo $this->get('translator')->trans('Cargando...',array(),'templates'); ?>"></button>
+        <!-- /ko -->
+    </div>
+</div>
+
+
+<div id="modal-info" style="min-width: 475px; width:auto!important" class="modal animated fast pulse hide" data-bind="with: temp">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 data-bind="text: 'Informacion de ' + name()"></h3>
+    </div>
+    <div class="modal-body">
+
+        <div class="ds-icon-container">
+            <div data-bind="css: nameKey() && 'ds-icon ' + nameKey().toLowerCase()"></div>
+        </div>
+        <div class="alert alert-info mb0 mt7 clearfix">
+            <div data-bind="text: description"></div>
+            <div class="mt7">
+                <b class="" data-bind="text: 'Version: ' + version()"></b>
+            </div>
+        </div>
+
+    </div>
+    <div class="modal-footer">
+        <button class="btn" data-dismiss="modal" aria-hidden="true"><?php echo $this->get('translator')->trans('Cerrar',array(),'templates'); ?></button>
+        <button data-bind="click: $parent.openModalInstall.bind($parent)" class="btn btn-primary" title="<?php echo $this->get('translator')->trans('Instalar aplicacion',array(),'templates'); ?>"><i class="icon icon-new fa-cube"></i> <?php echo $this->get('translator')->trans('Ir a instalar',array(),'templates'); ?></button>
+    </div>
+</div>
+
+<div id="alertWpRedirectModal" class="modal animated fast pulse in hide" data-bind="with: tempWp">
+    <div class="modal-header mb0">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3>
+            <?php echo $this->get('translator')->trans('Administración de WordPress',array(),'templates'); ?>
+        </h3>
+    </div>
+    <div class="modal-body">
+        <div class="alert alert-info mb0">
+            <p><?php echo $this->get('translator')->trans('Serás redireccionado al panel Administrador de WordPress',array(),'templates'); ?> </p>
+            <span><p><?php echo $this->get('translator')->trans('Al ser este un entorno temporal para pruebas sin SSL, te pedimos que copies a continuación el usuario y contraseña de tu Panel Ferozo, te serán requeridos a modo de seguridad para poder acceder',array(),'templates'); ?> </p></span>
+            <ul>
+                <li>
+                    <b><?php echo $this->get('translator')->trans('Usuario:',array(),'templates'); ?></b> <span data-bind="text: $parent.userName"></span>
+                </li>
+                <li>
+                    <b><?php echo $this->get('translator')->trans('Contraseña:',array(),'templates'); ?></b> <span data-bind="text: $parent.pwd, visible: $parent.showPassword()"></span><span data-bind="visible: !$parent.showPassword()">•••••••••</span>
+                    <button title="<?php echo $this->get('translator')->trans('Mostrar/Ocultar Contraseña',array(),'templates'); ?>" class="btn btn-small" data-bind="click: $parent.showPassword.bind($data, !$parent.showPassword())">
+                        <i data-bind="visible: !$parent.showPassword()," class="icon-eye-open"></i>
+                        <i data-bind="visible: $parent.showPassword()," class="icon-eye-close"></i>
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="modal-footer">
+            <button class="btn" data-dismiss="modal" aria-hidden="true" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'CancelarRedirectWp');"><?php echo $this->get('translator')->trans('Cancelar',array(),'templates'); ?></button>
+            <a class="btn btn-primary" href="" target="_blank" data-bind="attr: { 'href': '/hosting/webapp/autologin/'+id()}" onclick="FerozoHosting.sendAnalytics('event', 'PackAmigo', 'button', 'RedirectWp');"><?php echo $this->get('translator')->trans('Continuar',array(),'templates'); ?></a>
+    </div>
+</div>
+
+<!-- /ko -->
+
+<span class="hide" id="trans-ssl-no"><?php echo $this->get('translator')->trans('dominio sin SSL (http)',array(),'templates'); ?></span>
+<span class="hide" id="trans-ssl-yes"><?php echo $this->get('translator')->trans('dominio con SSL (https)',array(),'templates'); ?></span>
+<span class="hide" id="trans-ssl-www"><?php echo $this->get('translator')->trans('www.dominio con SSL (https)',array(),'templates'); ?></span>

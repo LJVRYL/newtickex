@@ -1,0 +1,92 @@
+
+//
+// squarebuttons
+// --------------------------------------------------
+
+
+// Note: `.squarebuttons` and `.squarebuttons > li` are overriden in responsive files
+
+// Make wrapper ul behave like the grid
+.squarebuttons {
+  margin-left: 0;
+  list-style: none;
+    overflow: hidden;
+  .clearfix();
+}
+// Fluid rows have no left margin
+.row-fluid .squarebuttons {
+  margin-left: 0;
+}
+
+
+// The actual squarebutton (can be `a` or `div`)
+.squarebutton {
+  display: block;
+  padding: 4px;
+    text-align: center;
+  line-height: @baseLineHeight;
+  border: 1px solid #ddd;
+  background-color:@white;
+  min-height: 200px;
+  color:@grayLight;
+  text-decoration: none;
+  .border-radius(3px);
+  .box-shadow(0 1px 3px rgba(0,0,0,.055));
+  .transition(all .2s ease-in-out);
+}
+// Add a hover state for linked versions only
+a.squarebutton:hover {
+  border-color: #A8A8A8;
+  .box-shadow(0 1px 8px rgba(68, 63, 51, 0.47));
+    text-decoration: none;
+}
+
+// Images and captions
+.squarebutton > img {
+  display: block;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.squarebutton > .icon
+{
+    color:@grayLight;
+    font-size: 5em;
+    line-height: 1.2em;
+    margin-bottom: 0.4em;
+    width: 100%;
+    margin-top: .4em;
+    display: inline-block;
+
+
+}
+
+.squarebutton .caption {
+  padding: 9px;
+  color: @gray;
+}
+
+
+ul.squarebuttons li.active a
+{
+    .box-shadow(3px 3px 4px #E6E6E6 inset);
+}
+
+ul.squarebuttons li.active a:hover
+{
+  border-color: transparent;
+  .box-shadow(3px 3px 4px #E6E6E6 inset);
+  text-decoration: none;
+}
+
+.section-head-title small:before {
+  content: " | ";
+  font-size: 25px;
+}
+
+.section-head-title small {
+  color: #D5D5D5;
+  font-style: italic;
+}
+

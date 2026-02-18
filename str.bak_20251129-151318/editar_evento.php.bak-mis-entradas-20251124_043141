@@ -1,0 +1,349 @@
+<?php
+require_once __DIR__.'/inc/bootstrap.php';
+$title = "Editar evento";
+
+require_login();
+$pdo = db();
+
+$cu = current_user();
+$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
+$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
+if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
+    abort_404("No tenés permiso.");
+}
+
+$eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($eventoId <= 0) abort_404("ID de evento inválido.");
+
+// cargar evento
+$stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id=? LIMIT 1");
+$stmtEv->execute(array($eventoId));
+$evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
+if (!$evento) abort_404("Evento no encontrado.");
+
+// ownership
+if ($tipoGlobal === 'admin_evento') {
+    $creador = isset($evento['creado_por_admin_id']) ? (int)$evento['creado_por_admin_id'] : 0;
+    if ($creador !== $adminId) abort_404("No podés editar este evento.");
+}
+
+$error = '';
+$okMsg = '';
+
+/* ==========================
+   1) GUARDAR DATOS EVENTO
+   ========================== */
+if (isset($_POST['action']) && $_POST['action'] === 'save_event') {
+
+    $nombre      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
+    $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
+    $fechaDesde  = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
+    $fechaHasta  = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
+
+    if ($nombre === '') {
+        $error = "El nombre es obligatorio.";
+    }
+
+    $flyerFilename = isset($evento['flyer_filename']) ? $evento['flyer_filename'] : null;
+
+    if (!$error && isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
+
+        if ($_FILES['flyer']['error'] === UPLOAD_ERR_OK) {
+            $tmpName = $_FILES['flyer']['tmp_name'];
+            $size    = (int)$_FILES['flyer']['size'];
+
+            if ($size > 2*1024*1024) {
+                $error = "El flyer no puede pesar más de 2 MB.";
+            } else {
+                $originalName = $_FILES['flyer']['name'];
+                $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+                if (!in_array($ext, array('png','jpg','jpeg'), true)) {
+                    $error = "Solo PNG/JPG.";
+                } else {
+                    $safeBase = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $originalName);
+                    $newName  = time().'_'.$safeBase;
+                    $destPath = __DIR__.'/event_flyers/'.$newName;
+
+                    if (!move_uploaded_file($tmpName, $destPath)) {
+                        $error = "No se pudo guardar el flyer.";
+                    } else {
+                        $flyerFilename = 'event_flyers/'.$newName;
+                    }
+                }
+            }
+        } else {
+            $error = "Error al subir flyer (código ".(int)$_FILES['flyer']['error'].")";
+        }
+    }
+
+    if (!$error) {
+        $stmtU = $pdo->prepare("
+            UPDATE eventos
+            SET nombre=:n, descripcion=:d, flyer_filename=:f,
+                fecha_desde=:fd, fecha_hasta=:fh
+            WHERE id=:id
+        ");
+        $stmtU->execute(array(
+            ':n'  => $nombre,
+            ':d'  => $descripcion,
+            ':f'  => $flyerFilename,
+            ':fd' => ($fechaDesde !== '' ? $fechaDesde : null),
+            ':fh' => ($fechaHasta !== '' ? $fechaHasta : null),
+            ':id' => $eventoId
+        ));
+
+        $okMsg = "Evento actualizado.";
+        $stmtEv->execute(array($eventoId));
+        $evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
+    }
+}
+
+/* ==========================
+   2) TIPOS DE ENTRADA
+   ========================== */
+
+// eliminar tipo
+if (isset($_GET['del_tipo'])) {
+    $tid = (int)$_GET['del_tipo'];
+
+    $chk = $pdo->prepare("SELECT evento_id FROM tipos_entrada WHERE id=?");
+    $chk->execute(array($tid));
+    $eidOwn = (int)$chk->fetchColumn();
+    if ($eidOwn !== $eventoId) abort_404("Tipo fuera de este evento.");
+
+    $pdo->prepare("DELETE FROM tipos_entrada WHERE id=?")->execute(array($tid));
+    header("Location: editar_evento.php?id=".$eventoId);
+    exit;
+}
+
+// agregar tipo manual
+if (isset($_POST['action']) && $_POST['action'] === 'add_tipo_manual') {
+
+    $nombre = isset($_POST['nombre_te']) ? trim($_POST['nombre_te']) : '';
+    $tipo   = isset($_POST['tipo_te']) ? trim($_POST['tipo_te']) : 'free';
+    $precio = isset($_POST['precio_te']) ? (int)$_POST['precio_te'] : 0;
+    $ctotal = isset($_POST['ctotal_te']) ? (int)$_POST['ctotal_te'] : 0;
+    $hora   = isset($_POST['hora_te']) ? trim($_POST['hora_te']) : '';
+
+    if ($nombre === '') $error = "Nombre de tipo obligatorio.";
+    if (!$error && !in_array($tipo, array('free','paga'), true)) $error = "Tipo inválido.";
+    if (!$error && $tipo === 'free') $precio = 0;
+    if (!$error && $tipo === 'paga' && $precio <= 0) $error = "Precio inválido para paga.";
+    if (!$error && $hora !== '' && !preg_match('/^\d{2}:\d{2}$/', $hora)) $error = "Hora inválida.";
+
+    if (!$error) {
+        $stmtI = $pdo->prepare("
+            INSERT INTO tipos_entrada
+            (evento_id, nombre, tipo, precio, cantidad_total, cantidad_disponible, hora_limite, reglas_precio)
+            VALUES
+            (:eid,:n,:t,:p,:ct,:cd,:h,NULL)
+        ");
+        $stmtI->execute(array(
+            ':eid'=>$eventoId,
+            ':n'=>$nombre,
+            ':t'=>$tipo,
+            ':p'=>$precio,
+            ':ct'=>$ctotal,
+            ':cd'=>$ctotal,
+            ':h'=>($hora!==''?$hora:null)
+        ));
+        $okMsg = "Tipo creado.";
+    }
+}
+
+// update tipo
+if (isset($_POST['action']) && $_POST['action'] === 'update_tipo') {
+
+    $tid    = isset($_POST['tipo_id']) ? (int)$_POST['tipo_id'] : 0;
+    $nombre = isset($_POST['nombre_u']) ? trim($_POST['nombre_u']) : '';
+    $tipo   = isset($_POST['tipo_u']) ? trim($_POST['tipo_u']) : 'free';
+    $precio = isset($_POST['precio_u']) ? (int)$_POST['precio_u'] : 0;
+    $ctot   = isset($_POST['ctotal_u']) ? (int)$_POST['ctotal_u'] : 0;
+    $cdisp  = isset($_POST['cdisp_u']) ? (int)$_POST['cdisp_u'] : 0;
+    $hora   = isset($_POST['hora_u']) ? trim($_POST['hora_u']) : '';
+
+    if ($tid <= 0) $error = "Tipo inválido.";
+    if (!$error && $nombre === '') $error = "Nombre obligatorio.";
+    if (!$error && !in_array($tipo, array('free','paga'), true)) $error = "Tipo inválido.";
+    if (!$error && $tipo === 'free') $precio = 0;
+    if (!$error && $tipo === 'paga' && $precio <= 0) $error = "Precio inválido para paga.";
+    if (!$error && ($ctot < 0 || $cdisp < 0)) $error = "Cupos inválidos.";
+    if (!$error && $cdisp > $ctot) $error = "Disponibles no puede ser mayor a total.";
+    if (!$error && $hora !== '' && !preg_match('/^\d{2}:\d{2}$/', $hora)) $error = "Hora inválida.";
+
+    if (!$error) {
+        $chk = $pdo->prepare("SELECT evento_id FROM tipos_entrada WHERE id=?");
+        $chk->execute(array($tid));
+        $eidOwn = (int)$chk->fetchColumn();
+        if ($eidOwn !== $eventoId) abort_404("Tipo fuera de este evento.");
+
+        $stmtU = $pdo->prepare("
+            UPDATE tipos_entrada
+            SET nombre=:n, tipo=:t, precio=:p,
+                cantidad_total=:ct, cantidad_disponible=:cd, hora_limite=:h
+            WHERE id=:id
+        ");
+        $stmtU->execute(array(
+            ':n'=>$nombre,
+            ':t'=>$tipo,
+            ':p'=>$precio,
+            ':ct'=>$ctot,
+            ':cd'=>$cdisp,
+            ':h'=>($hora!==''?$hora:null),
+            ':id'=>$tid
+        ));
+        $okMsg = "Tipo actualizado.";
+    }
+}
+
+// listar tipos del evento
+$stmtTipos = $pdo->prepare("SELECT * FROM tipos_entrada WHERE evento_id=? ORDER BY id ASC");
+$stmtTipos->execute(array($eventoId));
+$tiposEvento = $stmtTipos->fetchAll(PDO::FETCH_ASSOC);
+
+include __DIR__.'/inc/layout_top.php';
+?>
+
+<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
+  <a class="btn secondary" href="panel_evento.php?id=<?php echo (int)$eventoId; ?>">Administrar entradas</a>
+  <span style="flex:1 1 auto;"></span>
+  <a class="btn danger" href="login.php?logout=1">Salir</a>
+</div>
+
+<div class="card">
+  <h2>Editar evento</h2>
+
+  <?php if($error): ?><div class="flash err"><?php echo e($error); ?></div><?php endif; ?>
+  <?php if($okMsg): ?><div class="flash ok"><?php echo e($okMsg); ?></div><?php endif; ?>
+
+  <form method="post" enctype="multipart/form-data" style="margin-top:10px;">
+    <input type="hidden" name="action" value="save_event">
+
+    <label>Nombre</label>
+    <input name="nombre" required value="<?php echo e($evento['nombre']); ?>">
+
+    <label>Slug / URL (no editable)</label>
+    <input value="<?php echo e($evento['slug']); ?>" disabled>
+
+    <label>Descripción</label>
+    <textarea name="descripcion" rows="3"><?php echo e($evento['descripcion']); ?></textarea>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div>
+        <label>Fecha desde</label>
+        <input type="date" name="fecha_desde" value="<?php echo e($evento['fecha_desde']); ?>">
+      </div>
+      <div>
+        <label>Fecha hasta</label>
+        <input type="date" name="fecha_hasta" value="<?php echo e($evento['fecha_hasta']); ?>">
+      </div>
+    </div>
+
+    <label>Flyer (PNG/JPG, máx 2MB)</label>
+    <input type="file" name="flyer" accept="image/png,image/jpeg">
+
+    <?php
+      $flyerOk = (!empty($evento['flyer_filename']) && file_exists(__DIR__.'/'.$evento['flyer_filename']));
+    ?>
+    <?php if($flyerOk): ?>
+      <div style="margin-top:8px;">
+        <img src="<?php echo e($evento['flyer_filename']); ?>" style="max-width:220px;border-radius:12px;border:1px solid var(--line);">
+      </div>
+    <?php endif; ?>
+
+    <div style="margin-top:10px;">
+      <button class="btn" type="submit">Guardar evento</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Tipos de entrada del evento</h2>
+
+  <?php if(!$tiposEvento): ?>
+    <div class="flash warn" style="margin-top:8px;">Este evento no tiene tipos aún.</div>
+  <?php else: ?>
+    <table class="table" style="margin-top:8px;">
+      <thead>
+        <tr>
+          <th>ID</th><th>Nombre</th><th>Tipo</th><th>Precio</th>
+          <th>Total</th><th>Disp.</th><th>Hora límite</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach($tiposEvento as $te): ?>
+          <tr>
+            <form method="post">
+              <input type="hidden" name="action" value="update_tipo">
+              <input type="hidden" name="tipo_id" value="<?php echo (int)$te['id']; ?>">
+
+              <td><?php echo (int)$te['id']; ?></td>
+              <td><input name="nombre_u" value="<?php echo e($te['nombre']); ?>"></td>
+              <td>
+                <select name="tipo_u">
+                  <option value="free" <?php if($te['tipo']==='free') echo 'selected'; ?>>FREE</option>
+                  <option value="paga" <?php if($te['tipo']==='paga') echo 'selected'; ?>>PAGA</option>
+                </select>
+              </td>
+              <td><input type="number" min="0" step="1" name="precio_u" value="<?php echo (int)$te['precio']; ?>"></td>
+              <td><input type="number" min="0" step="1" name="ctotal_u" value="<?php echo (int)$te['cantidad_total']; ?>"></td>
+              <td><input type="number" min="0" step="1" name="cdisp_u" value="<?php echo (int)$te['cantidad_disponible']; ?>"></td>
+              <td><input type="time" name="hora_u" value="<?php echo e($te['hora_limite']); ?>"></td>
+              <td style="white-space:nowrap;">
+                <butto
+                <a class="btn danger" style="padding:6px 10px;font-size:12px;"
+                   href="editar_evento.php?id=<?php echo $eventoId; ?>&del_tipo=<?php echo (int)$te['id']; ?>"
+                   onclick="return confirm('¿Eliminar tipo?');">✕</a>
+              </td>
+            </form>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  <?php endif; ?>
+</div>
+
+<div class="card">
+  <h3>Agregar tipo manual</h3>
+
+  <form method="post" style="margin-top:8px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:8px;align-items:end;">
+    <input type="hidden" name="action" value="add_tipo_manual">
+
+    <div>
+      <label>Nombre</label>
+      <input name="nombre_te" required>
+    </div>
+
+    <div>
+      <label>Tipo</label>
+      <select name="tipo_te">
+        <option value="free">FREE</option>
+        <option value="paga">PAGA</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Precio</label>
+      <input type="number" min="0" step="1" name="precio_te" value="0">
+    </div>
+
+    <div>
+      <label>Cupo total</label>
+      <input type="number" min="0" step="1" name="ctotal_te" value="0">
+    </div>
+
+    <div>
+      <label>Hora límite</label>
+      <input type="time" name="hora_te">
+    </div>
+
+    <div style="grid-column:1 / -1;">
+      <button class="btn secondary" type="submit">Crear tipo</button>
+    </div>
+  </form>
+</div>
+
+<?php include __DIR__.'/inc/layout_bottom.php'; ?>
