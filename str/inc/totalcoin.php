@@ -2,6 +2,56 @@
 // Helpers para consumir TotalCoin directo desde Tickex (sin pasar por UI de SenForms)
 // Cubre login (token Bearer), checkout y armado de URLs de callbacks.
 
+if (!function_exists('tc__sanitize_log_value')) {
+    function tc__sanitize_log_value($s)
+    {
+        $txt = (string)$s;
+        // Evitar loguear tokens/credenciales por si aparecen en respuestas.
+        $txt = preg_replace('/("(?:Token|token|access_token)"\s*:\s*")([^"]+)(")/i', '$1***$3', $txt);
+        $txt = preg_replace('/("(?:Password|password)"\s*:\s*")([^"]+)(")/i', '$1***$3', $txt);
+        $txt = preg_replace('/(Authorization:\s*Bearer\s+)(\S+)/i', '$1***', $txt);
+        return $txt;
+    }
+}
+
+if (!function_exists('tc__debug_log_path')) {
+    function tc__debug_log_path()
+    {
+        // Preferir uploads/ (suele ser writable en hosting)
+        $base = dirname(__DIR__, 3); // .../newtickex
+        $path = $base . '/uploads/totalcoin_debug.log';
+        $dir = dirname($path);
+        if (@is_dir($dir) && @is_writable($dir)) {
+            return $path;
+        }
+        $tmp = rtrim((string)sys_get_temp_dir(), '/\\');
+        if ($tmp !== '') {
+            return $tmp . '/totalcoin_debug.log';
+        }
+        return null;
+    }
+}
+
+if (!function_exists('tc_debug_log')) {
+    function tc_debug_log($debugId, $message, $context = array())
+    {
+        $path = tc__debug_log_path();
+        if (!$path) return;
+        $line = array(
+            'ts' => date('c'),
+            'id' => (string)$debugId,
+            'msg' => tc__sanitize_log_value($message),
+            'ctx' => $context,
+        );
+        // Sanitizar context de forma defensiva
+        $json = json_encode($line, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            $json = '{"ts":"' . date('c') . '","id":"' . tc__sanitize_log_value($debugId) . '","msg":"' . tc__sanitize_log_value($message) . '"}';
+        }
+        @file_put_contents($path, $json . "\n", FILE_APPEND | LOCK_EX);
+    }
+}
+
 if (!function_exists('tc_config')) {
     function tc_config()
     {

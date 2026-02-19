@@ -549,6 +549,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log('[TotalCoin] ' . $debugId . ' checkout error: ' . $e->getMessage());
           } catch (Exception $_e) {
           }
+          try {
+            if (function_exists('tc_debug_log')) {
+              $cfg = function_exists('tc_config') ? tc_config() : array();
+              tc_debug_log($debugId, $e->getMessage(), array(
+                'event_id' => (int)$eventId,
+                'ref' => (string)$ref,
+                'use_prod' => isset($cfg['use_prod']) ? (bool)$cfg['use_prod'] : null,
+                'login_url' => isset($cfg['login_url']) ? (string)$cfg['login_url'] : null,
+                'checkout_url' => isset($cfg['checkout_url']) ? (string)$cfg['checkout_url'] : null,
+                'callback_base' => isset($cfg['callback_base']) ? (string)$cfg['callback_base'] : null,
+              ));
+            }
+          } catch (Exception $_e) {
+            // ignore
+          }
           $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
           if ($isPrivDebug) {
             $gatewayDebug = $e->getMessage();
