@@ -615,6 +615,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
               header('Pragma: no-cache');
               header('Location: ' . $paymentUrl, true, 303);
+              // Fallback extra: si por algún motivo el cliente no sigue el Location,
+              // dejamos un HTML mínimo con link + redirección JS.
+              $safeUrl = htmlspecialchars((string)$paymentUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+              echo "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\">";
+              echo "<meta http-equiv=\"refresh\" content=\"0;url=" . $safeUrl . "\">";
+              echo "<title>Redirigiendo…</title></head><body style=\"font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:20px;\">";
+              echo "<h3 style=\"margin:0 0 8px;\">Redirigiendo al pago…</h3>";
+              echo "<p style=\"margin:0 0 12px;\">Si no te redirige automáticamente, abrí el link:</p>";
+              echo "<p><a href=\"" . $safeUrl . "\" rel=\"noopener noreferrer\">Continuar al pago</a></p>";
+              echo "<script>try{window.location.replace(" . json_encode((string)$paymentUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ");}catch(e){}</script>";
+              echo "</body></html>";
               exit;
             }
 
