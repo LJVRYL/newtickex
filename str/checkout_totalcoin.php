@@ -16,6 +16,8 @@ $isPrivDebug = false;
 $gatewayDebug = '';
 $lastDebugId = '';
 $redirectFallback = array('auto' => false, 'reason' => '', 'hs_file' => '', 'hs_line' => 0);
+$tcGo = isset($_GET['tc_go']) ? (int)$_GET['tc_go'] : 0;
+$tcRid = isset($_GET['rid']) ? trim((string)$_GET['rid']) : '';
 $preview = array(
   'selected' => array(),
   'total' => 0,
@@ -46,6 +48,30 @@ $defaults = array(
   'email'       => $_GET['email'] ?? '',
 );
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
+
+// Si venimos de un redirect interno (POST-Redirect-GET), cargar el payment_url desde DB
+// y dejar que el browser navegue a TotalCoin con JS.
+if ($tcGo === 1 && $tcRid !== '' && $paymentUrl === null) {
+  try {
+    $pdoGo = db();
+    $stGo = $pdoGo->prepare('SELECT payment_url, evento_id, ref FROM tc_orders WHERE request_id = :rid LIMIT 1');
+    $stGo->execute(array(':rid' => (string)$tcRid));
+    $rowGo = $stGo->fetch(PDO::FETCH_ASSOC);
+    if ($rowGo && !empty($rowGo['payment_url'])) {
+      $paymentUrl = (string)$rowGo['payment_url'];
+      $redirectFallback = array('auto' => true, 'reason' => 'prg_get', 'hs_file' => '', 'hs_line' => 0);
+      // Ajustar eventId si no estaba en GET
+      if ($eventId <= 0 && isset($rowGo['evento_id'])) {
+        $eventId = (int)$rowGo['evento_id'];
+      }
+      // No forzar step: solo mostrar flash + link + auto redirect.
+    } else {
+      $errors[] = 'No se encontró la orden para continuar al pago. (RID: ' . e($tcRid) . ')';
+    }
+  } catch (Throwable $_t) {
+    $errors[] = 'No se pudo cargar la orden para continuar al pago.';
+  }
+}
 
 // Datos del usuario logueado (si los hubiera)
 $cu = current_user();
@@ -592,8 +618,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           }
         }
 
-          // UX: redirigir automáticamente al checkout de TotalCoin
+          // UX: Post-Redirect-Get interno (evita depender de redirects externos).
           if ($paymentUrl) {
+            // Intentar extraer requestId para construir una URL interna de continuación.
+            $ridForGo = '';
+            try {
+              $uGo = @parse_url($paymentUrl);
+              if (is_array($uGo) && isset($uGo['query'])) {
+                $qGo = array();
+                @parse_str($uGo['query'], $qGo);
+                if (isset($qGo['requestId'])) $ridForGo = (string)$qGo['requestId'];
+              }
+              if ($ridForGo === '') {
+                $posGo = strpos($paymentUrl, 'requestId=');
+                if ($posGo !== false) {
+                  $ridForGo = substr($paymentUrl, $posGo + 10);
+                }
+              }
+            } catch (Throwable $_t) {
+              $ridForGo = '';
+            }
+
             $hsFile = ''; $hsLine = 0;
             $hs = headers_sent($hsFile, $hsLine);
 
@@ -605,24 +650,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   'headers_sent' => (bool)$hs,
                   'hs_file' => (string)$hsFile,
                   'hs_line' => (int)$hsLine,
+                  'rid' => (string)$ridForGo,
                 ));
               }
             } catch (Throwable $_t) {
               // ignore
             }
 
-            if (!$hs) {
-              // Intentar redirect HTTP estándar, pero SIN cortar el render.
-              // Si el cliente/proxy no respeta Location, el HTML de la página mostrará el link y hará redirect por JS.
+            // Redirigir a una URL interna (GET) para evitar problemas con redirects externos.
+            if (!$hs && $ridForGo !== '') {
               header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
               header('Pragma: no-cache');
-              header('Location: ' . $paymentUrl, true, 303);
-              $redirectFallback = array('auto' => true, 'reason' => 'location_sent', 'hs_file' => '', 'hs_line' => 0);
-            } else {
-              // Si ya se enviaron headers (BOM/echo/warning), no podemos mandar Location.
-              // Mostramos el link y además intentamos redirigir por JS.
-              $redirectFallback = array('auto' => true, 'reason' => 'headers_sent', 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
+              header('Location: checkout_totalcoin.php?event=' . (int)$eventId . '&tc_go=1&rid=' . urlencode((string)$ridForGo), true, 303);
+              exit;
             }
+
+            // Fallback: si no pudimos hacer PRG (headers enviados o no pudimos extraer rid),
+            // quedarnos en esta misma respuesta y dejar que el browser navegue con JS.
+            $redirectFallback = array('auto' => true, 'reason' => ($ridForGo !== '' ? 'prg_unavailable' : 'no_rid'), 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
         } catch (Throwable $e) {
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
