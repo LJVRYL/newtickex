@@ -52,7 +52,8 @@ function tickex_guess_base_url_here()
   if ($host === '') {
     return '';
   }
-  $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
+  $scriptName = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '/';
+  $basePath = rtrim(dirname($scriptName), '/\\');
   if ($basePath === '' || $basePath === '.') {
     $basePath = '';
   }
