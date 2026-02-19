@@ -139,6 +139,16 @@ function tickex_mail_open_log_db()
     try {
         $pdo = new PDO('sqlite:' . $dbFile);
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        // Mitigar locks transitorios de SQLite (best-effort)
+        try {
+            $pdo->exec('PRAGMA busy_timeout = 15000');
+            $pdo->exec('PRAGMA journal_mode = WAL');
+            $pdo->exec('PRAGMA synchronous = NORMAL');
+        } catch (Exception $e) {
+            // ignore
+        }
+
         tickex_mail_ensure_schema($pdo);
         return $pdo;
     } catch (Exception $e) {

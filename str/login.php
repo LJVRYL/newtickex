@@ -12,8 +12,10 @@ try {
 
   // Mitigar locks transitorios de SQLite
   try {
-    $pdo->exec('PRAGMA busy_timeout = 5000');
+    $pdo->exec('PRAGMA busy_timeout = 15000');
     $pdo->exec('PRAGMA foreign_keys = ON');
+    $pdo->exec('PRAGMA journal_mode = WAL');
+    $pdo->exec('PRAGMA synchronous = NORMAL');
   } catch (Exception $e) {
     // ignore
   }
@@ -124,8 +126,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $selectLegacy  = $hasLegacy  ? 'password AS legacy_password' : "'' AS legacy_password";
 
             $stmt = $pdo->prepare("SELECT id, nombre, apellido, email, $selectPwdHash, $selectLegacy, rol, email_confirmado, tipo_global FROM usuarios WHERE email = :email LIMIT 1");
-            $stmt->execute(array(':email' => $email));
-            $u = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // SQLite puede quedar lockeado por escrituras concurrentes (email_logs, tokens, etc).
+            // Reintentamos unos ms antes de fallar.
+            $u = false;
+            $tries = 0;
+            while (true) {
+              try {
+                $stmt->execute(array(':email' => $email));
+                $u = $stmt->fetch(PDO::FETCH_ASSOC);
+                break;
+              } catch (Exception $e) {
+                $msg = $e->getMessage();
+                if (stripos($msg, 'database is locked') !== false && $tries < 3) {
+                  $tries++;
+                  usleep(250000); // 250ms
+                  continue;
+                }
+                throw $e;
+              }
+            }
 
             $okPass = false;
             $hasUserPassword = false;
@@ -265,8 +285,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 WHERE email = :email
                 LIMIT 1
               ");
-                $stmtCli->execute(array(':email' => $email));
-                $cli = $stmtCli->fetch(PDO::FETCH_ASSOC);
+
+              $cli = false;
+              $triesCli = 0;
+              while (true) {
+                try {
+                  $stmtCli->execute(array(':email' => $email));
+                  $cli = $stmtCli->fetch(PDO::FETCH_ASSOC);
+                  break;
+                } catch (Exception $e) {
+                  $msg = $e->getMessage();
+                  if (stripos($msg, 'database is locked') !== false && $triesCli < 3) {
+                    $triesCli++;
+                    usleep(250000);
+                    continue;
+                  }
+                  throw $e;
+                }
+              }
 
                 $okCli = false;
               $firstSet = false;

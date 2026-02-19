@@ -14,10 +14,13 @@ function db(){
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
         // Evita errores intermitentes "database is locked" en escrituras concurrentes.
-        // Es un no-op si SQLite no soporta alguna PRAGMA.
+        // WAL mejora la convivencia de lecturas vs escrituras.
+        // Todo esto es best-effort (no rompe si alguna PRAGMA no existe).
         try {
-            $pdo->exec('PRAGMA busy_timeout = 5000');
+            $pdo->exec('PRAGMA busy_timeout = 15000');
             $pdo->exec('PRAGMA foreign_keys = ON');
+            $pdo->exec('PRAGMA journal_mode = WAL');
+            $pdo->exec('PRAGMA synchronous = NORMAL');
         } catch (Exception $e) {
             // ignore
         }
