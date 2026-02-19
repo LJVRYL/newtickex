@@ -167,6 +167,7 @@ $viewRow = null;
 $shareUrl = '';
 $shareToken = '';
 $waPhone = isset($_GET['wa']) ? trim((string)$_GET['wa']) : '';
+$shareText = '';
 if ($viewId > 0) {
     $stV = $pdo->prepare('SELECT * FROM email_logs WHERE id = :id LIMIT 1');
     $stV->execute(array(':id' => $viewId));
@@ -225,6 +226,12 @@ if ($shareToken !== '') {
   }
 }
 
+if ($viewRow) {
+  $subj = isset($viewRow['subject']) ? (string)$viewRow['subject'] : '';
+  $body = isset($viewRow['body']) ? (string)$viewRow['body'] : '';
+  $shareText = trim(($subj !== '' ? ($subj . "\n\n") : '') . $body);
+}
+
 $title = 'Emails';
 include __DIR__ . '/inc/layout_top.php';
 ?>
@@ -269,11 +276,9 @@ include __DIR__ . '/inc/layout_top.php';
         <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
         <button class="btn secondary" type="submit">Generar link</button>
       </form>
-      <?php if ($shareUrl !== ''): ?>
-        <input id="shareUrl" value="<?php echo e($shareUrl); ?>" style="min-width:320px;flex:1 1 320px;" readonly>
-        <button class="btn secondary" type="button" onclick="(function(){var u=document.getElementById('shareUrl').value||''; if(!u)return; if(navigator.share){navigator.share({title:'Tickex',text:'Link:',url:u}).catch(function(){});} else if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){alert('Link copiado');}).catch(function(){});} else {prompt('Copiar link:', u);} })();">Compartir</button>
-      <?php else: ?>
-        <span class="muted" style="font-size:13px;">Generá un link para compartir por WhatsApp o apps.</span>
+      <?php if ($shareText !== ''): ?>
+        <button class="btn secondary" type="button" onclick="(function(){var t=document.getElementById('shareText').value||''; if(!t)return; if(navigator.share){navigator.share({title:'Tickex',text:t}).catch(function(){});} else if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){alert('Mensaje copiado');}).catch(function(){});} else {prompt('Copiar mensaje:', t);} })();">Compartir mensaje</button>
+        <button class="btn secondary" type="button" onclick="(function(){var t=document.getElementById('shareText').value||''; if(!t)return; if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){alert('Mensaje copiado');}).catch(function(){prompt('Copiar mensaje:', t);});} else {prompt('Copiar mensaje:', t);} })();">Copiar mensaje</button>
       <?php endif; ?>
 
       <form method="post" style="margin:0;">
@@ -288,7 +293,14 @@ include __DIR__ . '/inc/layout_top.php';
       </form>
     </div>
 
-    <?php if ($shareUrl !== ''): ?>
+    <?php if ($shareText !== ''): ?>
+      <div class="card" style="margin:10px 0 0 0;">
+        <div class="muted" style="font-size:13px;margin-bottom:6px;">Mensaje (body) para enviar manualmente</div>
+        <textarea id="shareText" style="width:100%;min-height:120px;" readonly><?php echo e($shareText); ?></textarea>
+      </div>
+    <?php endif; ?>
+
+    <?php if ($shareText !== ''): ?>
       <div class="card" style="margin:10px 0 0 0;">
         <div class="muted" style="font-size:13px;margin-bottom:6px;">WhatsApp (abre WhatsApp con el link listo para enviar)</div>
         <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0;">
@@ -300,7 +312,7 @@ include __DIR__ . '/inc/layout_top.php';
           <?php
             $waLink = '';
             if ($waPhone !== '') {
-              $waLink = tickex_whatsapp_link($waPhone, $shareUrl);
+              $waLink = tickex_whatsapp_link($waPhone, $shareText);
             }
           ?>
           <?php if ($waLink !== ''): ?>
@@ -308,6 +320,10 @@ include __DIR__ . '/inc/layout_top.php';
           <?php endif; ?>
         </form>
       </div>
+    <?php endif; ?>
+
+    <?php if ($shareUrl !== ''): ?>
+      <div class="muted" style="font-size:12px;margin-top:10px;">Link opcional (para compartir solo el detalle): <a class="link" href="<?php echo e($shareUrl); ?>" target="_blank" rel="noopener"><?php echo e($shareUrl); ?></a></div>
     <?php endif; ?>
 
     <div class="muted" style="font-size:13px;">Enviado: <?php echo e($viewRow['created_at']); ?> — Resultado: <?php echo ((int)$viewRow['mail_ok'] === 1) ? '<strong>OK</strong>' : '<strong style="color:var(--danger)">FALLÓ</strong>'; ?></div>
