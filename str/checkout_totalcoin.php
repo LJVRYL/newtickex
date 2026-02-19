@@ -15,6 +15,7 @@ $csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : 
 $isPrivDebug = false;
 $gatewayDebug = '';
 $lastDebugId = '';
+$redirectFallback = array('auto' => false, 'reason' => '', 'hs_file' => '', 'hs_line' => 0);
 $preview = array(
   'selected' => array(),
   'total' => 0,
@@ -593,8 +594,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
           // UX: redirigir automáticamente al checkout de TotalCoin
           if ($paymentUrl) {
-            header('Location: ' . $paymentUrl);
-            exit;
+            $hsFile = ''; $hsLine = 0;
+            $hs = headers_sent($hsFile, $hsLine);
+
+            try {
+              if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+                tc_debug_log($lastDebugId, 'redirect_attempt', array(
+                  'event_id' => (int)$eventId,
+                  'ref' => (string)$ref,
+                  'headers_sent' => (bool)$hs,
+                  'hs_file' => (string)$hsFile,
+                  'hs_line' => (int)$hsLine,
+                ));
+              }
+            } catch (Throwable $_t) {
+              // ignore
+            }
+
+            if (!$hs) {
+              header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+              header('Pragma: no-cache');
+              header('Location: ' . $paymentUrl, true, 303);
+              exit;
+            }
+
+            // Fallback: si ya se enviaron headers (BOM/echo/warning), no hacemos exit:
+            // mostramos el link y además intentamos redirigir por JS.
+            $redirectFallback = array('auto' => true, 'reason' => 'headers_sent', 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
         } catch (Throwable $e) {
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
@@ -704,6 +730,17 @@ include __DIR__.'/inc/layout_top.php';
       <div>URL de pago: <a class="link" href="<?php echo e($paymentUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo e($paymentUrl); ?></a></div>
       <div style="margin-top:10px;"><a class="btn secondary" href="<?php echo e($paymentUrl); ?>" target="_blank" rel="noopener noreferrer">Ir al pago</a></div>
     </div>
+    <?php if (!empty($redirectFallback['auto']) && $redirectFallback['auto'] && $paymentUrl): ?>
+      <script>
+        // Fallback: si no pudimos redirigir por header(Location), intentamos navegar desde el browser.
+        // Esto también permite ver el link si el navegador bloquea popups.
+        (function(){
+          try {
+            window.location.href = <?php echo json_encode($paymentUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+          } catch (e) {}
+        })();
+      </script>
+    <?php endif; ?>
   <?php endif; ?>
   <?php if ($freeSuccess && !$paymentUrl): ?>
     <div class="flash ok">
