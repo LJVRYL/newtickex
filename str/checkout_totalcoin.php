@@ -612,26 +612,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!$hs) {
+              // Intentar redirect HTTP estándar, pero SIN cortar el render.
+              // Si el cliente/proxy no respeta Location, el HTML de la página mostrará el link y hará redirect por JS.
               header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
               header('Pragma: no-cache');
               header('Location: ' . $paymentUrl, true, 303);
-              // Fallback extra: si por algún motivo el cliente no sigue el Location,
-              // dejamos un HTML mínimo con link + redirección JS.
-              $safeUrl = htmlspecialchars((string)$paymentUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-              echo "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\">";
-              echo "<meta http-equiv=\"refresh\" content=\"0;url=" . $safeUrl . "\">";
-              echo "<title>Redirigiendo…</title></head><body style=\"font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:20px;\">";
-              echo "<h3 style=\"margin:0 0 8px;\">Redirigiendo al pago…</h3>";
-              echo "<p style=\"margin:0 0 12px;\">Si no te redirige automáticamente, abrí el link:</p>";
-              echo "<p><a href=\"" . $safeUrl . "\" rel=\"noopener noreferrer\">Continuar al pago</a></p>";
-              echo "<script>try{window.location.replace(" . json_encode((string)$paymentUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ");}catch(e){}</script>";
-              echo "</body></html>";
-              exit;
+              $redirectFallback = array('auto' => true, 'reason' => 'location_sent', 'hs_file' => '', 'hs_line' => 0);
+            } else {
+              // Si ya se enviaron headers (BOM/echo/warning), no podemos mandar Location.
+              // Mostramos el link y además intentamos redirigir por JS.
+              $redirectFallback = array('auto' => true, 'reason' => 'headers_sent', 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
             }
-
-            // Fallback: si ya se enviaron headers (BOM/echo/warning), no hacemos exit:
-            // mostramos el link y además intentamos redirigir por JS.
-            $redirectFallback = array('auto' => true, 'reason' => 'headers_sent', 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
         } catch (Throwable $e) {
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
