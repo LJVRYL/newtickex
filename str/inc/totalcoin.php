@@ -18,12 +18,26 @@ if (!function_exists('tc__debug_log_path')) {
     function tc__debug_log_path()
     {
         // Preferir uploads/ (suele ser writable en hosting)
-        $base = dirname(__DIR__, 3); // .../newtickex
-        $path = $base . '/uploads/totalcoin_debug.log';
-        $dir = dirname($path);
-        if (@is_dir($dir) && @is_writable($dir)) {
-            return $path;
+        // __DIR__ aquí es .../str/inc
+        $candidates = array();
+
+        // Repo root (esperado): .../web/uploads
+        $candidates[] = dirname(__DIR__, 2) . '/uploads/totalcoin_debug.log';
+
+        // Fallbacks por si la estructura difiere
+        $candidates[] = dirname(__DIR__, 3) . '/uploads/totalcoin_debug.log';
+        $cwd = @getcwd();
+        if (is_string($cwd) && $cwd !== '') {
+            $candidates[] = rtrim($cwd, '/\\') . '/uploads/totalcoin_debug.log';
         }
+
+        foreach ($candidates as $path) {
+            $dir = dirname($path);
+            if (@is_dir($dir) && @is_writable($dir)) {
+                return $path;
+            }
+        }
+
         $tmp = rtrim((string)sys_get_temp_dir(), '/\\');
         if ($tmp !== '') {
             return $tmp . '/totalcoin_debug.log';
