@@ -132,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':t'  => $tipoId,
                 ':ev' => $eventoId,
             ));
+            $entradaId = (int)$pdo->lastInsertId();
             $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
 
             // Envío automático de email
@@ -143,9 +144,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mensaje .= "\nMostrá este código en la puerta del evento para ingresar.\n\n";
             $mensaje .= "Si tenés dudas, respondé este email.\n\n";
             $mensaje .= "¡Nos vemos!\nEquipo Tickex";
-            $headers = "From: info@tickex.com.ar\r\nReply-To: info@tickex.com.ar\r\n";
-            // mail() puede fallar silenciosamente, así que no interrumpe el flujo
-            @mail($email, $asunto, $mensaje, $headers);
+
+            tickex_send_mail_template($email, 'tickex_cortesia', array(
+              'nombre' => $nombreIns,
+              'codigo' => $codigo,
+              'tipo'   => $tipoId,
+              'fecha'  => $fecha,
+            ), array(
+              'context'       => 'tickex_cortesia',
+              'related_table' => 'entradas',
+              'related_id'    => $entradaId,
+            ), array(
+              'subject'      => $asunto,
+              'body'         => $mensaje,
+              'from_email'   => 'info@tickex.com.ar',
+              'from_name'    => 'Tickex',
+              'reply_to'     => 'info@tickex.com.ar',
+              'extra_params' => '-f info@tickex.com.ar',
+              'is_html'      => 0,
+            ));
         } catch (Exception $e) {
             $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
         }
@@ -246,5 +263,74 @@ include __DIR__.'/inc/layout_top.php';
     }
   })();
 </script>
+
+
+<div class="card" style="margin-top:32px;max-width:900px;">
+  <h3>Últimos Tickex enviados</h3>
+  <form method="get" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input type="text" name="buscar" placeholder="Buscar por email, nombre, código..." value="<?php echo isset($_GET['buscar']) ? e($_GET['buscar']) : ''; ?>" style="flex:1 1 200px;">
+    <button class="btn" type="submit">Buscar</button>
+    <?php if (isset($_GET['buscar']) && $_GET['buscar'] !== ''): ?>
+      <a class="btn secondary" href="enviar_tickex.php">Limpiar</a>
+    <?php endif; ?>
+  </form>
+
+  <?php
+    // Eliminar tickex si se pide
+    if (isset($_GET['del_tickex']) && (int)$_GET['del_tickex'] > 0) {
+      $delId = (int)$_GET['del_tickex'];
+      $pdo->prepare("DELETE FROM entradas WHERE id = ?")->execute(array($delId));
+      echo '<div class="flash ok">Tickex eliminado.</div>';
+    }
+
+    // Buscar últimos tickex enviados por este formulario (código CORT-...)
+    $where = "WHERE codigo LIKE 'CORT-%'";
+    $params = array();
+    if (isset($_GET['buscar']) && trim($_GET['buscar']) !== '') {
+      $q = '%'.trim($_GET['buscar']).'%';
+      $where .= " AND (email LIKE :q OR nombre LIKE :q OR codigo LIKE :q)";
+      $params[':q'] = $q;
+    }
+    $sql = "SELECT * FROM entradas $where ORDER BY id DESC LIMIT 20";
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $ultimos = $st->fetchAll(PDO::FETCH_ASSOC);
+  ?>
+  <?php if (empty($ultimos)): ?>
+    <div class="muted">No hay tickex enviados recientemente.</div>
+  <?php else: ?>
+    <table class="table" style="font-size:14px;">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Email</th>
+          <th>Código</th>
+          <th>Tipo</th>
+          <th>Evento</th>
+          <th>Fecha</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($ultimos as $u): ?>
+          <tr>
+            <td><?php echo (int)$u['id']; ?></td>
+            <td><?php echo e($u['nombre']); ?></td>
+            <td><?php echo e($u['email']); ?></td>
+            <td><?php echo e($u['codigo']); ?></td>
+            <td><?php echo e($u['tipo']); ?></td>
+            <td><?php echo (int)$u['evento_id']; ?></td>
+            <td><?php echo e($u['fecha_registro']); ?></td>
+            <td style="white-space:nowrap;">
+              <a class="btn secondary" href="ver_ticket.php?id=<?php echo (int)$u['id']; ?>" target="_blank">Ver ticket</a>
+              <a class="btn danger" href="enviar_tickex.php?del_tickex=<?php echo (int)$u['id']; ?>" onclick="return confirm('¿Eliminar este tickex?');">Eliminar</a>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  <?php endif; ?>
+</div>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>

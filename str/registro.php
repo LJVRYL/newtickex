@@ -1,7 +1,11 @@
 <?php
 // registro.php – API de registro desde el formulario público
 header('Content-Type: application/json; charset=utf-8');
+require_once __DIR__ . '/inc/security.php';
+tickex_send_security_headers();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+require_once __DIR__ . '/inc/mail.php';
 
 // Solo POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -43,7 +47,6 @@ function enviar_mail_entrada($to, $nombre, $codigo, $id, $fechaRegistro, $tipo =
 {
     $fromEmail = 'no-reply@tickex.com.ar';
     $fromName  = 'Save The Rave';
-    $from      = $fromName . ' <' . $fromEmail . '>';
 
     $ticketUrl = 'https://str.tickex.com.ar/ticket.php?c=' . urlencode($codigo);
     $subject   = 'Tu entrada #' . (int)$id . ' para Save The Rave';
@@ -63,11 +66,27 @@ function enviar_mail_entrada($to, $nombre, $codigo, $id, $fechaRegistro, $tipo =
     $body .= "Save The Rave\n";
     $body .= "tickex.com.ar\n";
 
-    $headers  = "From: " . $from . "\r\n";
-    $headers .= "Reply-To: " . $fromEmail . "\r\n";
-    $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
-
-    return mail($to, $subject, $body, $headers);
+    return tickex_send_mail_template($to, 'entrada_registro', array(
+        'id'            => (int)$id,
+        'nombre'        => $nombre,
+        'email'         => $to,
+        'tipo'          => $tipo,
+        'fecha_registro'=> $fechaRegistro,
+        'ticket_url'    => $ticketUrl,
+        'codigo'        => $codigo,
+    ), array(
+        'context'       => 'entrada_registro',
+        'related_table' => 'entradas',
+        'related_id'    => (int)$id,
+    ), array(
+        'subject'      => $subject,
+        'body'         => $body,
+        'from_email'   => $fromEmail,
+        'from_name'    => $fromName,
+        'reply_to'     => $fromEmail,
+        'extra_params' => '-f ' . $fromEmail,
+        'is_html'      => 0,
+    ));
 }
 
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
@@ -125,7 +144,6 @@ try {
     echo json_encode(array(
         'ok'           => true,
         'id'           => $id,
-        'codigo'       => $codigo,
         'fecha'        => $fechaRegistro,
         'tipo'         => $tipo,
         'mail_enviado' => $mailOk ? 1 : 0
@@ -135,7 +153,6 @@ try {
     http_response_code(500);
     echo json_encode(array(
         'ok'      => false,
-        'error'   => 'Error en el servidor',
-        'detalle' => $e->getMessage()
+        'error'   => 'Error en el servidor'
     ));
 }

@@ -3,6 +3,7 @@
 
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/db.php';
+require_once __DIR__.'/inc/mail.php';
 
 function ensure_registro_pendientes($pdo)
 {
@@ -42,7 +43,6 @@ function ensure_registro_pendientes($pdo)
 $title     = 'Registro – Paso 1';
 $errores   = array();
 $mensajeOk = '';
-$linkDirecto = '';
 $email     = '';
 $nextUrl   = isset($_GET['next']) ? $_GET['next'] : '';
 
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['email'])) {
 }
 
 // ---------- función para enviar el mail con el link ----------
-function enviar_mail_confirmacion_step1($email, $token)
+function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
 {
     $fromEmail = 'no-reply@tickex.com.ar';
     $fromName  = 'Tickex';
@@ -66,20 +66,24 @@ function enviar_mail_confirmacion_step1($email, $token)
     $body .= "Si no fuiste vos, podés ignorar este mensaje.\n\n";
     $body .= "Tickex\n";
 
-    $headers  = "From: " . $from . "\r\n";
-    $headers .= "Reply-To: " . $fromEmail . "\r\n";
-    $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
-
     // Envelope sender (-f) importante
     $extraParams = '-f ' . $fromEmail;
 
-    $ok = mail($email, $subject, $body, $headers, $extraParams);
-
-    // Log simple
-    $logLine = date('c') . " registro_step1 mail to=" . $email . " ok=" . ($ok ? '1' : '0') . "\n";
-    @file_put_contents(__DIR__ . '/log_mail_registro.txt', $logLine, FILE_APPEND);
-
-    return $ok;
+    return tickex_send_mail_template($email, 'registro_step1', array(
+      'link' => $link,
+    ), array(
+      'context'       => 'registro_step1',
+      'related_table' => 'registro_pendientes',
+      'related_id'    => $registroId,
+    ), array(
+      'subject'      => $subject,
+      'body'         => $body,
+      'from_email'   => $fromEmail,
+      'from_name'    => $fromName,
+      'reply_to'     => $fromEmail,
+      'extra_params' => $extraParams,
+      'is_html'      => 0,
+    ));
 }
 
 // ---------- POST: procesar email ----------
@@ -128,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           ':creado_en' => $ahora,
           ':id'        => (int)$u['id'],
         ));
+        $regId = (int)$u['id'];
       } else {
         $stmtIns = $pdo->prepare("
           INSERT INTO registro_pendientes
@@ -141,10 +146,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           ':next_url'  => $nextUrl,
           ':creado_en' => $ahora,
         ));
+        $regId = (int)$pdo->lastInsertId();
       }
 
-      $mailOk = enviar_mail_confirmacion_step1($email, $token);
-      $linkDirecto = 'https://str.tickex.com.ar/completar_registro.php?token=' . urlencode($token);
+      $mailOk = enviar_mail_confirmacion_step1($email, $token, isset($regId) ? $regId : null);
 
       $mensajeOk  = 'Te enviamos un mensaje a ';
       $mensajeOk .= htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
@@ -184,8 +189,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               ':creado_en' => $ahora,
           ));
 
-          $mailOk = enviar_mail_confirmacion_step1($email, $token);
-          $linkDirecto = 'https://str.tickex.com.ar/completar_registro.php?token=' . urlencode($token);
+            $regId = (int)$pdo->lastInsertId();
+
+            $mailOk = enviar_mail_confirmacion_step1($email, $token, $regId);
 
           $mensajeOk  = 'Te enviamos un mensaje a ';
           $mensajeOk .= htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
@@ -235,14 +241,6 @@ include __DIR__.'/inc/layout_top.php';
       <strong>Revisá tu email</strong><br><br>
       <?php echo $mensajeOk; ?><br><br>
       Si no ves el mail en unos minutos, revisá la carpeta de spam / correo no deseado.
-      <?php if ($linkDirecto !== ''): ?>
-        <div style="margin-top:10px;">
-          Enlace directo (dev):
-          <a class="link" href="<?php echo htmlspecialchars($linkDirecto, ENT_QUOTES, 'UTF-8'); ?>">
-            <?php echo htmlspecialchars($linkDirecto, ENT_QUOTES, 'UTF-8'); ?>
-          </a>
-        </div>
-      <?php endif; ?>
     </div>
   </div>
 <?php endif; ?>

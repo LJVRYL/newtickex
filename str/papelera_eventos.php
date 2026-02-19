@@ -4,6 +4,8 @@ $title = "Papelera de eventos – TICKEX";
 
 require_login();
 
+$csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
+
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
 if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
@@ -96,7 +98,7 @@ include __DIR__.'/inc/layout_top.php';
             <td>
               <a
                 class="btn secondary"
-                href="restaurar_evento.php?id=<?php echo $eid; ?>"
+                href="restaurar_evento.php?id=<?php echo $eid; ?>&csrf=<?php echo urlencode($csrf); ?>"
                 title="Restaurar evento"
                 style="padding:4px 6px;font-size:12px;"
               >↩ Restaurar</a>

@@ -529,7 +529,24 @@ require __DIR__ . '/inc/layout_top.php';
               <td><?php echo e($p['nombre']); ?></td>
               <td><?php echo e($p['tipo']); ?></td>
               <td><?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
-              <td><?php echo (int)$p['cantidad_default']; ?></td>
+              <td>
+                <form method="post" style="margin:0;display:inline;">
+                  <input type="hidden" name="action" value="update">
+                  <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
+                  <input type="hidden" name="nombre" value="<?php echo e($p['nombre']); ?>">
+                  <input type="hidden" name="categoria" value="<?php echo e($p['categoria']); ?>">
+                  <input type="hidden" name="tipo" value="<?php echo e($p['tipo']); ?>">
+                  <input type="hidden" name="precio_default" value="<?php echo e($p['precio_default']); ?>">
+                  <input type="number" name="cantidad_default" value="<?php echo (int)$p['cantidad_default']; ?>" min="0" style="width:60px;">
+                  <input type="hidden" name="hora_limite_default" value="<?php echo e(isset($p['hora_limite_default']) ? $p['hora_limite_default'] : ''); ?>">
+                  <input type="hidden" name="descripcion" value="<?php echo e(isset($p['descripcion']) ? $p['descripcion'] : ''); ?>">
+                  <input type="hidden" name="reglas_default" value="<?php echo e(isset($p['reglas_default']) ? $p['reglas_default'] : ''); ?>">
+                  <?php if ($hasVentaHasta): ?><input type="hidden" name="venta_hasta" value="<?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?>"><?php endif; ?>
+                  <?php if (!empty($p['activo'])): ?><input type="hidden" name="activo" value="1"><?php endif; ?>
+                  <?php if ($hasVis): ?><input type="hidden" name="visible_publico" value="<?php echo !empty($p['visible_publico']) ? '1' : '0'; ?>"><?php endif; ?>
+                  <button class="btn" type="submit" style="padding:2px 8px;font-size:13px;">Guardar</button>
+                </form>
+              </td>
               <?php if ($hasVentaHasta): ?><td><?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?></td><?php endif; ?>
               <?php if ($hasVis): ?>
                 <td>

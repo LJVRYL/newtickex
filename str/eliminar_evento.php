@@ -18,6 +18,21 @@ if ($id <= 0) {
     exit;
 }
 
+$csrf = isset($_GET['csrf']) ? (string)$_GET['csrf'] : '';
+if (!tickex_csrf_verify($csrf)) {
+        http_response_code(403);
+        include __DIR__.'/inc/layout_top.php';
+        ?>
+        <div class="card">
+            <h2>Acción bloqueada</h2>
+            <p style="margin-top:8px;">Token de seguridad inválido. Volvé a intentar desde el panel.</p>
+            <a class="btn" href="panel_admin.php">⬅ Volver al panel</a>
+        </div>
+        <?php
+        include __DIR__.'/inc/layout_bottom.php';
+        exit;
+}
+
 try {
     $pdo = db();
 } catch (Exception $e) {

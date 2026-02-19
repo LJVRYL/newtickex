@@ -1,18 +1,7 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
-// Asegurar path de sesiones escribible (WSL suele bloquear /var/lib/php/sessions)
-$sp = ini_get('session.save_path');
-if (!$sp || !is_writable($sp)) {
-  $tmp = sys_get_temp_dir();
-  if (is_dir($tmp) && is_writable($tmp)) {
-    session_save_path($tmp);
-  }
-}
-
-session_start();
+require_once __DIR__ . '/inc/security.php';
+tickex_send_security_headers();
+tickex_session_start();
 
 // Conexión directa a la misma base que usamos en registro_usuario.php
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
@@ -31,18 +20,47 @@ $errores = array();
 $email   = '';
 $pass    = '';
 
+// Soporte para volver a una URL específica (ej: checkout) luego del login.
+$next = '';
+if (isset($_GET['next'])) {
+  $next = (string)$_GET['next'];
+} elseif (isset($_POST['next'])) {
+  $next = (string)$_POST['next'];
+}
+
+// Prefill de email si viene por query (ej: desde checkout)
+if ($email === '' && isset($_GET['email'])) {
+  $email = trim((string)$_GET['email']);
+}
+
+function _safe_next_url($next)
+{
+  $n = trim((string)$next);
+  if ($n === '') return '';
+  // evitar open redirect
+  if (strpos($n, '://') !== false) return '';
+  if (stripos($n, 'javascript:') === 0) return '';
+  // aceptar rutas relativas del sitio
+  if ($n[0] === '/') return $n;
+  // aceptar archivos relativos simples
+  if (preg_match('/^[a-zA-Z0-9_\-\/\.]+\.php(\?.*)?$/', $n)) return $n;
+  return '';
+}
+
+$nextSafe = _safe_next_url($next);
+
 // ---------------------------------------------------------------------
 // Si ya está logueado, mandarlo directo al panel correspondiente
 // ---------------------------------------------------------------------
 if (!empty($_SESSION['es_admin']) && !empty($_SESSION['admin_id'])) {
     // Usuario admin ya logueado
-    header('Location: panel_admin.php');
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_admin.php'));
     exit;
 }
 
 if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
     // Usuario común ya logueado
-    header('Location: panel_usuario.php');
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
     exit;
 }
 
@@ -50,6 +68,26 @@ if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
 // Manejo del POST (login)
 // ---------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Rate limit básico por sesión: evita brute force casual
+    $now = time();
+    $windowSec = 10 * 60;
+    $maxAttempts = 10;
+    if (!isset($_SESSION['_login_fail_count'])) {
+      $_SESSION['_login_fail_count'] = 0;
+      $_SESSION['_login_fail_ts'] = $now;
+    }
+    $firstTs = isset($_SESSION['_login_fail_ts']) ? (int)$_SESSION['_login_fail_ts'] : $now;
+    if (($now - $firstTs) > $windowSec) {
+      $_SESSION['_login_fail_count'] = 0;
+      $_SESSION['_login_fail_ts'] = $now;
+      $firstTs = $now;
+    }
+    if ((int)$_SESSION['_login_fail_count'] >= $maxAttempts) {
+      $errores[] = 'Demasiados intentos. Esperá unos minutos e intentá de nuevo.';
+      // Pequeño delay para frenar automatización
+      usleep(350000);
+    }
+
     $email = isset($_POST['email']) ? trim($_POST['email']) : '';
     $pass  = isset($_POST['password']) ? $_POST['password'] : '';
 
@@ -110,10 +148,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 if ($okPass) {
+                    // Anti session fixation
+                    if (function_exists('session_regenerate_id')) {
+                      @session_regenerate_id(true);
+                    }
+
+                    // Reset rate limit
+                    $_SESSION['_login_fail_count'] = 0;
+                    $_SESSION['_login_fail_ts'] = time();
+
                     // Datos base del usuario (vista usuarios)
                     $_SESSION['usuario_id']     = (int)$u['id'];
                     $_SESSION['usuario_email']  = $u['email'];
                     $_SESSION['usuario_nombre'] = trim($u['nombre'] . ' ' . $u['apellido']);
+                  $_SESSION['first_name']      = isset($u['nombre']) ? (string)$u['nombre'] : '';
+                  $_SESSION['last_name']       = isset($u['apellido']) ? (string)$u['apellido'] : '';
                     $_SESSION['usuario_rol']    = $u['rol'];
                     $_SESSION['tipo_global']    = isset($u['tipo_global']) ? $u['tipo_global'] : '';
                     // Compatibilidad con scripts legacy
@@ -161,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           }
 
                           // Redirigimos al panel de admins
-                          header('Location: panel_admin.php');
+                          header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_admin.php'));
                           exit;
                         }
                     } catch (Exception $e) {
@@ -170,13 +219,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     // Si NO es admin, seguimos con el flujo normal de usuario común:
-                    header('Location: panel_usuario.php');
+                    header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
                     exit;
                 }
             }
 
             // Si el usuario existe y tenía contraseña pero no validó, no seguimos a clientes
             if ($u && $hasUserPassword && !$okPass) {
+              $_SESSION['_login_fail_count'] = (int)$_SESSION['_login_fail_count'] + 1;
               $errores[] = 'Email o contraseña incorrectos.';
             }
 
@@ -239,6 +289,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['usuario_id']     = (int)$cli['id'];
                     $_SESSION['usuario_email']  = $cli['email'];
                     $_SESSION['usuario_nombre'] = trim(($cli['nombre'] ?? '') . ' ' . ($cli['apellido'] ?? ''));
+                  $_SESSION['first_name']      = isset($cli['nombre']) ? (string)$cli['nombre'] : '';
+                  $_SESSION['last_name']       = isset($cli['apellido']) ? (string)$cli['apellido'] : '';
+                  $_SESSION['dni']             = isset($cli['dni']) ? (string)$cli['dni'] : '';
                     $_SESSION['usuario_rol']    = 'cliente';
                     $_SESSION['rol']            = 'cliente';
                     $_SESSION['usuario']        = $cli['email'];
@@ -246,10 +299,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['email']          = $cli['email'];
                     $_SESSION['tipo_global']    = '';
 
-                    header('Location: panel_usuario.php');
+                  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
                     exit;
                 }
 
+                // sumar intento fallido (credenciales incorrectas)
+                $_SESSION['_login_fail_count'] = (int)$_SESSION['_login_fail_count'] + 1;
                 $errores[] = 'Email o contraseña incorrectos.';
             }
         } catch (Exception $e) {
@@ -289,6 +344,9 @@ include __DIR__ . '/inc/layout_top.php';
 
 <div class="card" style="max-width:480px;margin:0 auto 16px auto;">
   <form method="post">
+    <?php if ($nextSafe !== ''): ?>
+      <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextSafe, ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
     <label for="email">Email</label>
     <input type="text"
            id="email"

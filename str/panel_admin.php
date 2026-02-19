@@ -8,6 +8,8 @@ $title = 'Panel de administración';
 
 require_login();
 
+$csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
+
 $cu = current_user();
 
 // Rol y permisos
@@ -41,19 +43,32 @@ if (!$esAdmin
 }
 
 // Nombre a mostrar
+
 $nombreMostrar = '';
 if (isset($cu['display_name']) && trim($cu['display_name']) !== '') {
-    $nombreMostrar = $cu['display_name'];
+  $nombreMostrar = $cu['display_name'];
 } elseif (isset($cu['nombre']) && trim($cu['nombre']) !== '') {
-    $nombreMostrar = $cu['nombre'];
+  $nombreMostrar = $cu['nombre'];
 } elseif (isset($cu['username']) && trim($cu['username']) !== '') {
-    $nombreMostrar = $cu['username'];
+  $nombreMostrar = $cu['username'];
 } elseif (isset($cu['email'])) {
-    $nombreMostrar = $cu['email'];
+  $nombreMostrar = $cu['email'];
 } elseif (isset($_SESSION['usuario_email'])) {
-    $nombreMostrar = $_SESSION['usuario_email'];
+  $nombreMostrar = $_SESSION['usuario_email'];
 } else {
-    $nombreMostrar = 'Admin';
+  $nombreMostrar = 'Admin';
+}
+
+// Rol junto al nombre en el saludo
+$rolMostrar = '';
+if ($tipoGlobal === 'admin_evento') {
+  $rolMostrar = 'Admin del evento';
+} elseif ($tipoGlobal === 'super_admin') {
+  $rolMostrar = 'Super administrador';
+} elseif ($tipoGlobal === 'superadmin') {
+  $rolMostrar = 'Super administrador';
+} else {
+  $rolMostrar = $rol;
 }
 
 $pdo = db();
@@ -136,7 +151,7 @@ include __DIR__ . '/inc/layout_top.php';
 
 <div class="card" style="max-width:1100px;margin:16px auto;">
   <h1 style="margin-top:0;">Panel de administración</h1>
-  <p style="margin:8px 0;">Hola, <strong><?php echo e($nombreMostrar); ?></strong>.</p>
+  <p style="margin:8px 0;">Hola, <strong><?php echo e($nombreMostrar); ?></strong> <span class="muted" style="font-size:13px;">(<?php echo e($rolMostrar); ?>)</span>.</p>
   <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
     <label class="muted" for="summary_event_id" style="margin:0;">Resumen:</label>
     <select name="summary_event_id" id="summary_event_id" style="min-width:220px;">
@@ -224,7 +239,7 @@ include __DIR__ . '/inc/layout_top.php';
 
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
             <a class="btn secondary" style="display:inline-flex;align-items:center;gap:6px;" href="editar_evento.php?id=<?php echo (int)$ev['id']; ?>">✏ Editar</a>
-            <a class="btn danger" style="display:inline-flex;align-items:center;gap:6px;" href="eliminar_evento.php?id=<?php echo (int)$ev['id']; ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Borrar</a>
+            <a class="btn danger" style="display:inline-flex;align-items:center;gap:6px;" href="eliminar_evento.php?id=<?php echo (int)$ev['id']; ?>&csrf=<?php echo urlencode($csrf); ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Borrar</a>
             <a class="btn btn-panel" style="display:inline-flex;align-items:center;gap:6px;" href="panel_evento.php?evento_id=<?php echo (int)$ev['id']; ?>">Ver panel</a>
           </div>
         </div>

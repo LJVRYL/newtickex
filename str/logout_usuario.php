@@ -1,5 +1,7 @@
 <?php
-session_start();
+require_once __DIR__ . '/inc/security.php';
+tickex_send_security_headers();
+tickex_session_start();
 
 // Claves conocidas que queremos limpiar de forma explícita
 $keys = array(

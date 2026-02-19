@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/flash.php';
+require_once __DIR__.'/inc/mail.php';
 
 function ensure_registro_pendientes($pdo)
 {
@@ -22,7 +23,7 @@ function ensure_registro_pendientes($pdo)
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_regpend_email ON registro_pendientes(email)");
 }
 
-function enviar_mail_confirmacion_step1($email, $token)
+function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
 {
     $fromEmail = 'no-reply@tickex.com.ar';
     $fromName  = 'Tickex';
@@ -37,13 +38,23 @@ function enviar_mail_confirmacion_step1($email, $token)
     $body .= "Si no fuiste vos, podés ignorar este mensaje.\n\n";
     $body .= "Tickex\n";
 
-    $headers  = "From: " . $from . "\r\n";
-    $headers .= "Reply-To: " . $fromEmail . "\r\n";
-    $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
-
     $extraParams = '-f ' . $fromEmail;
 
-    return mail($email, $subject, $body, $headers, $extraParams);
+    return tickex_send_mail_template($email, 'registro_pendiente_step1', array(
+      'link' => $link,
+    ), array(
+      'context'       => 'registro_pendiente_step1',
+      'related_table' => 'registro_pendientes',
+      'related_id'    => $registroId,
+    ), array(
+      'subject'      => $subject,
+      'body'         => $body,
+      'from_email'   => $fromEmail,
+      'from_name'    => $fromName,
+      'reply_to'     => $fromEmail,
+      'extra_params' => $extraParams,
+      'is_html'      => 0,
+    ));
 }
 
 require_login();
@@ -80,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $pdo->prepare('UPDATE registro_pendientes SET token=:t, creado_en=:c, completado_en=NULL WHERE id=:id')
                 ->execute(array(':t'=>$token, ':c'=>$ahora, ':id'=>$id));
 
-            $mailOk = enviar_mail_confirmacion_step1($row['email'], $token);
+            $mailOk = enviar_mail_confirmacion_step1($row['email'], $token, (int)$row['id']);
             $flashMsg = 'Token regenerado y reenviado a ' . e($row['email']) . ($mailOk ? '' : ' (mail() devolvió false)');
             $_SESSION['flash_ok'] = $flashMsg;
         }

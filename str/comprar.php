@@ -4,6 +4,8 @@ declare(strict_types=1);
 // Compra pública: ahora redirige al checkout interno TotalCoin de Tickex, precargando datos del evento.
 // URL: /comprar.php?id=12  (id = eventos.id de STR)
 
+require_once __DIR__ . '/inc/bootstrap.php';
+
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) {
   http_response_code(400);
@@ -12,12 +14,18 @@ if ($id <= 0) {
   exit;
 }
 
+// Tracking revendedor (afiliado): ?aff=ID
+$aff = 0;
+if (isset($_GET['aff'])) {
+  $aff = (int)$_GET['aff'];
+}
+if ($aff > 0) {
+  // last-click: siempre pisa
+  tickex_set_cookie('tickex_aff', (string)$aff, 30, '/');
+}
+
 try {
-  $dbPath = __DIR__ . '/save_the_rave.sqlite';
-  $pdo = new PDO('sqlite:' . $dbPath, null, null, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-  ]);
+  $pdo = db();
 
   // Detectar slug del evento y forzar el nuevo EventPublicId si es 4aniversario
   $eventSlug = '';
@@ -32,11 +40,15 @@ try {
   // Redirigimos al checkout interno TotalCoin con datos precargados
   $concept = $eventSlug !== '' ? $eventSlug : ('Evento-' . $id);
   $ref = 'str-' . ($eventSlug !== '' ? $eventSlug : $id) . '-' . time();
-  $qs = http_build_query(array(
+  $q = array(
     'event'   => $id,
     'concept' => $concept,
     'ref'     => $ref,
-  ));
+  );
+  if ($aff > 0) {
+    $q['aff'] = $aff;
+  }
+  $qs = http_build_query($q);
   $url = 'checkout_totalcoin.php?' . $qs;
   header("Location: $url", true, 302);
   exit;

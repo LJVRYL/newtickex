@@ -7,6 +7,20 @@ $title = 'Checkout TotalCoin (Tickex)';
 $errors = array();
 $paymentUrl = null;
 $freeSuccess = false;
+$revendedorId = 0;
+$revendedorName = '';
+$eventOwnerAdminId = 0;
+
+// Captura revendedor (afiliado): GET ?aff=ID o cookie tickex_aff
+$affCandidate = '';
+if (isset($_GET['aff']) && $_GET['aff'] !== '') {
+  $affCandidate = (string)$_GET['aff'];
+} elseif (isset($_COOKIE['tickex_aff']) && $_COOKIE['tickex_aff'] !== '') {
+  $affCandidate = (string)$_COOKIE['tickex_aff'];
+}
+if ($affCandidate !== '' && preg_match('/^\d+$/', $affCandidate)) {
+  $revendedorId = (int)$affCandidate;
+}
 $defaults = array(
   'amount'      => $_GET['amount'] ?? '',
   'concept'     => $_GET['concept'] ?? ($_GET['event'] ?? ''),
@@ -19,10 +33,99 @@ $defaults = array(
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
 
 // Datos del usuario logueado (si los hubiera)
-$sessionEmail = $_SESSION['email'] ?? ($_SESSION['usuario'] ?? '');
-$sessionFirst = $_SESSION['first_name'] ?? ($_SESSION['nombre'] ?? '');
-$sessionLast  = $_SESSION['last_name'] ?? ($_SESSION['apellido'] ?? '');
+$cu = current_user();
+
+if (!function_exists('_tickex_pick_first_col')) {
+  function _tickex_pick_first_col($colMap, $candidates) {
+    foreach ($candidates as $c) {
+      if (isset($colMap[$c])) return $c;
+    }
+    return null;
+  }
+}
+
+if (!function_exists('_tickex_validate_revendedor_for_event')) {
+  // Devuelve array(id, name) o array(0,'') si inválido.
+  function _tickex_validate_revendedor_for_event($pdo, $revendedorId, $eventOwnerAdminId) {
+    $rid = (int)$revendedorId;
+    if ($rid <= 0) return array(0, '');
+    try {
+      $st = $pdo->prepare('SELECT id, nombre, activo, owner_admin_id, usuario_admin_id FROM revendedores WHERE id = :id LIMIT 1');
+      $st->execute(array(':id' => $rid));
+      $rv = $st->fetch(PDO::FETCH_ASSOC);
+      if (!$rv || (isset($rv['activo']) && (int)$rv['activo'] !== 1)) {
+        return array(0, '');
+      }
+
+      $name = isset($rv['nombre']) ? (string)$rv['nombre'] : '';
+      $owner = isset($rv['owner_admin_id']) ? (int)$rv['owner_admin_id'] : 0;
+      $legacyOwner = isset($rv['usuario_admin_id']) ? (int)$rv['usuario_admin_id'] : 0;
+      $eoid = (int)$eventOwnerAdminId;
+
+      if ($eoid > 0) {
+        if ($owner > 0) {
+          if ($owner !== $eoid) return array(0, '');
+        } else {
+          // compat: si no tiene owner_admin_id pero tiene usuario_admin_id igual, lo aceptamos y backfilleamos
+          if ($legacyOwner !== $eoid) return array(0, '');
+          try {
+            $stUp = $pdo->prepare('UPDATE revendedores SET owner_admin_id = :oid WHERE id = :id AND (owner_admin_id IS NULL OR owner_admin_id = 0)');
+            $stUp->execute(array(':oid' => $eoid, ':id' => $rid));
+          } catch (Exception $_e) {
+            // ignore
+          }
+        }
+      }
+
+      return array((int)$rv['id'], $name);
+    } catch (Exception $e) {
+      return array(0, '');
+    }
+  }
+}
+
+// Validar revendedor en DB (si existe) y re-setear cookie (last-click)
+if ($revendedorId > 0) {
+  try {
+    $pdoAff = db();
+    $stRev = $pdoAff->prepare('SELECT id, nombre, activo FROM revendedores WHERE id = :id LIMIT 1');
+    $stRev->execute(array(':id' => $revendedorId));
+    $rv = $stRev->fetch(PDO::FETCH_ASSOC);
+    if (!$rv || (isset($rv['activo']) && (int)$rv['activo'] !== 1)) {
+      $revendedorId = 0;
+    } else {
+      $revendedorId = (int)$rv['id'];
+      $revendedorName = isset($rv['nombre']) ? (string)$rv['nombre'] : '';
+    }
+  } catch (Exception $e) {
+    // no bloquear el checkout si falla validación
+  }
+}
+
+$sessionEmail = $_SESSION['usuario_email'] ?? ($_SESSION['email'] ?? ($cu['email'] ?? ($_SESSION['usuario'] ?? '')));
+$sessionFirst = $_SESSION['first_name'] ?? '';
+$sessionLast  = $_SESSION['last_name'] ?? '';
 $sessionDni   = $_SESSION['dni'] ?? '';
+
+// Fallback: si no hay first/last, intentar a partir del nombre de sesión
+if ($sessionFirst === '' || $sessionLast === '') {
+  $full = '';
+  if (isset($_SESSION['usuario_nombre']) && trim((string)$_SESSION['usuario_nombre']) !== '') {
+    $full = trim((string)$_SESSION['usuario_nombre']);
+  } elseif (isset($_SESSION['nombre']) && trim((string)$_SESSION['nombre']) !== '') {
+    $full = trim((string)$_SESSION['nombre']);
+  } elseif (isset($cu['display_name']) && trim((string)$cu['display_name']) !== '') {
+    $full = trim((string)$cu['display_name']);
+  }
+  if ($full !== '') {
+    $parts = preg_split('/\s+/', $full);
+    if ($sessionFirst === '' && !empty($parts[0])) $sessionFirst = (string)$parts[0];
+    if ($sessionLast === '' && count($parts) > 1) {
+      array_shift($parts);
+      $sessionLast = trim(implode(' ', $parts));
+    }
+  }
+}
 
 // Tomar email/nombre de sesión si no vienen en GET
 if ($defaults['email'] === '' && $sessionEmail !== '') $defaults['email'] = $sessionEmail;
@@ -38,10 +141,27 @@ if ($eventId > 0) {
   // Tickex local
   try {
     $pdoLocal = db();
+
+    // Determinar columna de creador (si existe)
+    $creatorCol = null;
+    try {
+      $evColsInfo = $pdoLocal->query('PRAGMA table_info(eventos)')->fetchAll(PDO::FETCH_ASSOC);
+      $evColMap = array();
+      foreach ($evColsInfo as $ci) {
+        if (isset($ci['name'])) $evColMap[$ci['name']] = true;
+      }
+      $creatorCol = _tickex_pick_first_col($evColMap, array('creado_por_admin_id','creador_id','admin_id','usuario_admin_id'));
+    } catch (Exception $_e) {
+      $creatorCol = null;
+    }
+
     $stEv = $pdoLocal->prepare('SELECT * FROM eventos WHERE id = :id LIMIT 1');
     $stEv->execute(array(':id' => $eventId));
     $evRow = $stEv->fetch(PDO::FETCH_ASSOC);
     if ($evRow) {
+      if ($creatorCol && isset($evRow[$creatorCol]) && (int)$evRow[$creatorCol] > 0) {
+        $eventOwnerAdminId = (int)$evRow[$creatorCol];
+      }
       $eventName = $evRow['nombre'] ?? $eventName;
       $eventDate = $evRow['fecha_desde'] ?? $eventDate;
       $eventLoc  = $evRow['lugar'] ?? ($evRow['ubicacion'] ?? $eventLoc);
@@ -131,8 +251,32 @@ if ($eventId > 0) {
   }
 }
 
+// Enforce: si el evento tiene dueño (admin), el revendedor debe pertenecer a ese admin.
+if ($revendedorId > 0) {
+  try {
+    $pdoAff = db();
+    $val = _tickex_validate_revendedor_for_event($pdoAff, $revendedorId, $eventOwnerAdminId);
+    $revendedorId = (int)$val[0];
+    $revendedorName = (string)$val[1];
+    if ($revendedorId > 0) {
+      tickex_set_cookie('tickex_aff', (string)$revendedorId, 30, '/');
+    } else {
+      // limpiar cookie si no corresponde a este evento
+      tickex_set_cookie('tickex_aff', '', 1, '/');
+    }
+  } catch (Exception $e) {
+    // ignore
+  }
+}
+
 $nextUrl = $_SERVER['REQUEST_URI'];
-$loginBase = 'https://str.tickex.com.ar/login.php';
+
+// Login en el mismo host (soporta localhost/dev). Evita hardcodear el dominio productivo.
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] !== '' ? $_SERVER['HTTP_HOST'] : 'localhost';
+$basePath = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
+if ($basePath === '' || $basePath === '.') { $basePath = ''; }
+$loginBase = $scheme . '://' . $host . $basePath . '/login.php';
 
 // Opciones de entradas: si no hay, usar fallback
 $entryOptions = array();
@@ -168,6 +312,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $last      = trim($_POST['last_name'] ?? $defaults['last_name']);
   $first     = trim($_POST['first_name'] ?? $defaults['first_name']);
   $email     = trim($_POST['email'] ?? $defaults['email']);
+  $affPost   = isset($_POST['aff']) ? (int)$_POST['aff'] : 0;
+  if ($revendedorId <= 0 && $affPost > 0) {
+    $revendedorId = $affPost;
+  }
+
+  // Revalidar revendedor en POST (anti-tamper + ownership por evento)
+  if ($revendedorId > 0) {
+    try {
+      $pdoAff = db();
+      $val = _tickex_validate_revendedor_for_event($pdoAff, $revendedorId, $eventOwnerAdminId);
+      $revendedorId = (int)$val[0];
+      $revendedorName = (string)$val[1];
+    } catch (Exception $e) {
+      $revendedorId = 0;
+      $revendedorName = '';
+    }
+  }
 
   // Selección múltiple con cantidades
   $selectedTickets = array();
@@ -213,8 +374,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($total > 0) {
       try {
         $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email);
+
+        // Persistir orden (requestId) para auditoría/atribución (revendedor)
+        if ($paymentUrl) {
+          $requestId = '';
+          try {
+            $u = @parse_url($paymentUrl);
+            if (is_array($u) && isset($u['query'])) {
+              $q = array();
+              @parse_str($u['query'], $q);
+              if (isset($q['requestId'])) {
+                $requestId = (string)$q['requestId'];
+              }
+            }
+            if ($requestId === '') {
+              $pos = strpos($paymentUrl, 'requestId=');
+              if ($pos !== false) {
+                $requestId = substr($paymentUrl, $pos + 10);
+              }
+            }
+          } catch (Exception $_e) {}
+
+          if ($requestId !== '') {
+            try {
+              $pdoSave = db();
+              $ticketsJson = '';
+              try { $ticketsJson = json_encode($selectedTickets); } catch (Exception $_e) { $ticketsJson = ''; }
+              $ip = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
+              $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
+              $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, updated_at)
+                VALUES (:rid, :st, :eid, :ref, :c, :am, :dni, :bl, :bf, :be, :rev, :tj, :pu, :ip, :ua, datetime('now'))");
+              $stIns->execute(array(
+                ':rid' => $requestId,
+                ':st'  => 'created',
+                ':eid' => $eventId,
+                ':ref' => $ref,
+                ':c'   => $concept,
+                ':am'  => $total,
+                ':dni' => $dni,
+                ':bl'  => $last,
+                ':bf'  => $first,
+                ':be'  => $email,
+                ':rev' => ($revendedorId > 0 ? $revendedorId : null),
+                ':tj'  => $ticketsJson,
+                ':pu'  => $paymentUrl,
+                ':ip'  => $ip,
+                ':ua'  => $ua,
+              ));
+
+              // si ya existía, actualizar los campos de atribución
+              $stUp = $pdoSave->prepare("UPDATE tc_orders SET evento_id=:eid, ref=:ref, concept=:c, amount=:am, buyer_dni=:dni, buyer_last=:bl, buyer_first=:bf, buyer_email=:be, revendedor_id=:rev, selected_tickets_json=:tj, payment_url=:pu, updated_at=datetime('now') WHERE request_id=:rid");
+              $stUp->execute(array(
+                ':rid' => $requestId,
+                ':eid' => $eventId,
+                ':ref' => $ref,
+                ':c'   => $concept,
+                ':am'  => $total,
+                ':dni' => $dni,
+                ':bl'  => $last,
+                ':bf'  => $first,
+                ':be'  => $email,
+                ':rev' => ($revendedorId > 0 ? $revendedorId : null),
+                ':tj'  => $ticketsJson,
+                ':pu'  => $paymentUrl,
+              ));
+            } catch (Exception $e) {
+              try { error_log('[TotalCoin] failed to persist order: ' . $e->getMessage()); } catch (Exception $_e) {}
+            }
+          }
+        }
+
+        // UX: redirigir automáticamente al checkout de TotalCoin
+        if ($paymentUrl) {
+          header('Location: ' . $paymentUrl);
+          exit;
+        }
       } catch (Exception $e) {
-        $errors[] = $e->getMessage();
+        // No exponer detalles internos del gateway al público
+        try { error_log('[TotalCoin] checkout error: ' . $e->getMessage()); } catch (Exception $_e) {}
+        $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos.';
       }
     } else {
       // Orden 100% gratuita: se marca como éxito sin pasar por TotalCoin
@@ -342,6 +580,7 @@ include __DIR__.'/inc/layout_top.php';
     <input type="hidden" name="last_name" value="<?php echo e($defaults['last_name']); ?>">
     <input type="hidden" name="first_name" value="<?php echo e($defaults['first_name']); ?>">
     <input type="hidden" name="email" value="<?php echo e($defaults['email']); ?>">
+    <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
   </form>
 </div>
 

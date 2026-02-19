@@ -1,83 +1,30 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+$pdo = db();
+$eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+// Actualizar cantidad_disponible
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_disponible') {
+  $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+  $cant = isset($_POST['cantidad_disponible']) ? (int)$_POST['cantidad_disponible'] : 0;
+  if ($teId > 0 && $cant >= 0 && $eventoId > 0) {
+    $upd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible = :cant WHERE id = :id AND evento_id = :eid");
+    $upd->execute(array(':cant' => $cant, ':id' => $teId, ':eid' => $eventoId));
+    $okMsg = "Cantidad disponible actualizada.";
+  } else {
+    $error = "Datos inválidos.";
+  }
+
+
+}
 $title = "Configurar entradas del evento";
-
 require_login();
-
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global'])
-    ? $_SESSION['tipo_global']
-    : (isset($cu['rol']) ? $cu['rol'] : '');
-
+    ? $_SESSION['tipo_global'] : (isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : ''));
 if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
-    header("Location: login.php");
-    exit;
+  abort_404("No podés modificar este evento.");
 }
-
-$adminId  = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0);
-$eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-if ($eventoId <= 0) {
-    abort_404("ID de evento inválido.");
-}
-
-try {
-    $pdo = db();
-} catch (Exception $e) {
-    http_response_code(500);
-    echo "Error DB: " . e($e->getMessage());
-    exit;
-}
-
-// ===== Evento =====
-$stEv = $pdo->prepare("SELECT * FROM eventos WHERE id = ?");
-$stEv->execute(array($eventoId));
-$evento = $stEv->fetch(PDO::FETCH_ASSOC);
-if (!$evento) {
-    abort_404("Evento no encontrado.");
-}
-
-// Detectar columnas opcionales en eventos
-$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-$hasCreadoPor = false;
-foreach ($colsEv as $c) {
-    if (isset($c['name']) && $c['name'] === 'creado_por_admin_id') {
-        $hasCreadoPor = true;
-        break;
-    }
-}
-
-// Detectar columnas opcionales en tipos_entrada
-$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-$hasCategoria  = false;
-$hasTipoVenta  = false;
-$hasHoraLimite = false;
-$visCol = null;
-foreach ($colsTE as $c) {
-  if (isset($c['name'])) {
-    if ($c['name'] === 'categoria') $hasCategoria = true;
-    if ($c['name'] === 'tipo_venta') $hasTipoVenta = true;
-    if ($c['name'] === 'hora_limite') $hasHoraLimite = true;
-    if (in_array($c['name'], array('visible_publico','publico','venta_publico'), true)) {
-      $visCol = $c['name'];
-    }
-  }
-}
-
-// Detectar si existe la tabla plantillas_entrada
-$hasTablaPlantillas = false;
-$stmtTbl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='plantillas_entrada' LIMIT 1");
-if ($stmtTbl && $stmtTbl->fetch(PDO::FETCH_ASSOC)) {
-  $hasTablaPlantillas = true;
-}
-
-// admin_evento solo puede tocar sus eventos
-if ($tipoGlobal === 'admin_evento' && $hasCreadoPor) {
-    $creador = isset($evento['creado_por_admin_id']) ? (int)$evento['creado_por_admin_id'] : 0;
-    if ($creador !== $adminId) {
-        abort_404("No podés modificar este evento.");
-    }
-}
-
 $error = '';
 $okMsg = '';
 
@@ -205,18 +152,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
 }
 
     // ===== Tipos ya asociados al evento =====
+    // Inicializar $colsTE antes de usarla
+    $colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+    $hasCategoria = false;
+    if (is_array($colsTE)) {
+      foreach ($colsTE as $c) {
+        if (isset($c['name']) && strtolower($c['name']) === 'categoria') {
+          $hasCategoria = true;
+          break;
+        }
+      }
+    }
     $orderBy = $hasCategoria ? 'categoria ASC, nombre ASC, id ASC' : 'nombre ASC, id ASC';
     $stTE = $pdo->prepare("SELECT * FROM tipos_entrada WHERE evento_id = ? ORDER BY $orderBy");
     $stTE->execute(array($eventoId));
+
 $tiposEvento = $stTE->fetchAll(PDO::FETCH_ASSOC);
 
+// Cargar datos del evento
+$evento = array();
+if ($eventoId > 0) {
+  $stEv = $pdo->prepare("SELECT * FROM eventos WHERE id = ? LIMIT 1");
+  $stEv->execute(array($eventoId));
+  $evento = $stEv->fetch(PDO::FETCH_ASSOC);
+}
+
+// Detectar columna de visibilidad
+$visCol = '';
+$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($colsTE as $c) {
+  if (!empty($c['name']) && (strtolower($c['name']) === 'visible' || strtolower($c['name']) === 'activo')) {
+    $visCol = $c['name'];
+    break;
+  }
+}
+
 // ===== Plantillas (Mis Entradas) del admin =====
+// Detectar si existe la tabla plantillas_entrada
+$hasTablaPlantillas = false;
+$tablas = $pdo->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($tablas as $t) {
+  if (isset($t['name']) && $t['name'] === 'plantillas_entrada') {
+    $hasTablaPlantillas = true;
+    break;
+  }
+}
 if ($hasTablaPlantillas) {
   if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
     $sqlTplList = "SELECT * FROM plantillas_entrada WHERE activo = 1 ORDER BY categoria ASC, nombre ASC";
     $stTplList = $pdo->prepare($sqlTplList);
     $stTplList->execute();
   } else {
+    // Definir $adminId correctamente
+    $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
     $sqlTplList = "SELECT * FROM plantillas_entrada WHERE activo = 1 AND creado_por_admin_id = ? ORDER BY categoria ASC, nombre ASC";
     $stTplList = $pdo->prepare($sqlTplList);
     $stTplList->execute(array($adminId));
@@ -339,7 +327,14 @@ include __DIR__.'/inc/layout_top.php';
             <td><?php echo e($tv); ?></td>
             <td>$<?php echo (int)$te['precio']; ?></td>
             <td><?php echo (int)$te['cantidad_total']; ?></td>
-            <td><?php echo (int)$te['cantidad_disponible']; ?></td>
+            <td>
+              <form method="post" style="margin:0;display:inline;">
+                <input type="hidden" name="action" value="update_disponible">
+                <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
+                <input type="number" name="cantidad_disponible" value="<?php echo (int)$te['cantidad_disponible']; ?>" min="0" style="width:60px;">
+                <button class="btn" type="submit" style="padding:2px 8px;font-size:13px;">Guardar</button>
+              </form>
+            </td>
             <td><?php echo e($hl); ?></td>
             <?php if ($visCol): ?>
             <td>
