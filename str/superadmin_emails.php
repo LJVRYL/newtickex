@@ -22,34 +22,94 @@ $viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
 $flashOk = '';
 $flashErr = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'resend') {
+function ensure_email_share_tokens($pdo)
+{
+  $pdo->exec("CREATE TABLE IF NOT EXISTS email_share_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_log_id INTEGER NOT NULL,
+    token TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT,
+    created_by_admin_id INTEGER,
+    UNIQUE(token)
+  )");
+  $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_share_tokens_log ON email_share_tokens(email_log_id)");
+  $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_share_tokens_exp ON email_share_tokens(expires_at)");
+}
+
+function tickex_make_share_token()
+{
+  if (function_exists('random_bytes')) {
+    return bin2hex(random_bytes(16));
+  }
+  return sha1(uniqid(mt_rand(), true));
+}
+
+function tickex_guess_base_url_here()
+{
+  $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+  $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+  if ($host === '') {
+    return '';
+  }
+  $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
+  if ($basePath === '' || $basePath === '.') {
+    $basePath = '';
+  }
+  return $scheme . '://' . $host . $basePath;
+}
+
+function tickex_whatsapp_link($phone, $text)
+{
+  $digits = preg_replace('/[^0-9]/', '', (string)$phone);
+  if ($digits === '') return '';
+  // wa.me requiere número en formato internacional sin +
+  return 'https://wa.me/' . $digits . '?text=' . rawurlencode((string)$text);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+  $action = (string)$_POST['action'];
+
+  if ($action === 'resend' || $action === 'resend_noreply') {
     $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
     if ($id > 0) {
-        $st = $pdo->prepare('SELECT * FROM email_logs WHERE id = :id LIMIT 1');
-        $st->execute(array(':id' => $id));
-        $row = $st->fetch(PDO::FETCH_ASSOC);
-        if ($row) {
-            $fromEmail = !empty($row['from_email']) ? $row['from_email'] : 'no-reply@tickex.com.ar';
-            $fromName  = !empty($row['from_name']) ? $row['from_name'] : 'Tickex';
-            $replyTo   = !empty($row['reply_to']) ? $row['reply_to'] : $fromEmail;
-            $extra     = !empty($row['extra_params']) ? $row['extra_params'] : '';
+      $st = $pdo->prepare('SELECT * FROM email_logs WHERE id = :id LIMIT 1');
+      $st->execute(array(':id' => $id));
+      $row = $st->fetch(PDO::FETCH_ASSOC);
 
-            $ok = tickex_send_mail($row['to_email'], $row['subject'], $row['body'], array(
-                'from_email'    => $fromEmail,
-                'from_name'     => $fromName,
-                'reply_to'      => $replyTo,
-                'extra_params'  => $extra,
-                'context'       => ($row['context'] ? ($row['context'] . '_resend') : 'resend'),
-                'related_table' => $row['related_table'],
-                'related_id'    => $row['related_id'],
-                'resend_of_id'  => (int)$row['id'],
-            ));
-
-            $flashOk = 'Reenvío ' . ($ok ? 'OK' : 'con fallas') . ' a ' . e($row['to_email']) . ' (log #' . (int)$row['id'] . ')';
+      if ($row) {
+        if ($action === 'resend_noreply') {
+          $fromEmail = 'no-reply@tickex.com.ar';
+          $fromName  = 'Tickex';
+          $replyTo   = $fromEmail;
+          $extra     = '-f ' . $fromEmail;
+          $ctxSuf    = '_resend_noreply';
         } else {
-            $flashErr = 'No se encontró el email log solicitado.';
+          $fromEmail = !empty($row['from_email']) ? $row['from_email'] : 'no-reply@tickex.com.ar';
+          $fromName  = !empty($row['from_name']) ? $row['from_name'] : 'Tickex';
+          $replyTo   = !empty($row['reply_to']) ? $row['reply_to'] : $fromEmail;
+          $extra     = !empty($row['extra_params']) ? $row['extra_params'] : '';
+          $ctxSuf    = '_resend';
         }
+
+        $ok = tickex_send_mail($row['to_email'], $row['subject'], $row['body'], array(
+          'from_email'    => $fromEmail,
+          'from_name'     => $fromName,
+          'reply_to'      => $replyTo,
+          'extra_params'  => $extra,
+          'context'       => ($row['context'] ? ($row['context'] . $ctxSuf) : ltrim($ctxSuf, '_')),
+          'related_table' => $row['related_table'],
+          'related_id'    => $row['related_id'],
+          'resend_of_id'  => (int)$row['id'],
+        ));
+
+        $label = ($action === 'resend_noreply') ? 'Reenvío (no-reply)' : 'Reenvío';
+        $flashOk = $label . ' ' . ($ok ? 'OK' : 'con fallas') . ' a ' . e($row['to_email']) . ' (log #' . (int)$row['id'] . ')';
+      } else {
+        $flashErr = 'No se encontró el email log solicitado.';
+      }
     }
+  }
 }
 
 $where = array();
@@ -103,10 +163,65 @@ $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
 $viewRow = null;
+$shareUrl = '';
+$shareToken = '';
+$waPhone = isset($_GET['wa']) ? trim((string)$_GET['wa']) : '';
 if ($viewId > 0) {
     $stV = $pdo->prepare('SELECT * FROM email_logs WHERE id = :id LIMIT 1');
     $stV->execute(array(':id' => $viewId));
     $viewRow = $stV->fetch(PDO::FETCH_ASSOC);
+
+  // token existente (si hay y no expiró)
+  try {
+    ensure_email_share_tokens($pdo);
+    $stTok = $pdo->prepare("SELECT token FROM email_share_tokens WHERE email_log_id = :id AND (expires_at IS NULL OR expires_at > datetime('now')) ORDER BY id DESC LIMIT 1");
+    $stTok->execute(array(':id' => $viewId));
+    $tok = (string)$stTok->fetchColumn();
+    if ($tok !== '') {
+      $shareToken = $tok;
+    }
+  } catch (Exception $e) {
+    // ignore
+  }
+}
+
+// Generar link compartible para el viewRow
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'share_link') {
+  $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+  if ($id > 0) {
+    try {
+      ensure_email_share_tokens($pdo);
+
+      // Reusar token vigente si existe
+      $stTok = $pdo->prepare("SELECT token FROM email_share_tokens WHERE email_log_id = :id AND (expires_at IS NULL OR expires_at > datetime('now')) ORDER BY id DESC LIMIT 1");
+      $stTok->execute(array(':id' => $id));
+      $tok = (string)$stTok->fetchColumn();
+      if ($tok === '') {
+        $tok = tickex_make_share_token();
+        $adminId = 0;
+        if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
+        elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
+
+        $ins = $pdo->prepare("INSERT INTO email_share_tokens (email_log_id, token, expires_at, created_by_admin_id) VALUES (:id,:t, datetime('now','+7 days'), :aid)");
+        $ins->execute(array(':id' => $id, ':t' => $tok, ':aid' => $adminId > 0 ? $adminId : null));
+      }
+
+      // PRG
+      $qs = array('from' => $from, 'q' => $q, 'view_id' => $id);
+      if ($waPhone !== '') $qs['wa'] = $waPhone;
+      header('Location: superadmin_emails.php?' . http_build_query($qs));
+      exit;
+    } catch (Exception $e) {
+      $flashErr = 'No se pudo generar el link para compartir.';
+    }
+  }
+}
+
+if ($shareToken !== '') {
+  $base = tickex_guess_base_url_here();
+  if ($base !== '') {
+    $shareUrl = $base . '/email_share.php?t=' . urlencode($shareToken);
+  }
 }
 
 $title = 'Emails';
@@ -147,6 +262,53 @@ include __DIR__ . '/inc/layout_top.php';
 <?php if ($viewRow): ?>
   <div class="card" style="overflow:auto;">
     <h3 style="margin-top:0;">Detalle log #<?php echo (int)$viewRow['id']; ?></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px 0;">
+      <form method="post" style="margin:0;">
+        <input type="hidden" name="action" value="share_link">
+        <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
+        <button class="btn secondary" type="submit">Generar link</button>
+      </form>
+      <?php if ($shareUrl !== ''): ?>
+        <input id="shareUrl" value="<?php echo e($shareUrl); ?>" style="min-width:320px;flex:1 1 320px;" readonly>
+        <button class="btn secondary" type="button" onclick="(function(){var u=document.getElementById('shareUrl').value||''; if(!u)return; if(navigator.share){navigator.share({title:'Tickex',text:'Link:',url:u}).catch(function(){});} else if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){alert('Link copiado');}).catch(function(){});} else {prompt('Copiar link:', u);} })();">Compartir</button>
+      <?php else: ?>
+        <span class="muted" style="font-size:13px;">Generá un link para compartir por WhatsApp o apps.</span>
+      <?php endif; ?>
+
+      <form method="post" style="margin:0;">
+        <input type="hidden" name="action" value="resend">
+        <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
+        <button class="btn secondary" type="submit">Reenviar</button>
+      </form>
+      <form method="post" style="margin:0;">
+        <input type="hidden" name="action" value="resend_noreply">
+        <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
+        <button class="btn secondary" type="submit">Reenviar (no-reply)</button>
+      </form>
+    </div>
+
+    <?php if ($shareUrl !== ''): ?>
+      <div class="card" style="margin:10px 0 0 0;">
+        <div class="muted" style="font-size:13px;margin-bottom:6px;">WhatsApp (abre WhatsApp con el link listo para enviar)</div>
+        <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0;">
+          <input type="hidden" name="from" value="<?php echo e($from); ?>">
+          <input type="hidden" name="q" value="<?php echo e($q); ?>">
+          <input type="hidden" name="view_id" value="<?php echo (int)$viewRow['id']; ?>">
+          <input name="wa" placeholder="Teléfono (ej: 54911...)" value="<?php echo e($waPhone); ?>" style="min-width:220px;">
+          <button class="btn secondary" type="submit">Usar número</button>
+          <?php
+            $waLink = '';
+            if ($waPhone !== '') {
+              $waLink = tickex_whatsapp_link($waPhone, $shareUrl);
+            }
+          ?>
+          <?php if ($waLink !== ''): ?>
+            <a class="btn" href="<?php echo e($waLink); ?>" target="_blank" rel="noopener">Abrir WhatsApp</a>
+          <?php endif; ?>
+        </form>
+      </div>
+    <?php endif; ?>
+
     <div class="muted" style="font-size:13px;">Enviado: <?php echo e($viewRow['created_at']); ?> — Resultado: <?php echo ((int)$viewRow['mail_ok'] === 1) ? '<strong>OK</strong>' : '<strong style="color:var(--danger)">FALLÓ</strong>'; ?></div>
     <div style="margin-top:10px;"><strong>To:</strong> <?php echo e($viewRow['to_email']); ?></div>
     <div><strong>From:</strong> <?php echo e($viewRow['from_name'] ? ($viewRow['from_name'] . ' <' . $viewRow['from_email'] . '>') : $viewRow['from_email']); ?></div>
@@ -205,12 +367,14 @@ include __DIR__ . '/inc/layout_top.php';
             <td><?php echo $ok ? '<strong>OK</strong>' : '<span style="color:var(--danger)">FALLÓ</span>'; ?></td>
             <td><?php echo $val; ?></td>
             <td style="white-space:nowrap;">
-              <a class="btn secondary" href="superadmin_emails.php?<?php echo http_build_query(array('from'=>$from,'q'=>$q,'view_id'=>(int)$r['id'])); ?>">Ver</a>
-              <form method="post" style="display:inline;">
-                <input type="hidden" name="action" value="resend">
-                <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                <button class="btn secondary" type="submit">Reenviar</button>
-              </form>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+                <a class="btn secondary" href="superadmin_emails.php?<?php echo http_build_query(array('from'=>$from,'q'=>$q,'view_id'=>(int)$r['id'])); ?>">Ver</a>
+                <form method="post" style="margin:0;">
+                  <input type="hidden" name="action" value="resend">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button class="btn secondary" type="submit">Reenviar</button>
+                </form>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>
