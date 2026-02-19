@@ -95,6 +95,9 @@ build/
 tmp/
 temp/
 
+# Android Studio (proyecto local)
+Android Studio/
+
 # --- Ignorar backups y archivos generados por el sistema ---
 *.BACKUP_*
 *.bak-*

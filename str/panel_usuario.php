@@ -195,6 +195,7 @@ try {
 }
 
 include __DIR__ . '/inc/layout_top.php';
+$isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '1');
 ?>
 <div class="card" style="max-width:900px;margin:0 auto 16px auto;">
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -204,7 +205,9 @@ include __DIR__ . '/inc/layout_top.php';
            style="height:80px;display:block;">
     </div>
     <div>
-      <h2 style="margin:0;">Mi cuenta Tickex</h2>
+      <?php if (!$isApp): ?>
+        <h2 style="margin:0;">Mi cuenta Tickex</h2>
+      <?php endif; ?>
       <div style="color:var(--muted);margin-top:4px;">
         Hola,
         <strong>
@@ -230,6 +233,11 @@ include __DIR__ . '/inc/layout_top.php';
         <span style="margin-left:8px;color:var(--muted);">
           Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?>
         </span>
+        <?php if ($isApp): ?>
+          <span style="margin-left:8px;color:var(--muted);">
+            Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?>
+          </span>
+        <?php endif; ?>
       </div>
     </div>
   </div>
@@ -253,7 +261,7 @@ include __DIR__ . '/inc/layout_top.php';
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
         <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Mis Tickex <span class="pill" style="background:var(--panel-2);border:1px solid var(--line);">Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?></span></h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="app-row-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
           <a class="btn secondary" href="panel_usuario.php?ver_todas=1">Ver todas</a>
           <a class="btn secondary" href="panel_usuario.php">Solo pendientes</a>
         </div>

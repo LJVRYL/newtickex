@@ -8,6 +8,30 @@ if (!isset($title)) {
     $title = 'Tickex';
 }
 
+if (!function_exists('tickex_is_app_mode')) {
+  function tickex_is_app_mode()
+  {
+    $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
+    $isByUa = ($ua !== '' && stripos($ua, 'TickexAppWebView') !== false);
+
+    $isByQuery = false;
+    if (isset($_GET['app'])) {
+      $isByQuery = ((string)$_GET['app'] === '1');
+      if ($isByQuery) {
+        // persistir para el resto de pantallas
+        $_SESSION['tickex_app'] = 1;
+        // cookie para pantallas que no pasan por bootstrap
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        @setcookie('tickex_app', '1', time() + 60*60*24*30, '/', '', $secure, true);
+      }
+    }
+
+    $isBySession = (!empty($_SESSION['tickex_app']));
+    $isByCookie = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '1');
+    return ($isByQuery || $isBySession || $isByCookie || $isByUa);
+  }
+}
+
 $themeClass = 'theme-dark';
 if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('theme-light', 'theme-dark'), true)) {
   $themeClass = $_SESSION['ui_theme'];
@@ -17,6 +41,16 @@ $bodyClass = trim($themeClass . ($isLogged ? '' : ' no-nav'));
 $role = isset($_SESSION['rol']) ? $_SESSION['rol'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
 $isClient = ($role === 'cliente');
 $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
+
+$isApp = tickex_is_app_mode();
+if ($isApp) {
+  $bodyClass .= ' app-shell';
+}
+
+$page = basename(isset($_SERVER['SCRIPT_NAME']) ? (string)$_SERVER['SCRIPT_NAME'] : '');
+if ($page === 'login.php') {
+  $bodyClass .= ' page-login';
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -33,7 +67,7 @@ $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
 <body class="<?php echo htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8'); ?>">
 <div class="topbar">
     <div class="wrap">
-        <a class="logo" href="<?php echo $isClient ? 'panel_usuario.php' : 'panel_admin.php'; ?>">TICKEX</a>
+    <a class="logo" href="<?php echo $isClient ? 'panel_usuario.php' : 'panel_admin.php'; ?>">TICKEX</a>
         <?php if ($isLogged): ?>
             <?php if (!$isClient): ?>
               <?php if (empty($hideNav)): ?>
@@ -64,9 +98,11 @@ $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
               // Mostrar solo primeras letras del email (ej: jua...@dominio.com)
               if (strpos($userMail, '@') !== false) {
                 list($userName, $userDomain) = explode('@', $userMail, 2);
-                $shortUser = mb_substr($userName, 0, 3) . '...@' . $userDomain;
+                $n = ($isApp ? 2 : 3);
+                $shortUser = mb_substr($userName, 0, $n) . '...@' . $userDomain;
               } else {
-                $shortUser = mb_substr($userMail, 0, 3) . '...';
+                $n = ($isApp ? 2 : 3);
+                $shortUser = mb_substr($userMail, 0, $n) . '...';
               }
               ?>
               <span title="<?php echo e($userMail); ?>"><?php echo e($shortUser); ?></span>
