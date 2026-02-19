@@ -504,7 +504,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
       if ($total > 0) {
         try {
+          try {
+            if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+              tc_debug_log($lastDebugId, 'gateway_start', array('event_id' => (int)$eventId, 'ref' => (string)$ref, 'amount' => (float)$total));
+            }
+          } catch (Throwable $_t) {
+            // ignore
+          }
+
           $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email);
+
+          try {
+            if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+              tc_debug_log($lastDebugId, 'gateway_ok', array('event_id' => (int)$eventId, 'ref' => (string)$ref));
+            }
+          } catch (Throwable $_t) {
+            // ignore
+          }
 
         // Persistir orden (requestId) para auditoría/atribución (revendedor)
         if ($paymentUrl) {
@@ -580,7 +596,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . $paymentUrl);
             exit;
           }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público
           try {
@@ -590,7 +606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           try {
             if (function_exists('tc_debug_log')) {
               $cfg = function_exists('tc_config') ? tc_config() : array();
-              tc_debug_log($debugId, $e->getMessage(), array(
+              tc_debug_log($debugId, get_class($e) . ': ' . $e->getMessage(), array(
                 'event_id' => (int)$eventId,
                 'ref' => (string)$ref,
                 'use_prod' => isset($cfg['use_prod']) ? (bool)$cfg['use_prod'] : null,
@@ -599,7 +615,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'callback_base' => isset($cfg['callback_base']) ? (string)$cfg['callback_base'] : null,
               ));
             }
-          } catch (Exception $_e) {
+          } catch (Throwable $_e) {
             // ignore
           }
           $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
