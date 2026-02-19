@@ -32,6 +32,9 @@ str/*.jpeg
 str/*.jpg
 str/*.png
 str/*.svg
+!str/tickex-logo.svg
+!str/tickex-logo_sobre_claro.svg
+!str/tickex-logo_sobre_oscuro.svg
 str/*.js.map
 str/*.less
 str/*.css
@@ -120,6 +123,9 @@ str/.secrets/
 *.gif
 *.svg
 *.css.map
+!str/tickex-logo.svg
+!str/tickex-logo_sobre_claro.svg
+!str/tickex-logo_sobre_oscuro.svg
 uploads/
 str.bak_*/
 testdir/
