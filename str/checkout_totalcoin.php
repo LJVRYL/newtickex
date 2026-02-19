@@ -14,6 +14,7 @@ $step = 'select';
 $csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $isPrivDebug = false;
 $gatewayDebug = '';
+$lastDebugId = '';
 $preview = array(
   'selected' => array(),
   'total' => 0,
@@ -398,11 +399,31 @@ if (!function_exists('_tickex_validate_buyer_fields')) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = isset($_POST['action']) ? (string)$_POST['action'] : 'preview';
 
+  // Para poder trazar cualquier fallo del paso de pago
+  if ($action === 'pay') {
+    $tmpRefForId = isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] ?? '');
+    if ($tmpRefForId === '') $tmpRefForId = 'str-' . $eventId;
+    $lastDebugId = 'TC-' . date('Ymd-His') . '-' . substr(sha1($tmpRefForId . '|' . (string)$eventId . '|' . microtime(true)), 0, 8);
+    try {
+      if (function_exists('tc_debug_log')) {
+        tc_debug_log($lastDebugId, 'pay_attempt', array('event_id' => (int)$eventId, 'ref' => $tmpRefForId));
+      }
+    } catch (Exception $_e) {
+      // ignore
+    }
+  }
+
   // Validar CSRF solo al momento de pagar (acción que cambia estado / llama gateway)
   if ($action === 'pay') {
     $providedCsrf = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
     if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($providedCsrf)) {
-      $errors[] = 'CSRF inválido. Actualizá la página e intentá de nuevo.';
+      $errors[] = 'CSRF inválido. Actualizá la página e intentá de nuevo.' . ($lastDebugId !== '' ? (' (ID: ' . $lastDebugId . ')') : '');
+      try {
+        if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+          tc_debug_log($lastDebugId, 'csrf_invalid', array('event_id' => (int)$eventId));
+        }
+      } catch (Exception $_e) {
+      }
     }
   }
 
@@ -462,6 +483,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $preview['email'] = $email;
 
     _tickex_validate_buyer_fields($dni, $last, $first, $email, $errors);
+
+    if (!empty($errors) && $lastDebugId !== '') {
+      // Asegurar correlación si falla antes del gateway
+      $hasIdAlready = false;
+      foreach ($errors as $erTxt) {
+        if (strpos((string)$erTxt, $lastDebugId) !== false) { $hasIdAlready = true; break; }
+      }
+      if (!$hasIdAlready) {
+        $errors[] = 'Detalle: validación falló. (ID: ' . $lastDebugId . ')';
+      }
+      try {
+        if (function_exists('tc_debug_log')) {
+          tc_debug_log($lastDebugId, 'validation_failed', array('event_id' => (int)$eventId));
+        }
+      } catch (Exception $_e) {
+      }
+    }
 
     if (empty($errors)) {
       if ($total > 0) {
@@ -543,7 +581,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
           }
         } catch (Exception $e) {
-          $debugId = 'TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8);
+          $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público
           try {
             error_log('[TotalCoin] ' . $debugId . ' checkout error: ' . $e->getMessage());
