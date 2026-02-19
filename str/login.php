@@ -9,6 +9,14 @@ $dbFile = __DIR__ . '/save_the_rave.sqlite';
 try {
     $pdo = new PDO('sqlite:' . $dbFile);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+  // Mitigar locks transitorios de SQLite
+  try {
+    $pdo->exec('PRAGMA busy_timeout = 5000');
+    $pdo->exec('PRAGMA foreign_keys = ON');
+  } catch (Exception $e) {
+    // ignore
+  }
 } catch (Exception $e) {
     // Si falla la DB mostramos algo entendible
     header('Content-Type: text/plain; charset=utf-8');

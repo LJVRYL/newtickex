@@ -13,6 +13,15 @@ function db(){
         $pdo = new PDO('sqlite:' . $dbFile);
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+        // Evita errores intermitentes "database is locked" en escrituras concurrentes.
+        // Es un no-op si SQLite no soporta alguna PRAGMA.
+        try {
+            $pdo->exec('PRAGMA busy_timeout = 5000');
+            $pdo->exec('PRAGMA foreign_keys = ON');
+        } catch (Exception $e) {
+            // ignore
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);
