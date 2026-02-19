@@ -105,6 +105,9 @@ if (!function_exists('tc_guess_base_url')) {
 if (!function_exists('tc_http_post_json')) {
     function tc_http_post_json($url, $payload)
     {
+        if (!function_exists('curl_init')) {
+            throw new RuntimeException('TotalCoin: cURL no está disponible en el servidor (extensión curl no instalada/habilitada).');
+        }
         $ch = curl_init($url);
         curl_setopt_array($ch, array(
             CURLOPT_POST           => true,
@@ -130,6 +133,9 @@ if (!function_exists('tc_http_post_json')) {
 if (!function_exists('tc_http_post_form')) {
     function tc_http_post_form($url, $fields, $bearer)
     {
+        if (!function_exists('curl_init')) {
+            throw new RuntimeException('TotalCoin: cURL no está disponible en el servidor (extensión curl no instalada/habilitada).');
+        }
         $ch = curl_init($url);
         curl_setopt_array($ch, array(
             CURLOPT_POST           => true,
