@@ -2,6 +2,7 @@
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/totalcoin.php';
 require_once __DIR__.'/inc/db.php';
+require_once __DIR__.'/inc/mail.php';
 
 $title = 'Checkout TotalCoin (Tickex)';
 $errors = array();
@@ -26,6 +27,7 @@ $preview = array(
   'last_name' => '',
   'email' => '',
   'ref' => '',
+  'create_account' => 0,
 );
 
 // Captura revendedor (afiliado): GET ?aff=ID o cookie tickex_aff
@@ -358,6 +360,81 @@ $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
 if ($basePath === '' || $basePath === '.') { $basePath = ''; }
 $loginBase = $scheme . '://' . $host . $basePath . '/login.php';
 
+// Base URL del sitio para links en emails (evita hardcodear dominio productivo)
+$siteBaseUrl = rtrim($scheme . '://' . $host . $basePath, '/');
+
+if (!function_exists('ensure_registro_pendientes_checkout')) {
+  function ensure_registro_pendientes_checkout($pdo)
+  {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      token TEXT NOT NULL,
+      nombre TEXT,
+      apellido TEXT,
+      apodo TEXT,
+      dni TEXT,
+      genero TEXT,
+      foto_path TEXT,
+      next_url TEXT,
+      creado_en TEXT,
+      completado_en TEXT,
+      password_hash TEXT
+    )");
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_token ON registro_pendientes(token)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_regpend_email ON registro_pendientes(email)");
+
+    // Backfill para instancias existentes
+    try {
+      $cols = $pdo->query('PRAGMA table_info(registro_pendientes)')->fetchAll(PDO::FETCH_ASSOC);
+      $hasPass = false;
+      foreach ($cols as $c) {
+        if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
+      }
+      if (!$hasPass) {
+        $pdo->exec('ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT');
+      }
+    } catch (Exception $e) {
+      // ignore
+    }
+  }
+}
+
+if (!function_exists('tickex_send_registro_step1_from_checkout')) {
+  function tickex_send_registro_step1_from_checkout($toEmail, $token, $registroId, $siteBaseUrl)
+  {
+    $fromEmail = 'no-reply@tickex.com.ar';
+    $fromName  = 'Tickex';
+
+    $link = rtrim((string)$siteBaseUrl, '/') . '/completar_registro.php?token=' . urlencode((string)$token);
+    $subject = 'Confirmá tu email en Tickex';
+
+    $body  = "Hola,\n\n";
+    $body .= "Para continuar tu registro en Tickex, hacé clic en este enlace:\n";
+    $body .= $link . "\n\n";
+    $body .= "Si no fuiste vos, podés ignorar este mensaje.\n\n";
+    $body .= "Tickex\n";
+
+    $extraParams = '-f ' . $fromEmail;
+
+    return tickex_send_mail_template($toEmail, 'registro_step1', array(
+      'link' => $link,
+    ), array(
+      'context'       => 'registro_step1',
+      'related_table' => 'registro_pendientes',
+      'related_id'    => $registroId,
+    ), array(
+      'subject'      => $subject,
+      'body'         => $body,
+      'from_email'   => $fromEmail,
+      'from_name'    => $fromName,
+      'reply_to'     => $fromEmail,
+      'extra_params' => $extraParams,
+      'is_html'      => 0,
+    ));
+  }
+}
+
 // Opciones de entradas: si no hay, usar fallback
 $entryOptions = array();
 foreach ($ticketTypes as $tt) {
@@ -500,6 +577,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $last = trim((string)($_POST['last_name'] ?? $defaults['last_name']));
     $first = trim((string)($_POST['first_name'] ?? $defaults['first_name']));
     $email = trim((string)($_POST['email'] ?? $defaults['email']));
+    $createAccount = 0;
+    if (isset($_POST['create_account'])) {
+      $v = (string)$_POST['create_account'];
+      if ($v === '1' || $v === 'on' || $v === 'true') $createAccount = 1;
+    }
 
     $preview['selected'] = $selectedTickets;
     $preview['total'] = $total;
@@ -508,6 +590,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $preview['first_name'] = $first;
     $preview['last_name'] = $last;
     $preview['email'] = $email;
+    $preview['create_account'] = $createAccount;
 
     _tickex_validate_buyer_fields($dni, $last, $first, $email, $errors);
 
@@ -529,6 +612,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+      // Registro opcional (best effort): crea/actualiza registro_pendientes y envía mail de confirmación
+      if ($createAccount === 1) {
+        try {
+          $pdoReg = db();
+          $pdoReg->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+          ensure_registro_pendientes_checkout($pdoReg);
+
+          $stEx = $pdoReg->prepare('SELECT id, completado_en, password_hash FROM registro_pendientes WHERE email = :e ORDER BY id DESC LIMIT 1');
+          $stEx->execute(array(':e' => $email));
+          $ex = $stEx->fetch(PDO::FETCH_ASSOC);
+
+          $alreadyHasPassword = false;
+          if ($ex) {
+            $ph = isset($ex['password_hash']) ? (string)$ex['password_hash'] : '';
+            $ce = isset($ex['completado_en']) ? (string)$ex['completado_en'] : '';
+            if ($ph !== '' || $ce !== '') {
+              $alreadyHasPassword = true;
+            }
+          }
+
+          if (!$alreadyHasPassword) {
+            $token = function_exists('random_bytes') ? bin2hex(random_bytes(16)) : sha1(uniqid(mt_rand(), true));
+            $ahora = date('Y-m-d H:i:s');
+            $nextForReg = 'checkout_totalcoin.php?event=' . (int)$eventId;
+
+            if ($ex) {
+              $stmtUp = $pdoReg->prepare("UPDATE registro_pendientes
+                SET token = :t,
+                    completado_en = NULL,
+                    next_url = :n,
+                    creado_en = :c,
+                    nombre = :fn,
+                    apellido = :ln,
+                    dni = :dni
+                WHERE id = :id");
+              $stmtUp->execute(array(
+                ':t' => $token,
+                ':n' => $nextForReg,
+                ':c' => $ahora,
+                ':fn' => $first,
+                ':ln' => $last,
+                ':dni' => $dni,
+                ':id' => (int)$ex['id'],
+              ));
+              $regId = (int)$ex['id'];
+            } else {
+              $stmtIns = $pdoReg->prepare('INSERT INTO registro_pendientes (email, token, nombre, apellido, dni, next_url, creado_en) VALUES (:e, :t, :fn, :ln, :dni, :n, :c)');
+              $stmtIns->execute(array(
+                ':e' => $email,
+                ':t' => $token,
+                ':fn' => $first,
+                ':ln' => $last,
+                ':dni' => $dni,
+                ':n' => $nextForReg,
+                ':c' => $ahora,
+              ));
+              $regId = (int)$pdoReg->lastInsertId();
+            }
+
+            $mailOk = tickex_send_registro_step1_from_checkout($email, $token, $regId, $siteBaseUrl);
+            try {
+              if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+                tc_debug_log($lastDebugId, 'register_mail', array(
+                  'event_id' => (int)$eventId,
+                  'email' => (string)$email,
+                  'reg_id' => (int)$regId,
+                  'mail_ok' => (bool)$mailOk,
+                ));
+              }
+            } catch (Throwable $_t) {
+              // ignore
+            }
+          } else {
+            try {
+              if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+                tc_debug_log($lastDebugId, 'register_skip_existing', array(
+                  'event_id' => (int)$eventId,
+                  'email' => (string)$email,
+                  'reg_id' => (int)$ex['id'],
+                ));
+              }
+            } catch (Throwable $_t) {
+              // ignore
+            }
+          }
+        } catch (Throwable $_t) {
+          try {
+            if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
+              tc_debug_log($lastDebugId, 'register_error', array(
+                'event_id' => (int)$eventId,
+                'msg' => (string)$_t->getMessage(),
+              ));
+            }
+          } catch (Throwable $_t2) {
+            // ignore
+          }
+          // No bloquear pago por error de registro/email
+        }
+      }
+
       if ($total > 0) {
         try {
           try {
@@ -846,6 +1029,16 @@ include __DIR__.'/inc/layout_top.php';
             Email (acá te llegan las entradas)
             <input type="email" name="email" value="<?php echo e($preview['email']); ?>" required>
           </label>
+
+          <?php $isLoggedCliente = isset($_SESSION['usuario_id']) && (int)$_SESSION['usuario_id'] > 0; ?>
+          <?php if (!$isLoggedCliente): ?>
+            <label style="grid-column:1 / -1;display:flex;gap:10px;align-items:flex-start;">
+              <input type="checkbox" name="create_account" value="1" style="margin-top:4px;" <?php echo !empty($preview['create_account']) ? 'checked' : ''; ?>>
+              <span>
+                Crear cuenta con estos datos (te enviamos un email para confirmar y definir tu contraseña)
+              </span>
+            </label>
+          <?php endif; ?>
 
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn" type="submit">Confirmar y pagar</button>
