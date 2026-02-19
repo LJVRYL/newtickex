@@ -396,12 +396,15 @@ if (!function_exists('_tickex_validate_buyer_fields')) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $providedCsrf = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
-  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($providedCsrf)) {
-    $errors[] = 'CSRF inválido. Actualizá la página e intentá de nuevo.';
-  }
-
   $action = isset($_POST['action']) ? (string)$_POST['action'] : 'preview';
+
+  // Validar CSRF solo al momento de pagar (acción que cambia estado / llama gateway)
+  if ($action === 'pay') {
+    $providedCsrf = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+    if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($providedCsrf)) {
+      $errors[] = 'CSRF inválido. Actualizá la página e intentá de nuevo.';
+    }
+  }
 
   $concept = $eventName;
   $ref = trim($_POST['ref'] ?? ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())));
@@ -641,6 +644,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php endif; ?>
 
   <?php if ($step === 'confirm'): ?>
+    <?php $csrfTokConfirm = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : $csrfTok; ?>
     <div class="card" style="max-width:920px;margin:0 auto 12px auto;background:var(--panel-2);border-color:var(--line);">
       <h3 style="margin:0 0 8px;">Confirmación del checkout</h3>
       <div style="display:grid;gap:10px;">
@@ -663,7 +667,7 @@ include __DIR__.'/inc/layout_top.php';
         </div>
 
         <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
-          <input type="hidden" name="csrf" value="<?php echo e($csrfTok); ?>">
+          <input type="hidden" name="csrf" value="<?php echo e($csrfTokConfirm); ?>">
           <input type="hidden" name="action" value="pay">
           <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time()))); ?>">
           <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
