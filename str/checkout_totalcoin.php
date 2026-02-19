@@ -107,6 +107,31 @@ $sessionFirst = $_SESSION['first_name'] ?? '';
 $sessionLast  = $_SESSION['last_name'] ?? '';
 $sessionDni   = $_SESSION['dni'] ?? '';
 
+// Si el usuario está logueado como cliente pero no tenemos datos en sesión,
+// intentar cargarlos desde registro_pendientes para no caer en loop de login.
+try {
+  $uidCliente = isset($_SESSION['usuario_id']) ? (int)$_SESSION['usuario_id'] : 0;
+  if ($uidCliente > 0 && ($sessionEmail === '' || $sessionFirst === '' || $sessionLast === '' || $sessionDni === '')) {
+    $pdoU = db();
+    $stU = $pdoU->prepare('SELECT nombre, apellido, email, dni FROM registro_pendientes WHERE id = :id LIMIT 1');
+    $stU->execute(array(':id' => $uidCliente));
+    $ru = $stU->fetch(PDO::FETCH_ASSOC);
+    if ($ru) {
+      if ($sessionEmail === '' && !empty($ru['email'])) $sessionEmail = (string)$ru['email'];
+      if ($sessionFirst === '' && !empty($ru['nombre'])) $sessionFirst = (string)$ru['nombre'];
+      if ($sessionLast === '' && !empty($ru['apellido'])) $sessionLast = (string)$ru['apellido'];
+      if ($sessionDni === '' && !empty($ru['dni'])) $sessionDni = (string)$ru['dni'];
+      // mantener espejo básico en sesión para próximas pantallas
+      if (!isset($_SESSION['usuario_email']) && $sessionEmail !== '') $_SESSION['usuario_email'] = $sessionEmail;
+      if (!isset($_SESSION['first_name']) && $sessionFirst !== '') $_SESSION['first_name'] = $sessionFirst;
+      if (!isset($_SESSION['last_name']) && $sessionLast !== '') $_SESSION['last_name'] = $sessionLast;
+      if (!isset($_SESSION['dni']) && $sessionDni !== '') $_SESSION['dni'] = $sessionDni;
+    }
+  }
+} catch (Exception $e) {
+  // no bloquear el checkout
+}
+
 // Fallback: si no hay first/last, intentar a partir del nombre de sesión
 if ($sessionFirst === '' || $sessionLast === '') {
   $full = '';
