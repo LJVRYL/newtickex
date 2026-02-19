@@ -47,13 +47,15 @@ if (!function_exists('tc_http_post_json')) {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => array('Content-Type: application/json'),
             CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT        => 20,
         ));
         $resp = curl_exec($ch);
         if ($resp === false) {
+            $errno = curl_errno($ch);
             $err = curl_error($ch);
             curl_close($ch);
-            throw new RuntimeException('TotalCoin login error: ' . $err);
+            throw new RuntimeException('TotalCoin login cURL error (errno=' . $errno . '): ' . $err);
         }
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -70,13 +72,15 @@ if (!function_exists('tc_http_post_form')) {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => array('Authorization: Bearer ' . $bearer),
             CURLOPT_POSTFIELDS     => http_build_query($fields),
+            CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT        => 20,
         ));
         $resp = curl_exec($ch);
         if ($resp === false) {
+            $errno = curl_errno($ch);
             $err = curl_error($ch);
             curl_close($ch);
-            throw new RuntimeException('TotalCoin checkout error: ' . $err);
+            throw new RuntimeException('TotalCoin checkout cURL error (errno=' . $errno . '): ' . $err);
         }
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
@@ -175,7 +179,20 @@ if (!function_exists('tc_checkout')) {
         if ($status < 200 || $status >= 300) {
             throw new RuntimeException('TotalCoin checkout failed HTTP ' . $status . ' body=' . $body);
         }
-        $requestId = trim(str_replace('"', '"', $body), "\"");
+        $requestId = '';
+        $bodyTrim = trim((string)$body);
+        // A veces devuelve JSON (por ejemplo {"requestId":"..."})
+        if ($bodyTrim !== '' && ($bodyTrim[0] === '{' || $bodyTrim[0] === '[')) {
+            $data = json_decode($bodyTrim, true);
+            if (is_array($data)) {
+                if (isset($data['requestId'])) $requestId = (string)$data['requestId'];
+                if ($requestId === '' && isset($data['RequestId'])) $requestId = (string)$data['RequestId'];
+            }
+        }
+        if ($requestId === '') {
+            // Fallback: body crudo o string quoted
+            $requestId = trim($bodyTrim, "\"\n\r\t ");
+        }
         if ($requestId === '') {
             throw new RuntimeException('TotalCoin checkout empty requestId: ' . $body);
         }

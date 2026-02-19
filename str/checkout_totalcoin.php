@@ -10,6 +10,19 @@ $freeSuccess = false;
 $revendedorId = 0;
 $revendedorName = '';
 $eventOwnerAdminId = 0;
+$step = 'select';
+$csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
+$isPrivDebug = false;
+$gatewayDebug = '';
+$preview = array(
+  'selected' => array(),
+  'total' => 0,
+  'dni' => '',
+  'first_name' => '',
+  'last_name' => '',
+  'email' => '',
+  'ref' => '',
+);
 
 // Captura revendedor (afiliado): GET ?aff=ID o cookie tickex_aff
 $affCandidate = '';
@@ -34,6 +47,20 @@ $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
 
 // Datos del usuario logueado (si los hubiera)
 $cu = current_user();
+
+try {
+  if (function_exists('is_admin') && is_admin()) {
+    $isPrivDebug = true;
+  } else {
+    $tg = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
+    $rol = isset($cu['rol']) ? (string)$cu['rol'] : (isset($_SESSION['rol']) ? (string)$_SESSION['rol'] : '');
+    if (in_array($tg, array('admin_evento','super_admin','superadmin'), true) || $rol === 'admin') {
+      $isPrivDebug = true;
+    }
+  }
+} catch (Exception $e) {
+  $isPrivDebug = false;
+}
 
 if (!function_exists('_tickex_pick_first_col')) {
   function _tickex_pick_first_col($colMap, $candidates) {
@@ -330,18 +357,60 @@ foreach ($entryOptions as $opt) {
   $optionMap[(string)$opt['id']] = $opt;
 }
 
+if (!function_exists('_tickex_parse_selection')) {
+  // Normaliza selección del form a array de líneas: id,name,qty,price
+  function _tickex_parse_selection($optionMap, $ids, $qtys, &$errors)
+  {
+    $selectedTickets = array();
+    $total = 0;
+    if (!is_array($ids) || !is_array($qtys)) {
+      return array($selectedTickets, $total);
+    }
+    foreach ($ids as $i => $tid) {
+      $tidStr = (string)$tid;
+      $qty = isset($qtys[$i]) ? (int)$qtys[$i] : 0;
+      if ($qty <= 0) continue;
+      if (!isset($optionMap[$tidStr])) continue;
+      $opt = $optionMap[$tidStr];
+      $maxAvail = isset($opt['avail']) && $opt['avail'] !== null ? (int)$opt['avail'] : 999999;
+      if ($qty > $maxAvail) {
+        $errors[] = 'Cantidad excede disponibilidad para ' . e($opt['name']);
+        continue;
+      }
+      $lineTotal = $opt['price'] * $qty;
+      $total += $lineTotal;
+      $selectedTickets[] = array('id' => $tidStr, 'name' => $opt['name'], 'qty' => $qty, 'price' => $opt['price']);
+    }
+    return array($selectedTickets, $total);
+  }
+}
+
+if (!function_exists('_tickex_validate_buyer_fields')) {
+  function _tickex_validate_buyer_fields($dni, $last, $first, $email, &$errors)
+  {
+    if ($dni === '') $errors[] = 'DNI requerido';
+    if ($last === '') $errors[] = 'Apellido requerido';
+    if ($first === '') $errors[] = 'Nombre requerido';
+    if ($email === '' || strpos($email, '@') === false) $errors[] = 'Email inválido';
+  }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $concept   = $eventName;
-  $dni       = trim($_POST['dni'] ?? $defaults['dni']);
-  $ref       = trim($_POST['ref'] ?? ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())));
-  $last      = trim($_POST['last_name'] ?? $defaults['last_name']);
-  $first     = trim($_POST['first_name'] ?? $defaults['first_name']);
-  $email     = trim($_POST['email'] ?? $defaults['email']);
-  $affPost   = isset($_POST['aff']) ? (int)$_POST['aff'] : 0;
+  $providedCsrf = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($providedCsrf)) {
+    $errors[] = 'CSRF inválido. Actualizá la página e intentá de nuevo.';
+  }
+
+  $action = isset($_POST['action']) ? (string)$_POST['action'] : 'preview';
+
+  $concept = $eventName;
+  $ref = trim($_POST['ref'] ?? ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())));
+  if ($ref === '') $errors[] = 'Referencia requerida';
+
+  $affPost = isset($_POST['aff']) ? (int)$_POST['aff'] : 0;
   if ($revendedorId <= 0 && $affPost > 0) {
     $revendedorId = $affPost;
   }
-
   // Revalidar revendedor en POST (anti-tamper + ownership por evento)
   if ($revendedorId > 0) {
     try {
@@ -355,50 +424,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  // Selección múltiple con cantidades
-  $selectedTickets = array();
-  $total = 0;
-  if (!empty($_POST['ticket_id']) && is_array($_POST['ticket_id'])) {
-    foreach ($_POST['ticket_id'] as $i => $tid) {
-      $tidStr = (string)$tid;
-      $qty = isset($_POST['qty'][$i]) ? (int)$_POST['qty'][$i] : 0;
-      if ($qty <= 0) continue;
-      if (!isset($optionMap[$tidStr])) continue;
-      $opt = $optionMap[$tidStr];
-      $maxAvail = isset($opt['avail']) && $opt['avail'] !== null ? (int)$opt['avail'] : 999999;
-      if ($qty > $maxAvail) {
-        $errors[] = 'Cantidad excede disponibilidad para ' . e($opt['name']);
-        continue;
-      }
-      $lineTotal = $opt['price'] * $qty;
-      $total += $lineTotal;
-      $selectedTickets[] = array('id' => $tidStr, 'name' => $opt['name'], 'qty' => $qty, 'price' => $opt['price']);
-    }
+  // Selección (paso 1 o paso 2)
+  $selIds = isset($_POST['selected_id']) ? $_POST['selected_id'] : (isset($_POST['ticket_id']) ? $_POST['ticket_id'] : array());
+  $selQty = isset($_POST['selected_qty']) ? $_POST['selected_qty'] : (isset($_POST['qty']) ? $_POST['qty'] : array());
+  list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors);
+
+  if ($total <= 0 && empty($selectedTickets)) {
+    $errors[] = 'Seleccioná al menos una entrada.';
   }
 
-  // Si faltan datos de usuario, forzar flujo de login (desde ahí podrá registrarse)
-  $needsAuth = ($dni === '' || $last === '' || $first === '' || $email === '' || strpos($email, '@') === false);
-  if ($needsAuth) {
-    $redir = $loginBase . '?next=' . urlencode($nextUrl);
-    if ($email !== '') {
-      $redir .= '&email=' . urlencode($email);
-    }
-    header('Location: ' . $redir);
-    exit;
-  }
+  if ($action === 'preview') {
+    // Pasar al paso de confirmación (form visible)
+    $step = 'confirm';
+    $preview['selected'] = $selectedTickets;
+    $preview['total'] = $total;
+    $preview['ref'] = $ref;
+    $preview['dni'] = trim((string)($defaults['dni'] ?? ''));
+    $preview['first_name'] = trim((string)($defaults['first_name'] ?? ''));
+    $preview['last_name'] = trim((string)($defaults['last_name'] ?? ''));
+    $preview['email'] = trim((string)($defaults['email'] ?? ''));
+  } elseif ($action === 'pay') {
+    $step = 'confirm';
+    $dni = trim((string)($_POST['dni'] ?? $defaults['dni']));
+    $last = trim((string)($_POST['last_name'] ?? $defaults['last_name']));
+    $first = trim((string)($_POST['first_name'] ?? $defaults['first_name']));
+    $email = trim((string)($_POST['email'] ?? $defaults['email']));
 
-  if ($total <= 0 && empty($selectedTickets)) $errors[] = 'Seleccioná al menos una entrada.';
-  if ($concept === '') $errors[] = 'Concepto requerido';
-  if ($dni === '') $errors[] = 'DNI requerido';
-  if ($ref === '') $errors[] = 'Referencia requerida';
-  if ($last === '') $errors[] = 'Apellido requerido';
-  if ($first === '') $errors[] = 'Nombre requerido';
-  if ($email === '' || strpos($email, '@') === false) $errors[] = 'Email inválido';
+    $preview['selected'] = $selectedTickets;
+    $preview['total'] = $total;
+    $preview['ref'] = $ref;
+    $preview['dni'] = $dni;
+    $preview['first_name'] = $first;
+    $preview['last_name'] = $last;
+    $preview['email'] = $email;
 
-  if (empty($errors)) {
-    if ($total > 0) {
-      try {
-        $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email);
+    _tickex_validate_buyer_fields($dni, $last, $first, $email, $errors);
+
+    if (empty($errors)) {
+      if ($total > 0) {
+        try {
+          $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email);
 
         // Persistir orden (requestId) para auditoría/atribución (revendedor)
         if ($paymentUrl) {
@@ -469,19 +534,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           }
         }
 
-        // UX: redirigir automáticamente al checkout de TotalCoin
-        if ($paymentUrl) {
-          header('Location: ' . $paymentUrl);
-          exit;
+          // UX: redirigir automáticamente al checkout de TotalCoin
+          if ($paymentUrl) {
+            header('Location: ' . $paymentUrl);
+            exit;
+          }
+        } catch (Exception $e) {
+          $debugId = 'TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8);
+          // No exponer detalles internos del gateway al público
+          try {
+            error_log('[TotalCoin] ' . $debugId . ' checkout error: ' . $e->getMessage());
+          } catch (Exception $_e) {
+          }
+          $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
+          if ($isPrivDebug) {
+            $gatewayDebug = $e->getMessage();
+          }
         }
-      } catch (Exception $e) {
-        // No exponer detalles internos del gateway al público
-        try { error_log('[TotalCoin] checkout error: ' . $e->getMessage()); } catch (Exception $_e) {}
-        $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos.';
+      } else {
+        // Orden 100% gratuita: se marca como éxito sin pasar por TotalCoin
+        $freeSuccess = true;
       }
-    } else {
-      // Orden 100% gratuita: se marca como éxito sin pasar por TotalCoin
-      $freeSuccess = true;
     }
   }
 }
@@ -527,7 +600,7 @@ include __DIR__.'/inc/layout_top.php';
     <div class="flash" style="background:var(--panel-2);border:1px solid var(--line);color:var(--muted);">
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
         <div>
-          <strong>¿Ya tenés cuenta?</strong> Iniciá sesión para completar tus datos y seguir con el checkout.
+          <strong>Tip:</strong> si completás tus datos (email/DNI/nombre/apellido) el checkout es más rápido.
         </div>
         <a class="btn secondary" href="<?php echo $loginBase.'?next='.urlencode($nextUrl); ?>">Iniciar sesión</a>
       </div>
@@ -541,6 +614,15 @@ include __DIR__.'/inc/layout_top.php';
           <li><?php echo e($er); ?></li>
         <?php endforeach; ?>
       </ul>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($gatewayDebug !== '' && $isPrivDebug): ?>
+    <div class="flash" style="background:var(--panel-2);border:1px solid var(--line);color:var(--muted);">
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px;">Detalle técnico (solo admin)</div>
+      <div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;font-size:12px;white-space:pre-wrap;word-break:break-word;">
+        <?php echo e($gatewayDebug); ?>
+      </div>
     </div>
   <?php endif; ?>
 
@@ -558,7 +640,68 @@ include __DIR__.'/inc/layout_top.php';
     </div>
   <?php endif; ?>
 
+  <?php if ($step === 'confirm'): ?>
+    <div class="card" style="max-width:920px;margin:0 auto 12px auto;background:var(--panel-2);border-color:var(--line);">
+      <h3 style="margin:0 0 8px;">Confirmación del checkout</h3>
+      <div style="display:grid;gap:10px;">
+        <div class="card" style="margin:0;background:transparent;border:1px solid var(--line);">
+          <div class="muted" style="font-size:12px;">Entradas</div>
+          <?php if (!empty($preview['selected'])): ?>
+            <ul style="margin:8px 0 0 18px;">
+              <?php foreach ($preview['selected'] as $ln): ?>
+                <li>
+                  <strong><?php echo e((string)$ln['name']); ?></strong>
+                  · x<?php echo (int)$ln['qty']; ?>
+                  · $<?php echo e(number_format((float)$ln['price'], 0, ',', '.')); ?>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+            <div style="margin-top:10px;font-size:16px;font-weight:700;">Total: $<?php echo e(number_format((float)$preview['total'], 0, ',', '.')); ?></div>
+          <?php else: ?>
+            <div class="muted" style="margin-top:6px;">No hay entradas seleccionadas.</div>
+          <?php endif; ?>
+        </div>
+
+        <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
+          <input type="hidden" name="csrf" value="<?php echo e($csrfTok); ?>">
+          <input type="hidden" name="action" value="pay">
+          <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time()))); ?>">
+          <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
+
+          <?php foreach (($preview['selected'] ?? array()) as $ln): ?>
+            <input type="hidden" name="selected_id[]" value="<?php echo e((string)$ln['id']); ?>">
+            <input type="hidden" name="selected_qty[]" value="<?php echo (int)$ln['qty']; ?>">
+          <?php endforeach; ?>
+
+          <label>
+            DNI
+            <input type="text" name="dni" value="<?php echo e($preview['dni']); ?>" required>
+          </label>
+          <label>
+            Nombre
+            <input type="text" name="first_name" value="<?php echo e($preview['first_name']); ?>" required>
+          </label>
+          <label>
+            Apellido
+            <input type="text" name="last_name" value="<?php echo e($preview['last_name']); ?>" required>
+          </label>
+          <label style="grid-column:1 / -1;">
+            Email (acá te llegan las entradas)
+            <input type="email" name="email" value="<?php echo e($preview['email']); ?>" required>
+          </label>
+
+          <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn" type="submit">Confirmar y pagar</button>
+            <a class="btn secondary" href="<?php echo e($_SERVER['REQUEST_URI']); ?>">Volver</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  <?php else: ?>
+
   <form method="post" id="checkoutForm" style="display:grid;gap:12px;">
+    <input type="hidden" name="csrf" value="<?php echo e($csrfTok); ?>">
+    <input type="hidden" name="action" value="preview">
     <div class="card" style="background:var(--panel-2);border-color:var(--line);">
       <h3 style="margin:0 0 8px;">Seleccioná tus entradas</h3>
       <?php foreach ($entryOptions as $idx => $opt): 
@@ -598,15 +741,12 @@ include __DIR__.'/inc/layout_top.php';
       <button class="btn" type="submit">Comprar</button>
     </div>
 
-    <!-- Campos ocultos requeridos para el checkout -->
-    <input type="hidden" name="concept" value="<?php echo e($eventName); ?>">
+    <!-- Campos ocultos mínimos -->
     <input type="hidden" name="ref" value="<?php echo e($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())); ?>">
-    <input type="hidden" name="dni" value="<?php echo e($defaults['dni'] !== '' ? $defaults['dni'] : ''); ?>">
-    <input type="hidden" name="last_name" value="<?php echo e($defaults['last_name']); ?>">
-    <input type="hidden" name="first_name" value="<?php echo e($defaults['first_name']); ?>">
-    <input type="hidden" name="email" value="<?php echo e($defaults['email']); ?>">
     <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
   </form>
+
+  <?php endif; ?>
 </div>
 
 <script>
@@ -614,6 +754,10 @@ include __DIR__.'/inc/layout_top.php';
     const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="ticket_id"]');
     const qtySelects = document.querySelectorAll('select[name^="qty"]');
     const totalDisplay = document.getElementById('totalDisplay');
+
+    if (!totalDisplay || !checkboxes.length) {
+      return;
+    }
 
     function recalc() {
       let total = 0;
