@@ -121,6 +121,19 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0
 .app-shell .app-row-actions{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .app-shell .app-row-actions .btn{white-space:nowrap}
 
+/* Perfil (panel usuario) en app: apilar info y evitar header largo */
+.app-shell .app-profile{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.app-shell .app-hello{color:var(--muted)}
+.app-shell .app-email{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.app-shell .app-email-text{color:var(--muted)}
+.app-shell .app-meta{color:var(--muted);font-size:13px}
+.app-shell .app-badge{padding:2px 8px;border-radius:999px;font-size:12px;color:#fff}
+.app-shell .app-badge-ok{background:#1b8a3a}
+.app-shell .app-badge-err{background:#b34747}
+
+/* Botones de acciones más compactos en app */
+.app-shell .app-row-actions .btn.secondary{padding:7px 10px;font-size:12px;letter-spacing:.04em}
+
 /* Toggle switch */
 .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
 .switch input{position:absolute;opacity:0;pointer-events:none}

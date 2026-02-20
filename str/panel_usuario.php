@@ -208,37 +208,59 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
       <?php if (!$isApp): ?>
         <h2 style="margin:0;">Mi cuenta Tickex</h2>
       <?php endif; ?>
-      <div style="color:var(--muted);margin-top:4px;">
-        Hola,
-        <strong>
-          <?php
-          echo htmlspecialchars(
-              $nombreCompleto !== '' ? $nombreCompleto : $emailUsuario,
-              ENT_QUOTES,
-              'UTF-8'
-          );
-          ?>
-        </strong>
-      </div>
-      <div style="margin-top:6px;font-size:13px;">
-        <?php if ($emailConfirmado): ?>
-          <span style="background:#1b8a3a;color:white;padding:2px 8px;border-radius:999px;font-size:12px;">
-            ✔ Email verificado
-          </span>
-        <?php else: ?>
-          <span style="background:#b34747;color:white;padding:2px 8px;border-radius:999px;font-size:12px;">
-            ✖ Email pendiente de verificación
-          </span>
-        <?php endif; ?>
-        <span style="margin-left:8px;color:var(--muted);">
-          Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?>
-        </span>
-        <?php if ($isApp): ?>
+      <?php if ($isApp): ?>
+        <?php
+          $nombreHola = '';
+          if (isset($u['nombre']) && trim((string)$u['nombre']) !== '') {
+            $nombreHola = trim((string)$u['nombre']);
+          } elseif ($nombreCompleto !== '') {
+            $nombreHola = $nombreCompleto;
+          } else {
+            $nombreHola = $emailUsuario;
+          }
+          $tickexId = ($u['apodo'] && $u['apodo'] !== '') ? $u['apodo'] : ('#'.$u['id']);
+        ?>
+        <div class="app-profile">
+          <div class="app-hello">Hola, <strong><?php echo htmlspecialchars($nombreHola, ENT_QUOTES, 'UTF-8'); ?></strong></div>
+          <div class="app-email">
+            <?php if ($emailConfirmado): ?>
+              <span class="app-badge app-badge-ok">✔ Email verificado</span>
+            <?php else: ?>
+              <span class="app-badge app-badge-err">✖ Email pendiente de verificación</span>
+            <?php endif; ?>
+            <span class="app-email-text"><?php echo htmlspecialchars($emailUsuario, ENT_QUOTES, 'UTF-8'); ?></span>
+          </div>
+          <div class="app-meta">Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?></div>
+          <div class="app-meta">Tickex ID: <?php echo htmlspecialchars($tickexId, ENT_QUOTES, 'UTF-8'); ?></div>
+        </div>
+      <?php else: ?>
+        <div style="color:var(--muted);margin-top:4px;">
+          Hola,
+          <strong>
+            <?php
+            echo htmlspecialchars(
+                $nombreCompleto !== '' ? $nombreCompleto : $emailUsuario,
+                ENT_QUOTES,
+                'UTF-8'
+            );
+            ?>
+          </strong>
+        </div>
+        <div style="margin-top:6px;font-size:13px;">
+          <?php if ($emailConfirmado): ?>
+            <span style="background:#1b8a3a;color:white;padding:2px 8px;border-radius:999px;font-size:12px;">
+              ✔ Email verificado
+            </span>
+          <?php else: ?>
+            <span style="background:#b34747;color:white;padding:2px 8px;border-radius:999px;font-size:12px;">
+              ✖ Email pendiente de verificación
+            </span>
+          <?php endif; ?>
           <span style="margin-left:8px;color:var(--muted);">
-            Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?>
+            Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?>
           </span>
-        <?php endif; ?>
-      </div>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 </div>
@@ -259,8 +281,10 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
 
     <!-- Mis últimos Tickex -->
     <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Mis Tickex <span class="pill" style="background:var(--panel-2);border:1px solid var(--line);">Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?></span></h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;<?php echo $isApp ? 'justify-content:flex-start;' : ''; ?>">
+        <?php if (!$isApp): ?>
+          <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Mis Tickex <span class="pill" style="background:var(--panel-2);border:1px solid var(--line);">Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?></span></h3>
+        <?php endif; ?>
         <div class="app-row-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
           <a class="btn secondary" href="panel_usuario.php?ver_todas=1">Ver todas</a>
           <a class="btn secondary" href="panel_usuario.php">Solo pendientes</a>
