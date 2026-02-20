@@ -116,9 +116,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0
 .app-shell.app-client .topbar .wrap{flex-wrap:nowrap}
 .app-shell.app-client .quick-links{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
 
-/* En app (admin): ocultar navegación lateral/hamburger */
+/* En app (admin): mostrar botón menú para poder abrir el nav */
+.app-shell.app-admin .topbar .wrap{flex-wrap:nowrap}
 .app-shell.app-admin .quick-links{display:none}
-.app-shell.app-admin .hamburger{display:none}
+.app-shell.app-admin .hamburger{display:flex}
 
 /* Contenedores de acciones en fila (panel usuario) */
 .app-shell .app-row-actions{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
