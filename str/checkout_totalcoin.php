@@ -403,7 +403,7 @@ if (!function_exists('ensure_registro_pendientes_checkout')) {
 if (!function_exists('tickex_send_registro_step1_from_checkout')) {
   function tickex_send_registro_step1_from_checkout($toEmail, $token, $registroId, $siteBaseUrl)
   {
-    $fromEmail = 'no-reply@tickex.com.ar';
+    $fromEmail = 'servicio@tickex.com.ar';
     $fromName  = 'Tickex';
 
     $link = rtrim((string)$siteBaseUrl, '/') . '/completar_registro.php?token=' . urlencode((string)$token);

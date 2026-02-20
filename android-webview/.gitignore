@@ -1,0 +1,11 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Keystore (no subir)
+*.jks
+*.keystore

@@ -16,7 +16,7 @@ if (!in_array($rol, array('super_admin','superadmin'), true)) {
 $pdo = db();
 
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
-$from = isset($_GET['from']) ? trim($_GET['from']) : 'no-reply@tickex.com.ar';
+$from = isset($_GET['from']) ? trim($_GET['from']) : 'servicio@tickex.com.ar';
 $viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
 
 $flashOk = '';
@@ -80,13 +80,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
       if ($row) {
         if ($action === 'resend_noreply') {
-          $fromEmail = 'no-reply@tickex.com.ar';
+          $fromEmail = 'servicio@tickex.com.ar';
           $fromName  = 'Tickex';
           $replyTo   = $fromEmail;
           $extra     = '-f ' . $fromEmail;
           $ctxSuf    = '_resend_noreply';
         } else {
-          $fromEmail = !empty($row['from_email']) ? $row['from_email'] : 'no-reply@tickex.com.ar';
+          $fromEmail = !empty($row['from_email']) ? $row['from_email'] : 'servicio@tickex.com.ar';
           $fromName  = !empty($row['from_name']) ? $row['from_name'] : 'Tickex';
           $replyTo   = !empty($row['reply_to']) ? $row['reply_to'] : $fromEmail;
           $extra     = !empty($row['extra_params']) ? $row['extra_params'] : '';

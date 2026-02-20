@@ -28,6 +28,7 @@ function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
     $fromEmail = 'no-reply@tickex.com.ar';
     $fromName  = 'Tickex';
     $from      = $fromName . ' <' . $fromEmail . '>';
+      $fromEmail  = 'servicio@tickex.com.ar';
 
     $link    = 'https://str.tickex.com.ar/completar_registro.php?token=' . urlencode($token);
     $subject = 'Confirmá tu email en Tickex';

@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['email'])) {
 // ---------- función para enviar el mail con el link ----------
 function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
 {
-    $fromEmail = 'no-reply@tickex.com.ar';
+    $fromEmail = 'servicio@tickex.com.ar';
     $fromName  = 'Tickex';
     $from      = $fromName . ' <' . $fromEmail . '>';
 

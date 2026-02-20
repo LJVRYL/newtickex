@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $link = $scheme . '://' . $host . $basePath . '/reset_password.php?token=' . urlencode($token);
 
             if ($inserted) {
-                $fromEmail = 'no-reply@tickex.com.ar';
+                  $fromEmail = 'servicio@tickex.com.ar';
                 $fromName  = 'Tickex';
                 $from      = $fromName . ' <' . $fromEmail . '>';
                 $subject   = 'Recuperá tu contraseña de Tickex';
