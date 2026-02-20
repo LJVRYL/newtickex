@@ -331,6 +331,9 @@ include __DIR__ . '/inc/layout_top.php';
     <div style="margin-top:10px;"><strong>To:</strong> <?php echo e($viewRow['to_email']); ?></div>
     <div><strong>From:</strong> <?php echo e($viewRow['from_name'] ? ($viewRow['from_name'] . ' <' . $viewRow['from_email'] . '>') : $viewRow['from_email']); ?></div>
     <div><strong>Subject:</strong> <?php echo e($viewRow['subject']); ?></div>
+    <?php if (isset($viewRow['trace_id']) && (string)$viewRow['trace_id'] !== ''): ?>
+      <div><strong>Trace:</strong> <?php echo e($viewRow['trace_id']); ?></div>
+    <?php endif; ?>
     <div><strong>Context:</strong> <?php echo e($viewRow['context']); ?></div>
     <?php if (!empty($viewRow['error_text'])): ?>
       <div class="flash err" style="margin-top:10px;">Error: <?php echo e($viewRow['error_text']); ?></div>

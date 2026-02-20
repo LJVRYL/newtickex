@@ -52,6 +52,7 @@ function tickex_mail_ensure_schema($pdo)
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         resend_of_id INTEGER,
+        trace_id TEXT,
         context TEXT,
         related_table TEXT,
         related_id INTEGER,
@@ -70,6 +71,13 @@ function tickex_mail_ensure_schema($pdo)
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_created_at ON email_logs(created_at)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_to ON email_logs(to_email)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_context ON email_logs(context)");
+
+    // Backward compatible: agregar columna si la tabla ya existía
+    try {
+        $pdo->exec("ALTER TABLE email_logs ADD COLUMN trace_id TEXT");
+    } catch (Exception $e) {
+        // ignore
+    }
 
     // Plantillas editables por superadmin
     $pdo->exec("CREATE TABLE IF NOT EXISTS email_templates (
@@ -203,9 +211,10 @@ function tickex_mail_log_row($data)
     }
 
     try {
-        $stmt = $pdo->prepare('INSERT INTO email_logs (resend_of_id, context, related_table, related_id, to_email, from_email, from_name, reply_to, subject, body, headers, extra_params, mail_ok, error_text) VALUES (:resend_of_id, :context, :related_table, :related_id, :to_email, :from_email, :from_name, :reply_to, :subject, :body, :headers, :extra_params, :mail_ok, :error_text)');
+        $stmt = $pdo->prepare('INSERT INTO email_logs (resend_of_id, trace_id, context, related_table, related_id, to_email, from_email, from_name, reply_to, subject, body, headers, extra_params, mail_ok, error_text) VALUES (:resend_of_id, :trace_id, :context, :related_table, :related_id, :to_email, :from_email, :from_name, :reply_to, :subject, :body, :headers, :extra_params, :mail_ok, :error_text)');
         $stmt->execute(array(
             ':resend_of_id' => isset($data['resend_of_id']) ? $data['resend_of_id'] : null,
+            ':trace_id'     => isset($data['trace_id']) ? $data['trace_id'] : null,
             ':context'      => isset($data['context']) ? $data['context'] : null,
             ':related_table'=> isset($data['related_table']) ? $data['related_table'] : null,
             ':related_id'   => isset($data['related_id']) ? $data['related_id'] : null,
@@ -290,6 +299,8 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
 
     $headers  = 'From: ' . $fromHeader . "\r\n";
     $headers .= 'Reply-To: ' . $replyTo . "\r\n";
+    $headers .= 'Date: ' . date('r') . "\r\n";
+    $headers .= 'Message-ID: <tickex-' . $traceId . '@tickex.com.ar>' . "\r\n";
     $headers .= 'MIME-Version: 1.0' . "\r\n";
     $headers .= 'Content-Type: ' . $contentType . '; charset=UTF-8' . "\r\n";
     $headers .= 'X-Tickex-Trace: ' . $traceId . "\r\n";
@@ -316,6 +327,7 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
 
     tickex_mail_log_row(array(
         'resend_of_id' => isset($opts['resend_of_id']) ? $opts['resend_of_id'] : null,
+        'trace_id'     => $traceId,
         'context'      => isset($opts['context']) ? $opts['context'] : null,
         'related_table'=> isset($opts['related_table']) ? $opts['related_table'] : null,
         'related_id'   => isset($opts['related_id']) ? $opts['related_id'] : null,
