@@ -93,11 +93,17 @@ if ($page === 'login.php') {
               <div class="quick-links" aria-label="Accesos rápidos">
                 <a href="panel_usuario.php">Mis Tickex</a>
                 <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
+                <?php if ($isApp): ?>
+                  <a href="logout_usuario.php">Salir</a>
+                <?php endif; ?>
               </div>
             <?php endif; ?>
         <?php endif; ?>
         <div class="userchip">
             <?php if (!empty($_SESSION['usuario'])): ?>
+              <?php if ($isApp && $isClient): ?>
+                <?php // En modo app cliente, el logout se muestra arriba en quick-links ?>
+              <?php else: ?>
               <?php
               $userMail = $_SESSION['usuario'];
               // Mostrar solo primeras letras del email (ej: jua...@dominio.com)
@@ -114,6 +120,7 @@ if ($page === 'login.php') {
                 <span title="<?php echo e($userMail); ?>"><?php echo e($shortUser); ?></span>
               <?php endif; ?>
               <a class="link" href="logout_usuario.php">Salir</a>
+              <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>

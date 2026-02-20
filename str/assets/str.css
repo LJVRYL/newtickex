@@ -112,6 +112,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0
 
 /* En app (cliente): mantener accesos rápidos post-login */
 .app-shell.app-client .quick-links{display:flex}
+/* En app (cliente): header en una sola línea */
+.app-shell.app-client .topbar .wrap{flex-wrap:nowrap}
+.app-shell.app-client .quick-links{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
 
 /* En app (admin): ocultar navegación lateral/hamburger */
 .app-shell.app-admin .quick-links{display:none}
