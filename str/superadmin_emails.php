@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           $fromEmail = 'servicio@tickex.com.ar';
           $fromName  = 'Tickex';
           $replyTo   = $fromEmail;
-          $extra     = '-f ' . $fromEmail;
+          $extra     = '-f' . $fromEmail;
           $ctxSuf    = '_resend_noreply';
         } else {
           $fromEmail = !empty($row['from_email']) ? $row['from_email'] : 'servicio@tickex.com.ar';

@@ -277,8 +277,9 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
         $fromEmail = $forcedFrom;
         $replyTo = $forcedFrom;
         $envelopeFrom = tickex_mail_forced_envelope_from_email($forcedFrom);
-        if ($envelopeFrom !== '') {
-            $extra = '-f ' . $envelopeFrom;
+        if ($envelopeFrom !== '' && filter_var($envelopeFrom, FILTER_VALIDATE_EMAIL)) {
+            // Usar "-f<email>" (sin espacio) para máxima compatibilidad con sendmail/exim
+            $extra = '-f' . $envelopeFrom;
         }
         if ($fromName2 === '') {
             $fromName2 = tickex_mail_forced_from_name();
