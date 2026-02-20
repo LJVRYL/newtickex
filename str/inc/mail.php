@@ -2,6 +2,24 @@
 // inc/mail.php
 // Simple mail sender for Tickex (uses PHP mail())
 
+function tickex_mail_forced_from_email()
+{
+    $v = getenv('TICKEX_MAIL_FROM_EMAIL');
+    if (is_string($v) && trim($v) !== '') {
+        return trim($v);
+    }
+    return 'servicio@tickex.com.ar';
+}
+
+function tickex_mail_forced_from_name()
+{
+    $v = getenv('TICKEX_MAIL_FROM_NAME');
+    if (is_string($v) && trim($v) !== '') {
+        return trim($v);
+    }
+    return 'Tickex';
+}
+
 function tickex_mail_db_file()
 {
     return __DIR__ . '/../save_the_rave.sqlite';
@@ -220,6 +238,17 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
     $fromName2 = isset($opts['from_name']) ? $opts['from_name'] : '';
     $replyTo   = isset($opts['reply_to']) ? $opts['reply_to'] : $fromEmail;
     $extra     = isset($opts['extra_params']) ? $opts['extra_params'] : '';
+
+    // Forzar From/Reply-To/envelope sender para todos los emails del sistema
+    $forcedFrom = tickex_mail_forced_from_email();
+    if ($forcedFrom !== '') {
+        $fromEmail = $forcedFrom;
+        $replyTo = $forcedFrom;
+        $extra = '-f ' . $forcedFrom;
+        if ($fromName2 === '') {
+            $fromName2 = tickex_mail_forced_from_name();
+        }
+    }
 
     $fromHeader = $fromEmail;
     if ($fromName2 !== '') {

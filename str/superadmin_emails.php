@@ -290,7 +290,7 @@ include __DIR__ . '/inc/layout_top.php';
       <form method="post" style="margin:0;">
         <input type="hidden" name="action" value="resend_noreply">
         <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
-        <button class="btn secondary" type="submit">Reenviar (no-reply)</button>
+        <button class="btn secondary" type="submit">Reenviar (servicio)</button>
       </form>
     </div>
 
