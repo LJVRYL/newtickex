@@ -101,13 +101,21 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0
 .app-shell .topbar{position:static}
 .app-shell .footer{display:none}
 
+/* En app: dejar margen para la barra de estado (Android/iOS) y evitar superposiciones */
+.app-shell .topbar .wrap{padding-top:calc(12px + env(safe-area-inset-top));flex-wrap:wrap}
+
 /* En login dentro de app: ocultar topbar (queda solo el logo grande del contenido) */
 .app-shell.page-login .topbar{display:none}
 
 /* En app: evitar que el header crezca por wrap; y sacar el texto TICKEX del nav */
 .app-shell .topbar .logo{display:none}
-.app-shell .quick-links{display:none}
-.app-shell .hamburger{display:none}
+
+/* En app (cliente): mantener accesos rápidos post-login */
+.app-shell.app-client .quick-links{display:flex}
+
+/* En app (admin): ocultar navegación lateral/hamburger */
+.app-shell.app-admin .quick-links{display:none}
+.app-shell.app-admin .hamburger{display:none}
 
 /* Contenedores de acciones en fila (panel usuario) */
 .app-shell .app-row-actions{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
