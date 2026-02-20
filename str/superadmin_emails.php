@@ -16,7 +16,7 @@ if (!in_array($rol, array('super_admin','superadmin'), true)) {
 $pdo = db();
 
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
-$from = isset($_GET['from']) ? trim($_GET['from']) : 'servicio@tickex.com.ar';
+$from = isset($_GET['from']) ? trim($_GET['from']) : '';
 $viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
 
 $flashOk = '';
@@ -256,6 +256,7 @@ include __DIR__ . '/inc/layout_top.php';
     <label class="muted" style="margin:0;">From</label>
     <select name="from">
       <option value="" <?php echo $from === '' ? 'selected' : ''; ?>>Todos</option>
+      <option value="servicio@tickex.com.ar" <?php echo $from === 'servicio@tickex.com.ar' ? 'selected' : ''; ?>>servicio@tickex.com.ar</option>
       <option value="no-reply@tickex.com.ar" <?php echo $from === 'no-reply@tickex.com.ar' ? 'selected' : ''; ?>>no-reply@tickex.com.ar</option>
       <option value="info@tickex.com.ar" <?php echo $from === 'info@tickex.com.ar' ? 'selected' : ''; ?>>info@tickex.com.ar</option>
     </select>
