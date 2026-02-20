@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
           'resend_of_id'  => (int)$row['id'],
         ));
 
-        $label = ($action === 'resend_noreply') ? 'Reenvío (no-reply)' : 'Reenvío';
+        $label = ($action === 'resend_noreply') ? 'Reenvío (servicio)' : 'Reenvío';
         $flashOk = $label . ' ' . ($ok ? 'OK' : 'con fallas') . ' a ' . e($row['to_email']) . ' (log #' . (int)$row['id'] . ')';
       } else {
         $flashErr = 'No se encontró el email log solicitado.';
@@ -262,7 +262,7 @@ include __DIR__ . '/inc/layout_top.php';
     </select>
     <input name="q" placeholder="Buscar (to / subject / context)" value="<?php echo e($q); ?>" style="min-width:260px;">
     <button class="btn secondary" type="submit">Buscar</button>
-    <?php if ($q !== '' || $from !== 'no-reply@tickex.com.ar'): ?>
+    <?php if ($q !== '' || $from !== ''): ?>
       <a class="btn secondary" href="superadmin_emails.php">Limpiar</a>
     <?php endif; ?>
   </form>

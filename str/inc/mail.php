@@ -20,6 +20,27 @@ function tickex_mail_forced_from_name()
     return 'Tickex';
 }
 
+function tickex_mail_forced_envelope_from_email($fallback)
+{
+    $v = getenv('TICKEX_MAIL_ENVELOPE_FROM');
+    if (is_string($v) && trim($v) !== '') {
+        return trim($v);
+    }
+    return (is_string($fallback) && trim($fallback) !== '') ? trim($fallback) : '';
+}
+
+function tickex_mail_make_trace_id()
+{
+    if (function_exists('random_bytes')) {
+        try {
+            return bin2hex(random_bytes(8));
+        } catch (Exception $e) {
+            // ignore
+        }
+    }
+    return sha1(uniqid(mt_rand(), true));
+}
+
 function tickex_mail_db_file()
 {
     return __DIR__ . '/../save_the_rave.sqlite';
@@ -239,12 +260,17 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
     $replyTo   = isset($opts['reply_to']) ? $opts['reply_to'] : $fromEmail;
     $extra     = isset($opts['extra_params']) ? $opts['extra_params'] : '';
 
+    $traceId = tickex_mail_make_trace_id();
+
     // Forzar From/Reply-To/envelope sender para todos los emails del sistema
     $forcedFrom = tickex_mail_forced_from_email();
     if ($forcedFrom !== '') {
         $fromEmail = $forcedFrom;
         $replyTo = $forcedFrom;
-        $extra = '-f ' . $forcedFrom;
+        $envelopeFrom = tickex_mail_forced_envelope_from_email($forcedFrom);
+        if ($envelopeFrom !== '') {
+            $extra = '-f ' . $envelopeFrom;
+        }
         if ($fromName2 === '') {
             $fromName2 = tickex_mail_forced_from_name();
         }
@@ -266,6 +292,7 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
     $headers .= 'Reply-To: ' . $replyTo . "\r\n";
     $headers .= 'MIME-Version: 1.0' . "\r\n";
     $headers .= 'Content-Type: ' . $contentType . '; charset=UTF-8' . "\r\n";
+    $headers .= 'X-Tickex-Trace: ' . $traceId . "\r\n";
     $headers .= 'X-Mailer: PHP/' . phpversion();
 
     if (!empty($opts['headers_extra'])) {
