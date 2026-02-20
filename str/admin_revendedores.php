@@ -305,7 +305,6 @@ include __DIR__ . '/inc/layout_top.php';
             <th style="width:60px;">ID</th>
             <th style="width:220px;">Cliente</th>
             <th>Mensaje</th>
-            <th style="width:120px;">Evento</th>
             <th style="width:200px;">Acciones</th>
           </tr>
         </thead>
@@ -318,7 +317,6 @@ include __DIR__ . '/inc/layout_top.php';
                 <div class="muted" style="font-size:12px;"><?php echo e((string)($s['cliente_email'] ?? '')); ?></div>
               </td>
               <td><?php echo e((string)($s['mensaje'] ?? '')); ?></td>
-              <td><?php echo !empty($s['evento_id']) ? (int)$s['evento_id'] : '<span class="muted">—</span>'; ?></td>
               <td>
                 <form method="post" style="display:inline;">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">

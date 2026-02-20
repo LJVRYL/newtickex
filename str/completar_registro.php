@@ -243,8 +243,8 @@ include __DIR__.'/inc/layout_top.php';
       <input name="apellido" required value="<?php echo htmlspecialchars($apellido, ENT_QUOTES, 'UTF-8'); ?>">
     </div>
     <div>
-      <label>Apodo / como querés que te llamen (opcional)</label>
-      <input name="apodo" value="<?php echo htmlspecialchars($apodo, ENT_QUOTES, 'UTF-8'); ?>">
+      <label>Tickex ID (opcional)</label>
+      <input name="apodo" value="<?php echo htmlspecialchars($apodo, ENT_QUOTES, 'UTF-8'); ?>" placeholder="ej: leo123 (si lo dejás vacío, usaremos #ID)">
     </div>
     <div>
       <label>DNI</label>

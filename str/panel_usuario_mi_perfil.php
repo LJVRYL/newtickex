@@ -26,61 +26,61 @@ $usuarioId = (int)$_SESSION['usuario_id'];
 $flashOk = '';
 $flashErr = '';
 
-// --- Solicitud de revendedor ---
+function _tickex_parse_admin_tickex_id($raw)
+{
+  $s = trim((string)$raw);
+  if ($s === '') return 0;
+  if ($s[0] === '#') $s = substr($s, 1);
+  if ($s === '') return 0;
+  if (!ctype_digit($s)) return 0;
+  $id = (int)$s;
+  return $id > 0 ? $id : 0;
+}
+
+// --- Solicitud de revendedor (cliente -> admin por Tickex ID) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'rev_solicitar') {
   $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
   if (!tickex_csrf_verify($provided)) {
     $flashErr = 'CSRF inválido. Actualizá la página e intentá de nuevo.';
   } else {
-    $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
+    $adminTickexIdRaw = isset($_POST['admin_tickex_id']) ? (string)$_POST['admin_tickex_id'] : '';
+    $adminId = _tickex_parse_admin_tickex_id($adminTickexIdRaw);
     $mensaje = isset($_POST['mensaje']) ? trim((string)$_POST['mensaje']) : '';
-    if ($eventoId <= 0) {
-      $flashErr = 'Seleccioná un evento.';
+    if ($adminId <= 0) {
+      $flashErr = 'Ingresá un Tickex ID de admin válido (ej: #12).';
     } elseif (strlen($mensaje) > 500) {
       $flashErr = 'El mensaje es demasiado largo (máx 500).';
     } else {
-      // Determinar owner_admin_id desde el evento si existe columna de creador
-      $ownerAdminId = null;
       try {
-        $colsInfo = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-        $colMap = array();
-        foreach ($colsInfo as $ci) {
-          if (isset($ci['name'])) $colMap[$ci['name']] = true;
-        }
-        $creatorCol = null;
-        foreach (array('creado_por_admin_id','creador_id','admin_id','usuario_admin_id') as $cname) {
-          if (isset($colMap[$cname])) { $creatorCol = $cname; break; }
-        }
-        $sql = 'SELECT * FROM eventos WHERE id = :id LIMIT 1';
-        $stEv = $pdo->prepare($sql);
-        $stEv->execute(array(':id' => $eventoId));
-        $ev = $stEv->fetch(PDO::FETCH_ASSOC);
-        if ($ev && $creatorCol && isset($ev[$creatorCol]) && (int)$ev[$creatorCol] > 0) {
-          $ownerAdminId = (int)$ev[$creatorCol];
+        $stA = $pdo->prepare('SELECT id FROM usuarios_admin WHERE id = :id LIMIT 1');
+        $stA->execute(array(':id' => $adminId));
+        if (!$stA->fetchColumn()) {
+          $flashErr = 'No encontramos un admin con ese Tickex ID.';
         }
       } catch (Exception $e) {
-        $ownerAdminId = null;
+        $flashErr = 'No se pudo validar el admin. Intentá de nuevo.';
       }
 
-      try {
-        // Evitar duplicados pendientes por evento
-        $stDup = $pdo->prepare("SELECT 1 FROM revendedor_solicitudes WHERE cliente_id = :cid AND evento_id = :eid AND estado = 'pending' LIMIT 1");
-        $stDup->execute(array(':cid' => $usuarioId, ':eid' => $eventoId));
-        if ($stDup->fetchColumn()) {
-          $flashErr = 'Ya tenés una solicitud pendiente para este evento.';
-        } else {
-          $stIns = $pdo->prepare("INSERT INTO revendedor_solicitudes (cliente_id, cliente_email, evento_id, owner_admin_id, mensaje, estado) VALUES (:cid,:ce,:eid,:oid,:m,'pending')");
-          $stIns->execute(array(
-            ':cid' => $usuarioId,
-            ':ce'  => isset($_SESSION['usuario_email']) ? (string)$_SESSION['usuario_email'] : null,
-            ':eid' => $eventoId,
-            ':oid' => $ownerAdminId,
-            ':m'   => ($mensaje !== '' ? $mensaje : null),
-          ));
-          $flashOk = 'Solicitud enviada. Un admin la revisará.';
+      if ($flashErr === '') {
+        try {
+          // Evitar duplicados pendientes para el mismo admin (sin evento)
+          $stDup = $pdo->prepare("SELECT 1 FROM revendedor_solicitudes WHERE cliente_id = :cid AND owner_admin_id = :oid AND estado = 'pending' AND (evento_id IS NULL OR evento_id = 0) LIMIT 1");
+          $stDup->execute(array(':cid' => $usuarioId, ':oid' => $adminId));
+          if ($stDup->fetchColumn()) {
+            $flashErr = 'Ya tenés una solicitud pendiente para ese admin.';
+          } else {
+            $stIns = $pdo->prepare("INSERT INTO revendedor_solicitudes (cliente_id, cliente_email, evento_id, owner_admin_id, mensaje, estado) VALUES (:cid,:ce,NULL,:oid,:m,'pending')");
+            $stIns->execute(array(
+              ':cid' => $usuarioId,
+              ':ce'  => isset($_SESSION['usuario_email']) ? (string)$_SESSION['usuario_email'] : null,
+              ':oid' => $adminId,
+              ':m'   => ($mensaje !== '' ? $mensaje : null),
+            ));
+            $flashOk = 'Solicitud enviada. El admin la podrá aprobar o rechazar.';
+          }
+        } catch (Exception $e) {
+          $flashErr = 'No se pudo enviar la solicitud.';
         }
-      } catch (Exception $e) {
-        $flashErr = 'No se pudo enviar la solicitud.';
       }
     }
   }
@@ -116,8 +116,8 @@ include __DIR__ . '/inc/layout_top.php';
     <div><?php echo htmlspecialchars($u['nombre'], ENT_QUOTES, 'UTF-8'); ?></div>
     <div style="color:var(--muted);">Apellido</div>
     <div><?php echo htmlspecialchars($u['apellido'], ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">Apodo</div>
-    <div><?php echo htmlspecialchars($u['apodo'], ENT_QUOTES, 'UTF-8'); ?></div>
+    <div style="color:var(--muted);">Mi Tickex ID</div>
+    <div><?php echo htmlspecialchars(($u['apodo'] && $u['apodo'] !== '') ? (string)$u['apodo'] : ('#' . (int)$u['id']), ENT_QUOTES, 'UTF-8'); ?></div>
     <div style="color:var(--muted);">Género</div>
     <div><?php echo htmlspecialchars($u['genero'], ENT_QUOTES, 'UTF-8'); ?></div>
     <div style="color:var(--muted);">Email</div>
@@ -158,35 +158,16 @@ include __DIR__ . '/inc/layout_top.php';
   <?php endif; ?>
 
   <div style="font-size:13px;color:var(--muted);margin:6px 0 10px 0;">
-    Si querés vender entradas con comisión, podés enviar una solicitud para ser revendedor de un evento.
+    Para solicitar ser revendedor, ingresá el <strong>Tickex ID</strong> del administrador (ej: <strong>#12</strong>). El admin recibirá tu solicitud y podrá aprobarla o rechazarla.
   </div>
-
-  <?php
-    $eventOptions = array();
-    try {
-      $stE = $pdo->query("SELECT id, nombre, fecha_desde FROM eventos ORDER BY id DESC LIMIT 200");
-      while ($r = $stE->fetch(PDO::FETCH_ASSOC)) {
-        $label = isset($r['nombre']) ? (string)$r['nombre'] : ('Evento #' . (int)$r['id']);
-        if (!empty($r['fecha_desde'])) $label .= ' (' . substr((string)$r['fecha_desde'], 0, 10) . ')';
-        $eventOptions[] = array('id' => (int)$r['id'], 'label' => $label);
-      }
-    } catch (Exception $e) {
-      $eventOptions = array();
-    }
-  ?>
 
   <form method="post" style="display:grid;grid-template-columns:1fr;gap:10px;">
     <input type="hidden" name="action" value="rev_solicitar">
     <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(tickex_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
 
     <div>
-      <label for="evento_id">Evento</label>
-      <select id="evento_id" name="evento_id" required>
-        <option value="">Seleccioná…</option>
-        <?php foreach ($eventOptions as $op): ?>
-          <option value="<?php echo (int)$op['id']; ?>"><?php echo htmlspecialchars($op['label'], ENT_QUOTES, 'UTF-8'); ?></option>
-        <?php endforeach; ?>
-      </select>
+      <label for="admin_tickex_id">Tickex ID del admin</label>
+      <input id="admin_tickex_id" name="admin_tickex_id" placeholder="#12" required>
     </div>
 
     <div>
