@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mensaje .= "Si tenés dudas, respondé este email.\n\n";
             $mensaje .= "¡Nos vemos!\nEquipo Tickex";
 
-            tickex_send_mail_template($email, 'tickex_cortesia', array(
+            $mailOk = tickex_send_mail_template($email, 'tickex_cortesia', array(
               'nombre' => $nombreIns,
               'codigo' => $codigo,
               'tipo'   => $tipoId,
@@ -163,6 +163,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               'extra_params' => '-f info@tickex.com.ar',
               'is_html'      => 0,
             ));
+
+            // Mejor feedback: intentar traer trace_id del log para correlacionar con Exim/Gmail
+            $traceId = '';
+            $mailOk2 = null;
+            $mailErr = '';
+            try {
+              $stL = $pdo->prepare("SELECT trace_id, mail_ok, error_text FROM email_logs WHERE related_table = 'entradas' AND related_id = :rid ORDER BY id DESC LIMIT 1");
+              $stL->execute(array(':rid' => $entradaId));
+              $rowL = $stL->fetch(PDO::FETCH_ASSOC);
+              if ($rowL) {
+                if (isset($rowL['trace_id'])) $traceId = (string)$rowL['trace_id'];
+                if (isset($rowL['mail_ok'])) $mailOk2 = ((int)$rowL['mail_ok'] === 1);
+                if (!empty($rowL['error_text'])) $mailErr = (string)$rowL['error_text'];
+              }
+            } catch (Exception $e) {
+              // ignore
+            }
+
+            $finalOk = ($mailOk2 !== null) ? (bool)$mailOk2 : (bool)$mailOk;
+            $success .= $finalOk ? ' — Email: OK' : ' — Email: con fallas';
+            if ($traceId !== '') {
+              $success .= ' — Trace: ' . htmlspecialchars($traceId, ENT_QUOTES, 'UTF-8');
+              $success .= ' — Gmail: rfc822msgid:tickex-' . htmlspecialchars($traceId, ENT_QUOTES, 'UTF-8') . '@tickex.com.ar';
+            }
+            if (!$finalOk && $mailErr !== '') {
+              $errors[] = 'Error de envío: ' . $mailErr;
+            }
         } catch (Exception $e) {
             $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
         }
