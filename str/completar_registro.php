@@ -22,6 +22,13 @@ function ensure_registro_pendientes($pdo)
     $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_token ON registro_pendientes(token)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_regpend_email ON registro_pendientes(email)");
 
+    // Tickex ID (apodo): idealmente único. Best-effort: si hay duplicados, este índice puede fallar.
+    try {
+      $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_apodo_unique ON registro_pendientes(apodo)");
+    } catch (Exception $e) {
+      // ignore (puede fallar si hay datos duplicados existentes)
+    }
+
   // Backfill para instancias existentes sin columna de password
   try {
     $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
@@ -110,6 +117,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
     }
     if ($dni === '') {
         $errores[] = 'El DNI es obligatorio.';
+    }
+
+    // Tickex ID (apodo): único + formato simple
+    if ($apodo !== '') {
+      if (strlen($apodo) > 64) {
+        $errores[] = 'El Tickex ID es demasiado largo (máx 64).';
+      } elseif (!preg_match('/^[a-zA-Z0-9_-]+$/', $apodo)) {
+        $errores[] = 'El Tickex ID solo puede tener letras, números, _ y - (sin espacios).';
+      } else {
+        try {
+          $stU = $pdo->prepare('SELECT id FROM registro_pendientes WHERE lower(apodo) = lower(:ap) AND id <> :id LIMIT 1');
+          $stU->execute(array(':ap' => $apodo, ':id' => (int)$row['id']));
+          if ($stU->fetch(PDO::FETCH_ASSOC)) {
+            $errores[] = 'Ese Tickex ID ya está en uso. Elegí otro.';
+          }
+        } catch (Exception $e) {
+          // si falla el check, no bloquear el registro
+        }
+      }
     }
     $generoOpts = array('M','F','X','');
     if (!in_array($genero, $generoOpts, true)) {
