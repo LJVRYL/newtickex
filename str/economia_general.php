@@ -269,6 +269,8 @@ $ingresosTotales = 0;
 $ingresosManual  = 0;
 $entradasVendidas = 0;
 $totalesPorEvento = array();
+$ventasCheckout = 0.0; // Tickex/SenForms (checkout)
+$ventasStr      = 0.0; // STR (puerta/otros)
 
 // recoger ids de eventos
 $eventIds = array();
@@ -285,6 +287,18 @@ foreach ($eventIds as $eid) {
     $ingresosTotales += $stats['total_recaudado'];
     $ingresosManual  += $stats['manual_income'];
     $entradasVendidas += $stats['entradas_vendidas'];
+
+    // Desglose ventas por origen (para aplicar cargo de servicio SOLO al checkout)
+    if (!empty($stats['por_tipo']) && is_array($stats['por_tipo'])) {
+      foreach ($stats['por_tipo'] as $pt) {
+        if (!is_array($pt)) continue;
+        $m = isset($pt['monto']) ? (float)$pt['monto'] : 0.0;
+        $o = isset($pt['origen']) ? (string)$pt['origen'] : '';
+        if ($o === 'TICKEX') $ventasCheckout += $m;
+        elseif ($o === 'STR') $ventasStr += $m;
+      }
+    }
+
     $totalesPorEvento[] = array(
         'evento_id' => $eid,
         'recaudado' => $stats['total_recaudado'],
@@ -300,19 +314,23 @@ $artistCostTotal = 0;
 $saldoProyecto = ($ingresosTotales + $totalPresu) - ($totalGastos + $totalInv + $staffCost + $artistCostTotal);
 
 // ------------------------------------------------------------------
-// Visualización: 3% costo / 6% cobrado / 3% ganancia (sobre ventas)
+// Cargo de servicio (solo ventas por checkout)
+// - Este admin en particular: 3%
+// - Otros admins: 6%
+// - Ventas STR (puerta/otras): no se les aplica cargo aquí
 // ------------------------------------------------------------------
-$ventasTickets = $ingresosTotales - $ingresosManual; // aproximación: ventas sin manuales
-if (!is_numeric($ventasTickets)) $ventasTickets = 0;
-// si manual es negativo, ventasTickets puede quedar mayor; no forzar a 0.
+$serviceFeeDefault = 0.06;
+$serviceFeeSpecial = 0.03;
+$serviceFeeRate = $serviceFeeDefault;
 
-$rate_cost = 0.03;
-$rate_profit = 0.03;
-$rate_charge = $rate_cost + $rate_profit; // 6%
+// Nota: ajustar este ID si el admin especial no es #1
+if (isset($cu['id']) && (int)$cu['id'] === 1) {
+  $serviceFeeRate = $serviceFeeSpecial;
+}
 
-$costoServicio = $ventasTickets * $rate_cost;
-$cargoServicio = $ventasTickets * $rate_charge;
-$gananciaNeta  = $ventasTickets * $rate_profit;
+if (!is_numeric($ventasCheckout)) $ventasCheckout = 0.0;
+$cargoServicio = $ventasCheckout * $serviceFeeRate;
+$serviceFeePctLabel = (int)round($serviceFeeRate * 100);
 
 // ------------------------------------------------------------------
 // Ventas (log): últimas ventas unificadas STR + Tickex/SenForms
@@ -728,24 +746,14 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
   <div class="card" style="margin:0;background:var(--panel-2);">
-    <div class="muted" style="font-size:12px;">Ventas (sin manuales)</div>
-    <div style="font-size:26px;font-weight:700;margin-top:4px;">$<?php echo number_format($ventasTickets,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">Base para 3% / 6% / 3%</div>
+    <div class="muted" style="font-size:12px;">Ventas por checkout</div>
+    <div style="font-size:26px;font-weight:700;margin-top:4px;">$<?php echo number_format($ventasCheckout,2); ?></div>
+    <div style="font-size:12px;color:var(--muted);">Tickex/SenForms (no incluye puerta/STR)</div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
-    <div class="muted" style="font-size:12px;">Costo servicio (3%)</div>
-    <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">$<?php echo number_format($costoServicio,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">Costo pasarela / servicio</div>
-  </div>
-  <div class="card" style="margin:0;background:var(--panel-2);">
-    <div class="muted" style="font-size:12px;">Cargo servicio (6%)</div>
+    <div class="muted" style="font-size:12px;">Cargo servicio (<?php echo (int)$serviceFeePctLabel; ?>%)</div>
     <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--info);">$<?php echo number_format($cargoServicio,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">3% costo + 3% ganancia</div>
-  </div>
-  <div class="card" style="margin:0;background:var(--panel-2);">
-    <div class="muted" style="font-size:12px;">Ganancia (3%)</div>
-    <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--ok);">$<?php echo number_format($gananciaNeta,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">Ganancia neta objetivo</div>
+    <div style="font-size:12px;color:var(--muted);">Aplicado solo a ventas por checkout</div>
   </div>
 </div>
 
@@ -937,7 +945,7 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 
   <div style="overflow:auto;margin-top:10px;">
-    <table class="table" style="min-width:1050px;">
+    <table class="table" style="min-width:980px;">
       <thead>
         <tr>
           <th>Fecha</th>
@@ -946,23 +954,20 @@ include __DIR__.'/inc/layout_top.php';
           <th>Comprador</th>
           <th>Ref</th>
           <th style="text-align:right;">Monto</th>
-          <th style="text-align:right;">Costo 3%</th>
-          <th style="text-align:right;">Cargo 6%</th>
-          <th style="text-align:right;">Ganancia 3%</th>
+          <th style="text-align:right;">Cargo servicio</th>
           <th>Pago</th>
           <th style="text-align:center;">Acción</th>
         </tr>
       </thead>
       <tbody>
         <?php if (empty($ventas)): ?>
-          <tr><td colspan="11" style="text-align:center;color:var(--muted);">Sin ventas para el filtro</td></tr>
+          <tr><td colspan="9" style="text-align:center;color:var(--muted);">Sin ventas para el filtro</td></tr>
         <?php else: ?>
           <?php foreach ($ventas as $v): ?>
             <?php
               $amt = isset($v['amount']) ? (float)$v['amount'] : 0;
-              $c3  = $amt * 0.03;
-              $c6  = $amt * 0.06;
-              $g3  = $amt * 0.03;
+              $isCheckout = (isset($v['source']) && (string)$v['source'] === 'TICKEX');
+              $fee = $isCheckout ? ($amt * $serviceFeeRate) : 0.0;
               $buyer = trim((string)$v['buyer_name']);
               if ($buyer === '') $buyer = trim((string)$v['buyer_email']);
               if ($buyer === '') $buyer = '—';
@@ -979,9 +984,7 @@ include __DIR__.'/inc/layout_top.php';
               <td><?php echo e($buyer); ?></td>
               <td><?php echo $v['ref'] !== '' ? e($v['ref']) : '<span style="color:var(--muted);">—</span>'; ?></td>
               <td style="text-align:right;font-weight:700;">$<?php echo number_format($amt,2); ?></td>
-              <td style="text-align:right;">$<?php echo number_format($c3,2); ?></td>
-              <td style="text-align:right;">$<?php echo number_format($c6,2); ?></td>
-              <td style="text-align:right;color:var(--ok);">$<?php echo number_format($g3,2); ?></td>
+              <td style="text-align:right;<?php echo $isCheckout ? '' : 'color:var(--muted);'; ?>">$<?php echo number_format($fee,2); ?></td>
               <td><?php echo e($pay); ?></td>
               <td style="text-align:center;">
                 <a class="btn secondary" href="economia_general.php?<?php
@@ -993,7 +996,7 @@ include __DIR__.'/inc/layout_top.php';
             </tr>
             <?php if ($showKey !== '' && $showKey === $v['key']): ?>
               <tr>
-                <td colspan="11" style="padding:0;">
+                <td colspan="9" style="padding:0;">
                   <div style="padding:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
                       <div style="font-weight:700;">Detalle de pago / datos crudos</div>
