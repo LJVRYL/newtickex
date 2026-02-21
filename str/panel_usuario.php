@@ -329,6 +329,12 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
 
 <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
 
+  <style>
+    .tickex-ticket-row { min-width: 0; }
+    .tickex-ticket-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 520px) { .tickex-ticket-title { white-space: normal; overflow: visible; text-overflow: clip; } }
+  </style>
+
     <!-- Mis últimos Tickex -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;<?php echo $isApp ? 'justify-content:flex-start;' : ''; ?>">
@@ -360,7 +366,7 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
               $loc = '';
               if (isset($t['lugar']) && $t['lugar']) $loc = $t['lugar'];
               elseif (isset($t['ubicacion']) && $t['ubicacion']) $loc = $t['ubicacion'];
-              $ticketUrl = 'entrada.php?c=' . urlencode($t['codigo']);
+              $ticketUrl = 'ticket.php?c=' . urlencode($t['codigo']);
             ?>
             <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;gap:12px;align-items:stretch;width:100%;">
               <div style="flex:0 0 140px;height:140px;display:flex;align-items:center;justify-content:center;background:var(--panel-3);border-radius:8px;margin:12px 0 12px 12px;overflow:hidden;">
@@ -370,9 +376,9 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
                   <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">Sin flyer</div>
                 <?php endif; ?>
               </div>
-              <div style="padding:12px;display:flex;flex-direction:column;gap:6px;flex:1;">
+              <div class="tickex-ticket-row" style="padding:12px;display:flex;flex-direction:column;gap:6px;flex:1;min-width:0;">
                 <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
-                  <span style="font-weight:700;"><?php echo e($eventName); ?></span>
+                  <span class="tickex-ticket-title" style="font-weight:700;"><?php echo e($eventName); ?></span>
                   <span class="pill" style="border:1px solid var(--line);">Entrada <?php echo e($t['tipo']); ?></span>
                 </div>
                 <div style="font-size:13px;color:var(--muted);display:grid;grid-template-columns:1fr;gap:4px;">
@@ -387,12 +393,12 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
                   ?>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                  <a class="btn secondary" href="<?php echo e($ticketUrl); ?>" target="_blank" rel="noopener">Ver Tickex</a>
+                  <a class="btn secondary" style="padding:6px 10px;" href="<?php echo e($ticketUrl); ?>" target="_blank" rel="noopener" title="Ver Tickex" aria-label="Ver Tickex">👁</a>
                   <?php if (!$showAll): ?>
                     <form method="post" style="margin:0;" onsubmit="return confirm('¿Ocultar este Tickex de tu lista?');">
                       <input type="hidden" name="action" value="hide_ticket">
                       <input type="hidden" name="ticket_id" value="<?php echo (int)$t['id']; ?>">
-                      <button class="btn danger" type="submit" title="Ocultar"><span aria-hidden="true">🗑</span></button>
+                      <button class="btn danger" style="padding:6px 10px;" type="submit" title="Ocultar" aria-label="Ocultar">🗑</button>
                     </form>
                   <?php endif; ?>
                 </div>

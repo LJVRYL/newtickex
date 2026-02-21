@@ -82,33 +82,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
     $tipoId   = isset($_POST['tipo_id']) ? trim($_POST['tipo_id']) : '';
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
-    $tickexId = isset($_POST['tickex_id']) ? (int)$_POST['tickex_id'] : 0;
     $nombre   = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
-    $apodo    = isset($_POST['apodo']) ? trim($_POST['apodo']) : '';
+  $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
 
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
     if ($tipoId === '') $errors[] = 'Seleccioná un tipo de entrada.';
 
-    // Resolver email por tickex_id o apodo si no viene email
-    if ($email === '' && ($tickexId > 0 || $apodo !== '')) {
+    // Resolver email por Tickex ID (apodo) si no viene email
+    if ($email === '' && $tickexId !== '') {
         try {
-        if ($tickexId > 0) {
-          $stU = $pdo->prepare('SELECT email, nombre, apellido, apodo, id FROM registro_pendientes WHERE id = :id LIMIT 1');
-          $stU->execute(array(':id'=>$tickexId));
-        } else {
-          $stU = $pdo->prepare('SELECT email, nombre, apellido, apodo, id FROM registro_pendientes WHERE apodo = :ap LIMIT 1');
-          $stU->execute(array(':ap'=>$apodo));
-        }
+          $raw = trim($tickexId);
+          $idLookup = 0;
+          if ($raw !== '' && $raw[0] === '#') {
+            $idLookup = (int)substr($raw, 1);
+          } elseif (ctype_digit($raw)) {
+            // compat: si alguien pegó un ID numérico antiguo
+            $idLookup = (int)$raw;
+          }
+
+          if ($idLookup > 0) {
+            $stU = $pdo->prepare('SELECT email, nombre, apellido, apodo, id FROM registro_pendientes WHERE id = :id LIMIT 1');
+            $stU->execute(array(':id' => $idLookup));
+          } else {
+            $stU = $pdo->prepare('SELECT email, nombre, apellido, apodo, id FROM registro_pendientes WHERE lower(apodo) = lower(:ap) LIMIT 1');
+            $stU->execute(array(':ap' => $raw));
+          }
             $rowU = $stU->fetch(PDO::FETCH_ASSOC);
             if ($rowU && !empty($rowU['email'])) {
                 $email = $rowU['email'];
-          if ($tickexId <= 0) { $tickexId = (int)$rowU['id']; }
                 if ($nombre === '') {
                     $full = trim((isset($rowU['nombre']) ? $rowU['nombre'] : '') . ' ' . (isset($rowU['apellido']) ? $rowU['apellido'] : ''));
                     $nombre = $full !== '' ? $full : (isset($rowU['apodo']) ? $rowU['apodo'] : '');
                 }
             } else {
-          $errors[] = 'No se encontró el usuario Tickex con ese ID/apodo.';
+          $errors[] = 'No se encontró el usuario Tickex con ese Tickex ID.';
             }
         } catch (Exception $e) {
             $errors[] = 'No se pudo buscar el usuario Tickex.';
@@ -251,12 +258,8 @@ include __DIR__.'/inc/layout_top.php';
     </div>
     <div>
       <label>Tickex ID (opcional)</label>
-      <input type="number" name="tickex_id" placeholder="ID de usuario Tickex">
-      <small class="muted">Si lo completás, buscamos el email automáticamente.</small>
-    </div>
-    <div>
-      <label>Apodo Tickex (opcional)</label>
-      <input name="apodo" placeholder="Si no sabés el email, probá con apodo">
+      <input name="tickex_id" placeholder="Ej: Senchi">
+      <small class="muted">Es el apodo Tickex. Si lo completás, buscamos el email automáticamente.</small>
     </div>
     <div>
       <label>Nombre visible en entrada (opcional)</label>
@@ -292,7 +295,7 @@ include __DIR__.'/inc/layout_top.php';
 </script>
 
 
-<div class="card" style="margin-top:32px;max-width:900px;">
+<div class="card" style="margin-top:32px;max-width:900px;overflow:auto;">
   <h3>Últimos Tickex enviados</h3>
   <form method="get" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <input type="text" name="buscar" placeholder="Buscar por email, nombre, código..." value="<?php echo isset($_GET['buscar']) ? e($_GET['buscar']) : ''; ?>" style="flex:1 1 200px;">
@@ -326,7 +329,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php if (empty($ultimos)): ?>
     <div class="muted">No hay tickex enviados recientemente.</div>
   <?php else: ?>
-    <table class="table" style="font-size:14px;">
+    <table class="table" style="font-size:14px;min-width:860px;table-layout:fixed;width:100%;">
       <thead>
         <tr>
           <th>ID</th>
@@ -343,15 +346,15 @@ include __DIR__.'/inc/layout_top.php';
         <?php foreach ($ultimos as $u): ?>
           <tr>
             <td><?php echo (int)$u['id']; ?></td>
-            <td><?php echo e($u['nombre']); ?></td>
-            <td><?php echo e($u['email']); ?></td>
+            <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['nombre']); ?></td>
+            <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
             <td><?php echo e($u['codigo']); ?></td>
             <td><?php echo e($u['tipo']); ?></td>
             <td><?php echo (int)$u['evento_id']; ?></td>
             <td><?php echo e($u['fecha_registro']); ?></td>
             <td style="white-space:nowrap;">
-              <a class="btn secondary" href="ver_ticket.php?id=<?php echo (int)$u['id']; ?>" target="_blank">Ver ticket</a>
-              <a class="btn danger" href="enviar_tickex.php?del_tickex=<?php echo (int)$u['id']; ?>" onclick="return confirm('¿Eliminar este tickex?');">Eliminar</a>
+              <a class="btn secondary" style="padding:6px 10px;" href="ticket.php?c=<?php echo urlencode((string)$u['codigo']); ?>" target="_blank" rel="noopener" title="Ver ticket" aria-label="Ver ticket">👁</a>
+              <a class="btn danger" style="padding:6px 10px;" href="enviar_tickex.php?del_tickex=<?php echo (int)$u['id']; ?>" onclick="return confirm('¿Eliminar este tickex?');" title="Eliminar" aria-label="Eliminar">🗑</a>
             </td>
           </tr>
         <?php endforeach; ?>
