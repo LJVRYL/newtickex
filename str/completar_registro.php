@@ -12,6 +12,7 @@ function ensure_registro_pendientes($pdo)
         apellido TEXT,
         apodo TEXT,
         dni TEXT,
+    cbu TEXT,
         genero TEXT,
         foto_path TEXT,
         next_url TEXT,
@@ -29,15 +30,30 @@ function ensure_registro_pendientes($pdo)
       // ignore (puede fallar si hay datos duplicados existentes)
     }
 
+    // Preferido: case-insensitive
+    try {
+      $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_apodo_unique_ci ON registro_pendientes(lower(apodo))");
+    } catch (Exception $e) {
+      // ignore
+    }
+
   // Backfill para instancias existentes sin columna de password
   try {
     $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
     $hasPass = false;
+    $hasCbu = false;
     foreach ($cols as $c) {
       if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
     }
     if (!$hasPass) {
       $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
+    }
+
+    foreach ($cols as $c) {
+      if (isset($c['name']) && $c['name'] === 'cbu') { $hasCbu = true; break; }
+    }
+    if (!$hasCbu) {
+      $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN cbu TEXT");
     }
   } catch (Exception $e) {
     // ignorar
@@ -134,6 +150,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
           }
         } catch (Exception $e) {
           // si falla el check, no bloquear el registro
+        }
+
+        // También validar contra admins
+        if (empty($errores)) {
+          try {
+            $stA = $pdo->prepare('SELECT 1 FROM usuarios_admin WHERE lower(apodo) = lower(:ap) LIMIT 1');
+            $stA->execute(array(':ap' => $apodo));
+            if ($stA->fetchColumn()) {
+              $errores[] = 'Ese Tickex ID ya está en uso (admin). Elegí otro.';
+            }
+          } catch (Exception $e) {
+            // best-effort
+          }
         }
       }
     }

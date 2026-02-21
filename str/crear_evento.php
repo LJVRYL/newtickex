@@ -188,7 +188,7 @@ include __DIR__.'/inc/layout_top.php';
   </div>
 </div>
 
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" style="padding-bottom:calc(24px + constant(safe-area-inset-bottom));padding-bottom:calc(24px + env(safe-area-inset-bottom));">
 
   <div class="card">
     <h3>Datos del evento</h3>
@@ -220,7 +220,7 @@ include __DIR__.'/inc/layout_top.php';
     <input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg">
   </div>
 
-  <button class="btn" type="submit">Crear evento y configurar entradas</button>
+    <button class="btn" type="submit" style="margin-bottom:16px;">Crear evento y configurar entradas</button>
 </form>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>

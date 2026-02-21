@@ -34,10 +34,14 @@ try {
 
 // Detectar si existe la columna apellido (por compatibilidad de DB)
 $hasApellido = false;
+$hasApodo = false;
 try {
   $colsInfo = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);
   foreach ($colsInfo as $ci) {
     if (isset($ci['name']) && $ci['name'] === 'apellido') { $hasApellido = true; break; }
+  }
+  foreach ($colsInfo as $ci) {
+    if (isset($ci['name']) && $ci['name'] === 'apodo') { $hasApodo = true; break; }
   }
 } catch (Exception $e) {
   // si falla pragma, asumimos que puede no estar
@@ -48,6 +52,7 @@ $user = null;
 try {
   $selectCols = 'id, username, nombre, email, dni, cbu';
   if ($hasApellido) $selectCols .= ', apellido';
+  if ($hasApodo) $selectCols .= ', apodo';
   $stmt = $pdo->prepare(
     "SELECT $selectCols FROM usuarios_admin WHERE id = :id LIMIT 1"
   );
@@ -71,6 +76,8 @@ if (!$user) {
 $error = '';
 $okMsg = '';
 
+$csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
+
 $avatarDir = __DIR__ . '/avatars';
 if (!is_dir($avatarDir)) {
   @mkdir($avatarDir, 0775, true);
@@ -88,6 +95,11 @@ foreach (array('jpg', 'jpeg', 'png', 'webp') as $ext) {
 
 // Procesar POST
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+    $error = 'CSRF inválido. Actualizá la página e intentá de nuevo.';
+  }
 
   $deleteAvatar = isset($_POST['delete_avatar']);
 
@@ -113,8 +125,9 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
     $email    = isset($_POST['email'])    ? trim($_POST['email'])    : '';
     $dni      = isset($_POST['dni'])      ? trim($_POST['dni'])      : '';
     $cbu      = isset($_POST['cbu'])      ? trim($_POST['cbu'])      : '';
+    $apodo    = isset($_POST['apodo'])    ? trim($_POST['apodo'])    : '';
 
-    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if ($error === '' && $email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
       $error = 'El email no tiene un formato valido.';
     }
 
@@ -123,6 +136,39 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
     }
     if ($error === '' && $hasApellido && $apellido === '') {
       $error = 'El apellido es obligatorio para generar pagos.';
+    }
+
+    // Tickex ID (apodo) para admins
+    if ($error === '' && $apodo !== '') {
+      if (strlen($apodo) > 64) {
+        $error = 'El Tickex ID es demasiado largo (máx 64).';
+      } elseif (!preg_match('/^[a-zA-Z0-9_-]+$/', $apodo)) {
+        $error = 'El Tickex ID solo puede tener letras, números, _ y - (sin espacios).';
+      } else {
+        try {
+          // Unicidad contra otros admins
+          $stA = $pdo->prepare('SELECT 1 FROM usuarios_admin WHERE lower(apodo) = lower(:ap) AND id <> :id LIMIT 1');
+          $stA->execute(array(':ap' => $apodo, ':id' => (int)$user['id']));
+          if ($stA->fetchColumn()) {
+            $error = 'Ese Tickex ID ya lo usa otro admin.';
+          }
+        } catch (Exception $e) {
+          // ignore
+        }
+
+        if ($error === '') {
+          try {
+            // Unicidad contra clientes
+            $stC = $pdo->prepare('SELECT 1 FROM registro_pendientes WHERE lower(apodo) = lower(:ap) LIMIT 1');
+            $stC->execute(array(':ap' => $apodo));
+            if ($stC->fetchColumn()) {
+              $error = 'Ese Tickex ID ya lo usa un cliente.';
+            }
+          } catch (Exception $e) {
+            // ignore
+          }
+        }
+      }
     }
 
     if ($error === '' && !$deleteAvatar) {
@@ -134,7 +180,8 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
                    apellido = :apellido,
                    email  = :email,
                    dni    = :dni,
-                   cbu    = :cbu
+                   cbu    = :cbu,
+                   apodo  = :apodo
                  WHERE id = :id'
               );
               $stmtUpd->execute(array(
@@ -143,6 +190,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
                 ':email'    => ($email    !== '' ? $email    : null),
                 ':dni'      => ($dni      !== '' ? $dni      : null),
                 ':cbu'      => ($cbu      !== '' ? $cbu      : null),
+                ':apodo'    => ($apodo    !== '' ? $apodo    : null),
                 ':id'       => (int)$user['id'],
               ));
             } else {
@@ -151,7 +199,8 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
                  SET nombre = :nombre,
                    email  = :email,
                    dni    = :dni,
-                   cbu    = :cbu
+                   cbu    = :cbu,
+                   apodo  = :apodo
                  WHERE id = :id'
               );
               $stmtUpd->execute(array(
@@ -159,6 +208,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
                 ':email'    => ($email    !== '' ? $email    : null),
                 ':dni'      => ($dni      !== '' ? $dni      : null),
                 ':cbu'      => ($cbu      !== '' ? $cbu      : null),
+                ':apodo'    => ($apodo    !== '' ? $apodo    : null),
                 ':id'       => (int)$user['id'],
               ));
             }
@@ -171,6 +221,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
             $user['email']    = $email;
             $user['dni']      = $dni;
             $user['cbu']      = $cbu;
+            $user['apodo']    = $apodo;
 
             // Refrescar sesión para prefills de checkout
             $_SESSION['dni'] = $dni;
@@ -264,6 +315,7 @@ require __DIR__ . '/inc/layout_top.php';
 <?php endif; ?>
 
 <form method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
   <div class="card">
     <h3>Datos del perfil</h3>
 
@@ -297,11 +349,20 @@ require __DIR__ . '/inc/layout_top.php';
              value="<?php echo e($user['cbu']); ?>">
     </div>
 
+    <div style="margin-bottom:10px;">
+      <label for="apodo">Tickex ID (opcional)</label>
+      <input type="text" id="apodo" name="apodo"
+             value="<?php echo e(isset($user['apodo']) ? (string)$user['apodo'] : ''); ?>"
+             placeholder="Ej: STR">
+      <div class="muted" style="font-size:12px;margin-top:4px;">Solo letras/números/_/- (sin espacios). Este ID se usa para asignar revendedores.</div>
+    </div>
+
     <div style="margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <?php if ($avatarUrl !== ''): ?>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <img src="<?php echo e($avatarUrl); ?>" alt="Avatar" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid var(--border-subtle);">
           <form method="post" onsubmit="return confirm('¿Eliminar avatar?');" style="margin:0;">
+            <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
             <input type="hidden" name="delete_avatar" value="1">
             <button type="submit" class="btn danger" style="padding:6px 10px;font-size:14px;">
               🗑️ Eliminar avatar

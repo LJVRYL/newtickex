@@ -127,6 +127,30 @@ if ($eventSlug !== '') {
 
 $isLogged = !empty($_SESSION['usuario_id']) || !empty($_SESSION['user_id']) || !empty($_SESSION['admin_id']);
 
+function _tickex_site_checkout_url($siteSlug, $ev)
+{
+  $sid = strtolower(trim((string)$siteSlug));
+  $eventId = isset($ev['id']) ? (int)$ev['id'] : 0;
+  $eventSlug = isset($ev['slug']) ? strtolower(trim((string)$ev['slug'])) : '';
+  if ($eventId <= 0) return '#';
+  $concept = ($eventSlug !== '' ? $eventSlug : ('evento-' . $eventId));
+  $refPrefix = ($sid !== '' ? $sid : 'tickex');
+  $ref = $refPrefix . '-' . ($eventSlug !== '' ? $eventSlug : (string)$eventId) . '-' . time();
+
+  $q = array(
+    'event' => $eventId,
+    'concept' => $concept,
+    'ref' => $ref,
+  );
+
+  // Passthrough de afiliado si viene en la URL del sitio
+  if (isset($_GET['aff']) && trim((string)$_GET['aff']) !== '') {
+    $q['aff'] = (string)$_GET['aff'];
+  }
+
+  return 'checkout_totalcoin.php?' . http_build_query($q);
+}
+
 // Helpers de flyer
 function flyer_url($ev) {
     if (!empty($ev['flyer_filename'])) {
@@ -217,8 +241,7 @@ function flyer_url($ev) {
           </div>
           <p style="margin:0 0 14px;">Adquirí tu entrada completando tus datos. Si ya tenés cuenta, seguí para iniciar sesión.</p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-            <?php $redirect = 'site.php?slug='.$slug.'&event='.urlencode($eventoDetalle['slug']); ?>
-            <a class="btn btn-primary" href="comprar.php?id=<?php echo (int)($eventoDetalle['id'] ?? 0); ?>" target="_blank" rel="noopener">Adquirir entrada</a>
+            <a class="btn btn-primary" href="<?php echo e(_tickex_site_checkout_url($slug, $eventoDetalle)); ?>">Adquirir entrada</a>
             <a class="btn btn-ghost" href="site.php?slug=<?php echo e($slug); ?>">Volver a eventos</a>
           </div>
         </div>
@@ -247,7 +270,7 @@ function flyer_url($ev) {
                 ?>
               </div>
               <div class="event-actions">
-                <a href="site.php?slug=<?php echo e($slug); ?>&event=<?php echo e($ev['slug']); ?>" class="btn btn-primary">Adquirir entrada</a>
+                <a href="<?php echo e(_tickex_site_checkout_url($slug, $ev)); ?>" class="btn btn-primary">Adquirir entrada</a>
                 <a href="site.php?slug=<?php echo e($slug); ?>&event=<?php echo e($ev['slug']); ?>" class="btn btn-ghost">Ver detalle</a>
               </div>
             </div>

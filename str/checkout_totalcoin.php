@@ -475,6 +475,12 @@ if (!function_exists('_tickex_parse_selection')) {
       $tidStr = (string)$tid;
       $qty = isset($qtys[$i]) ? (int)$qtys[$i] : 0;
       if ($qty <= 0) continue;
+
+      // Límite UX/anti-abuso: no más de 10 por tipo en una compra.
+      if ($qty > 10) {
+        $errors[] = 'Máximo 10 entradas por tipo en una compra.';
+        continue;
+      }
       if (!isset($optionMap[$tidStr])) continue;
       $opt = $optionMap[$tidStr];
       $maxAvail = isset($opt['avail']) && $opt['avail'] !== null ? (int)$opt['avail'] : 999999;
@@ -898,6 +904,8 @@ include __DIR__.'/inc/layout_top.php';
   .meta-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px; color:var(--muted); }
   .card-soft { background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
   @media (max-width: 780px) { .checkout-hero { grid-template-columns:1fr; } }
+  .tickex-safe-bottom { padding-bottom:calc(24px + constant(safe-area-inset-bottom)); padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+  .tickex-hidden { display:none !important; }
 </style>
 
 <div class="card card-soft" style="margin-bottom:12px;">
@@ -981,7 +989,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <?php if ($step === 'confirm'): ?>
     <?php $csrfTokConfirm = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : $csrfTok; ?>
-    <div class="card" style="max-width:920px;margin:0 auto 12px auto;background:var(--panel-2);border-color:var(--line);">
+    <div class="card" style="margin:0 0 12px 0;background:var(--panel-2);border-color:var(--line);">
       <h3 style="margin:0 0 8px;">Confirmación del checkout</h3>
       <div style="display:grid;gap:10px;">
         <div class="card" style="margin:0;background:transparent;border:1px solid var(--line);">
@@ -1049,51 +1057,106 @@ include __DIR__.'/inc/layout_top.php';
     </div>
   <?php else: ?>
 
-  <form method="post" id="checkoutForm" style="display:grid;gap:12px;">
+  <form method="post" id="checkoutFlow" class="tickex-safe-bottom" style="display:grid;gap:12px;">
     <input type="hidden" name="csrf" value="<?php echo e($csrfTok); ?>">
-    <input type="hidden" name="action" value="preview">
-    <div class="card" style="background:var(--panel-2);border-color:var(--line);">
-      <h3 style="margin:0 0 8px;">Seleccioná tus entradas</h3>
-      <?php foreach ($entryOptions as $idx => $opt): 
-        $avail = $opt['avail'];
-        if ($avail === null) {
-          $maxQty = 10;
-        } elseif ($avail > 0) {
-          $maxQty = $avail;
-        } else {
-          $maxQty = 0;
-        }
-        if ($maxQty > 20) $maxQty = 20; // limitar selector para no alargar
-        $isSoldOut = ($avail !== null && $avail <= 0);
-      ?>
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;">
-          <label style="display:flex;align-items:center;gap:10px;min-width:220px;">
-            <input type="checkbox" name="ticket_id[<?php echo $idx; ?>]" value="<?php echo e($opt['id']); ?>" data-price="<?php echo e((string)$opt['price']); ?>" data-idx="<?php echo $idx; ?>" <?php echo $isSoldOut ? 'disabled' : ''; ?>>
-            <div>
-              <div style="font-weight:700;"><?php echo e($opt['name']); ?></div>
-              <div style="color:var(--muted);">$<?php echo e(number_format($opt['price'],0,',','.')); ?><?php if($avail !== null): ?> · Disponibles: <?php echo (int)$avail; ?><?php endif; ?><?php if($isSoldOut): ?> · Agotado<?php endif; ?></div>
-            </div>
-          </label>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="color:var(--muted);">Cantidad</span>
-            <select name="qty[<?php echo $idx; ?>]" data-idx="<?php echo $idx; ?>" style="min-width:70px;" <?php echo $isSoldOut ? 'disabled' : ''; ?>>
-              <?php for($i=0;$i<=$maxQty;$i++): ?>
-                <option value="<?php echo $i; ?>" <?php echo $i===0?'selected':''; ?>><?php echo $i; ?></option>
-              <?php endfor; ?>
-            </select>
-          </div>
-        </div>
-      <?php endforeach; ?>
-    </div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-      <div style="font-size:18px;font-weight:700;">Total: <span id="totalDisplay">$0</span></div>
-      <button class="btn" type="submit">Comprar</button>
-    </div>
-
-    <!-- Campos ocultos mínimos -->
+    <input type="hidden" name="action" value="pay">
     <input type="hidden" name="ref" value="<?php echo e($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())); ?>">
     <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
+
+    <div class="card" style="background:var(--panel-2);border-color:var(--line);margin:0 0 12px 0;">
+      <h3 style="margin:0 0 8px;">Seleccioná tus entradas</h3>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:10px;">Elegí la cantidad (máx 10 por tipo). Si dejás en 0, no se agrega.</div>
+
+      <div id="stepSelect">
+        <?php foreach ($entryOptions as $idx => $opt): 
+          $avail = $opt['avail'];
+          if ($avail === null) {
+            $maxQty = 10;
+          } elseif ($avail > 0) {
+            $maxQty = $avail;
+          } else {
+            $maxQty = 0;
+          }
+          if ($maxQty > 10) $maxQty = 10;
+          $isSoldOut = ($avail !== null && $avail <= 0);
+        ?>
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;">
+            <input type="hidden" name="ticket_id[<?php echo $idx; ?>]" value="<?php echo e($opt['id']); ?>">
+            <div style="min-width:220px;flex:1;">
+              <div style="font-weight:700;line-height:1.2;" data-ticket-name="<?php echo e($opt['name']); ?>"><?php echo e($opt['name']); ?></div>
+              <div style="color:var(--muted);">
+                $<?php echo e(number_format($opt['price'],0,',','.')); ?>
+                <?php if($avail !== null): ?> · Disponibles: <?php echo (int)$avail; ?><?php endif; ?>
+                <?php if($isSoldOut): ?> · Agotado<?php endif; ?>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="color:var(--muted);">Cantidad</span>
+              <select
+                name="qty[<?php echo $idx; ?>]"
+                data-idx="<?php echo $idx; ?>"
+                data-price="<?php echo e((string)$opt['price']); ?>"
+                data-name="<?php echo e((string)$opt['name']); ?>"
+                style="min-width:70px;"
+                <?php echo $isSoldOut ? 'disabled' : ''; ?>
+              >
+                <?php for($i=0;$i<=$maxQty;$i++): ?>
+                  <option value="<?php echo $i; ?>" <?php echo $i===0?'selected':''; ?>><?php echo $i; ?></option>
+                <?php endfor; ?>
+              </select>
+            </div>
+          </div>
+        <?php endforeach; ?>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px;">
+          <div style="font-size:18px;font-weight:700;">Total: <span id="totalDisplay">$0</span></div>
+          <button class="btn" type="button" id="btnContinue">Continuar</button>
+        </div>
+      </div>
+
+      <div id="stepConfirm" class="tickex-hidden" style="margin-top:12px;">
+        <div class="card" style="margin:0;background:transparent;border:1px solid var(--line);">
+          <div class="muted" style="font-size:12px;">Confirmación</div>
+          <ul id="confirmLines" style="margin:8px 0 0 18px;"></ul>
+          <div style="margin-top:10px;font-size:16px;font-weight:700;">Total: <span id="totalConfirm">$0</span></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;margin-top:10px;">
+          <label>
+            DNI
+            <input type="text" name="dni" value="<?php echo e($defaults['dni']); ?>" id="inpDni" disabled>
+          </label>
+          <label>
+            Nombre
+            <input type="text" name="first_name" value="<?php echo e($defaults['first_name']); ?>" id="inpFirst" disabled>
+          </label>
+          <label>
+            Apellido
+            <input type="text" name="last_name" value="<?php echo e($defaults['last_name']); ?>" id="inpLast" disabled>
+          </label>
+          <label style="grid-column:1 / -1;">
+            Email (acá te llegan las entradas)
+            <input type="email" name="email" value="<?php echo e($defaults['email']); ?>" id="inpEmail" disabled>
+          </label>
+
+          <?php $isLoggedCliente = isset($_SESSION['usuario_id']) && (int)$_SESSION['usuario_id'] > 0; ?>
+          <?php if (!$isLoggedCliente): ?>
+            <label style="grid-column:1 / -1;display:flex;gap:10px;align-items:flex-start;">
+              <input type="checkbox" name="create_account" value="1" style="margin-top:4px;" id="chkCreate" disabled>
+              <span>
+                Crear cuenta con estos datos (te enviamos un email para confirmar y definir tu contraseña)
+              </span>
+            </label>
+          <?php endif; ?>
+
+          <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn" type="submit" id="btnPay">Confirmar y pagar</button>
+            <button class="btn secondary" type="button" id="btnBack">Volver</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </form>
 
   <?php endif; ?>
@@ -1101,53 +1164,105 @@ include __DIR__.'/inc/layout_top.php';
 
 <script>
   (function(){
-    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="ticket_id"]');
-    const qtySelects = document.querySelectorAll('select[name^="qty"]');
+    const form = document.getElementById('checkoutFlow');
+    const qtySelects = document.querySelectorAll('#checkoutFlow select[name^="qty"]');
     const totalDisplay = document.getElementById('totalDisplay');
+    const stepSelect = document.getElementById('stepSelect');
+    const stepConfirm = document.getElementById('stepConfirm');
+    const confirmLines = document.getElementById('confirmLines');
+    const totalConfirm = document.getElementById('totalConfirm');
+    const btnContinue = document.getElementById('btnContinue');
+    const btnBack = document.getElementById('btnBack');
 
-    if (!totalDisplay || !checkboxes.length) {
+    const inpDni = document.getElementById('inpDni');
+    const inpFirst = document.getElementById('inpFirst');
+    const inpLast = document.getElementById('inpLast');
+    const inpEmail = document.getElementById('inpEmail');
+    const chkCreate = document.getElementById('chkCreate');
+
+    if (!form || !totalDisplay || !qtySelects.length) {
       return;
     }
 
-    function recalc() {
-      let total = 0;
-      checkboxes.forEach(cb => {
-        const idx = cb.getAttribute('data-idx');
-        const price = parseFloat(cb.getAttribute('data-price')) || 0;
-        const qtyEl = document.querySelector('select[name="qty['+idx+']"]');
-        const qty = qtyEl ? parseInt(qtyEl.value || '0', 10) : 0;
-        if (cb.checked && qty > 0) {
-          total += price * qty;
+    function readLines() {
+      const lines = [];
+      qtySelects.forEach(sel => {
+        const qty = parseInt(sel.value || '0', 10) || 0;
+        const price = parseFloat(sel.getAttribute('data-price') || '0') || 0;
+        const name = sel.getAttribute('data-name') || '';
+        if (qty > 0) {
+          lines.push({ name, qty, price, total: price * qty });
         }
       });
-      totalDisplay.textContent = '$' + total.toLocaleString('es-AR');
+      return lines;
     }
 
-    checkboxes.forEach(cb => {
-      cb.addEventListener('change', function(){
-        const idx = this.getAttribute('data-idx');
-        const qtyEl = document.querySelector('select[name="qty['+idx+']"]');
-        if (this.checked && qtyEl && parseInt(qtyEl.value||'0',10) === 0) {
-          qtyEl.value = '1';
-        }
-        if (!this.checked && qtyEl) {
-          qtyEl.value = '0';
-        }
-        recalc();
-      });
-    });
+    function recalc() {
+      const lines = readLines();
+      let total = 0;
+      lines.forEach(ln => { total += (ln.total || 0); });
+      totalDisplay.textContent = '$' + total.toLocaleString('es-AR');
+      return { lines, total };
+    }
+
+    function setConfirmEnabled(enabled) {
+      const on = !!enabled;
+      if (inpDni) { inpDni.disabled = !on; inpDni.required = on; }
+      if (inpFirst) { inpFirst.disabled = !on; inpFirst.required = on; }
+      if (inpLast) { inpLast.disabled = !on; inpLast.required = on; }
+      if (inpEmail) { inpEmail.disabled = !on; inpEmail.required = on; }
+      if (chkCreate) { chkCreate.disabled = !on; }
+    }
+
+    function goConfirm() {
+      const r = recalc();
+      if (!r.lines.length || r.total <= 0) {
+        alert('Elegí al menos 1 entrada.');
+        return;
+      }
+      if (confirmLines) {
+        confirmLines.innerHTML = '';
+        r.lines.forEach(ln => {
+          const li = document.createElement('li');
+          li.innerHTML = '<strong>' + (ln.name || '') + '</strong>' +
+            ' · x' + (ln.qty || 0) +
+            ' · $' + (Number(ln.price || 0)).toLocaleString('es-AR');
+          confirmLines.appendChild(li);
+        });
+      }
+      if (totalConfirm) {
+        totalConfirm.textContent = '$' + r.total.toLocaleString('es-AR');
+      }
+
+      if (stepSelect) stepSelect.classList.add('tickex-hidden');
+      if (stepConfirm) stepConfirm.classList.remove('tickex-hidden');
+      setConfirmEnabled(true);
+
+      try {
+        stepConfirm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {}
+    }
+
+    function goBack() {
+      if (stepConfirm) stepConfirm.classList.add('tickex-hidden');
+      if (stepSelect) stepSelect.classList.remove('tickex-hidden');
+      setConfirmEnabled(false);
+      try {
+        stepSelect.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {}
+    }
+
     qtySelects.forEach(sel => {
       sel.addEventListener('change', function(){
-        const idx = this.getAttribute('data-idx');
-        const cb = document.querySelector('input[type="checkbox"][name="ticket_id['+idx+']"]');
-        if (parseInt(this.value||'0',10) > 0) {
-          if (cb) cb.checked = true;
-        } else {
-          if (cb) cb.checked = false;
-        }
         recalc();
       });
     });
+
+    if (btnContinue) btnContinue.addEventListener('click', goConfirm);
+    if (btnBack) btnBack.addEventListener('click', goBack);
+
+    // Confirm inputs disabled until stepConfirm
+    setConfirmEnabled(false);
 
     recalc();
   })();

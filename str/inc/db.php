@@ -30,11 +30,26 @@ function db(){
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);
             $hasApellido = false;
             $hasEmailConfirmado = false;
+            $hasApodo = false;
             foreach ($cols as $c) {
                 if (isset($c['name']) && $c['name'] === 'apellido') { $hasApellido = true; break; }
             }
             if (!$hasApellido) {
                 $pdo->exec("ALTER TABLE usuarios_admin ADD COLUMN apellido TEXT");
+            }
+
+            foreach ($cols as $c) {
+                if (isset($c['name']) && $c['name'] === 'apodo') { $hasApodo = true; break; }
+            }
+            if (!$hasApodo) {
+                $pdo->exec("ALTER TABLE usuarios_admin ADD COLUMN apodo TEXT");
+            }
+
+            // Tickex ID (apodo) en admins: best-effort único (case-insensitive)
+            try {
+                $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_admin_apodo_unique ON usuarios_admin(lower(apodo))");
+            } catch (Exception $e) {
+                // ignore (puede fallar si hay duplicados existentes)
             }
 
             foreach ($cols as $c) {
@@ -179,6 +194,49 @@ SQL;
                                 // ignore seed errors
                         }
 
+                        // registro_pendientes: fuente de datos de clientes (asegurar columnas usadas por revendedores)
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            email TEXT NOT NULL,
+                            token TEXT NOT NULL,
+                            nombre TEXT,
+                            apellido TEXT,
+                            apodo TEXT,
+                            dni TEXT,
+                            cbu TEXT,
+                            genero TEXT,
+                            foto_path TEXT,
+                            next_url TEXT,
+                            creado_en TEXT,
+                            completado_en TEXT,
+                            password_hash TEXT
+                        )");
+
+                        // Tickex ID (apodo) en clientes: best-effort único (case-insensitive)
+                        try {
+                            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_registro_pendientes_apodo_unique_ci ON registro_pendientes(lower(apodo))");
+                        } catch (Exception $e) {
+                            // ignore (puede fallar si hay duplicados existentes)
+                        }
+
+                        try {
+                            $colsRp = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
+                            $hasCbu = false;
+                            $hasPass = false;
+                            foreach ($colsRp as $c) {
+                                if (isset($c['name']) && $c['name'] === 'cbu') $hasCbu = true;
+                                if (isset($c['name']) && $c['name'] === 'password_hash') $hasPass = true;
+                            }
+                            if (!$hasCbu) {
+                                $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN cbu TEXT");
+                            }
+                            if (!$hasPass) {
+                                $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
+                            }
+                        } catch (Exception $e) {
+                            // ignore
+                        }
+
             // staff_eventos: asignación múltiple de staff a eventos
             $pdo->exec("CREATE TABLE IF NOT EXISTS staff_eventos (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,6 +244,36 @@ SQL;
               evento_id INTEGER NOT NULL,
               UNIQUE(staff_id, evento_id)
             )");
+
+                        // staff_admins: relación cliente -> admin (rol staff adicional, sin perder rol cliente)
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS staff_admins (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            owner_admin_id INTEGER NOT NULL,
+                            cliente_id INTEGER NOT NULL,
+                            rol_staff TEXT,
+                            activo INTEGER NOT NULL DEFAULT 1,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            UNIQUE(owner_admin_id, cliente_id)
+                        )");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_admins_owner ON staff_admins(owner_admin_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_admins_cliente ON staff_admins(cliente_id)");
+
+                        // staff_admin_invitaciones: invitación por email con aceptación obligatoria
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS staff_admin_invitaciones (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            owner_admin_id INTEGER NOT NULL,
+                            email TEXT NOT NULL,
+                            token TEXT,
+                            mensaje TEXT,
+                            rol_staff TEXT,
+                            estado TEXT NOT NULL DEFAULT 'pending',
+                            cliente_id INTEGER,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            updated_at TEXT
+                        )");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_inv_owner ON staff_admin_invitaciones(owner_admin_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_inv_email ON staff_admin_invitaciones(email)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_inv_estado ON staff_admin_invitaciones(estado)");
 
                         // revendedores: entidad separada vinculada a usuarios_admin (si aplica)
                         $pdo->exec("CREATE TABLE IF NOT EXISTS revendedores (
@@ -232,6 +320,7 @@ SQL;
                             mensaje TEXT,
                             estado TEXT NOT NULL DEFAULT 'pending',
                             revendedor_id INTEGER,
+                                                        direction TEXT NOT NULL DEFAULT 'client_to_admin',
                             created_at TEXT NOT NULL DEFAULT (datetime('now')),
                             updated_at TEXT
                         )");
@@ -239,6 +328,39 @@ SQL;
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_revsol_owner ON revendedor_solicitudes(owner_admin_id)");
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_revsol_cliente ON revendedor_solicitudes(cliente_id)");
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_revsol_evento ON revendedor_solicitudes(evento_id)");
+                                                $pdo->exec("CREATE INDEX IF NOT EXISTS idx_revsol_direction ON revendedor_solicitudes(direction)");
+
+                                                // Backfill direction si la tabla existía sin esa columna
+                                                try {
+                                                    $colsSol = $pdo->query("PRAGMA table_info(revendedor_solicitudes)")->fetchAll(PDO::FETCH_ASSOC);
+                                                    $hasDir = false;
+                                                    foreach ($colsSol as $c) {
+                                                        if (isset($c['name']) && $c['name'] === 'direction') { $hasDir = true; break; }
+                                                    }
+                                                    if (!$hasDir) {
+                                                        $pdo->exec("ALTER TABLE revendedor_solicitudes ADD COLUMN direction TEXT NOT NULL DEFAULT 'client_to_admin'");
+                                                    }
+                                                    // Normalizar nulos/vacíos
+                                                    $pdo->exec("UPDATE revendedor_solicitudes SET direction='client_to_admin' WHERE direction IS NULL OR direction='' ");
+                                                } catch (Exception $e) {
+                                                    // ignore
+                                                }
+
+                        // Retiros solicitados por revendedores
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS revendedor_retiros (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            revendedor_id INTEGER NOT NULL,
+                            owner_admin_id INTEGER,
+                            cliente_id INTEGER,
+                            amount REAL NOT NULL,
+                            cbu TEXT,
+                            estado TEXT NOT NULL DEFAULT 'pending',
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            updated_at TEXT
+                        )");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_retiros_estado ON revendedor_retiros(estado)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_retiros_owner ON revendedor_retiros(owner_admin_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_retiros_rev ON revendedor_retiros(revendedor_id)");
 
                         // tc_orders: registro mínimo de órdenes/checkout TotalCoin (para auditoría y atribución)
                         $pdo->exec("CREATE TABLE IF NOT EXISTS tc_orders (

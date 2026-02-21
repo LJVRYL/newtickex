@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__ . '/inc/mail.php';
 $title = "Mi staff – Administrador";
 
 // ===== AUTH: solo admin_evento o super_admin =====
@@ -51,6 +52,157 @@ function ensure_staff_cost_column($pdo) {
   }
 }
 ensure_staff_cost_column($pdo);
+
+function _tickex_base_url()
+{
+  $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '';
+  if ($host === '') return '';
+  $scheme = (function_exists('tickex_is_https') && tickex_is_https()) ? 'https' : 'http';
+  return $scheme . '://' . $host;
+}
+
+function _tickex_random_token($bytesLen = 16)
+{
+  $n = (int)$bytesLen;
+  if ($n < 8) $n = 8;
+  if (function_exists('random_bytes')) {
+    return bin2hex(random_bytes($n));
+  }
+  return sha1(uniqid(mt_rand(), true));
+}
+
+/* =========================================================
+   INVITAR STAFF POR EMAIL (nuevo modelo) (POST)
+   ========================================================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'staff_invite') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+    flash('err', 'CSRF inválido. Actualizá la página e intentá de nuevo.');
+  } else {
+    $email = isset($_POST['email']) ? trim((string)$_POST['email']) : '';
+    $nombre = isset($_POST['nombre']) ? trim((string)$_POST['nombre']) : '';
+    $apellido = isset($_POST['apellido']) ? trim((string)$_POST['apellido']) : '';
+    $mensaje = isset($_POST['mensaje']) ? trim((string)$_POST['mensaje']) : '';
+    $rolStaff = 'staff_evento';
+
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+      flash('warn', 'Ingresá un email válido.');
+    } elseif (strlen($mensaje) > 500) {
+      flash('warn', 'El mensaje es demasiado largo (máx 500).');
+    } else {
+      try {
+        $stDup = $pdo->prepare("SELECT 1 FROM staff_admin_invitaciones WHERE owner_admin_id = :oid AND lower(email) = lower(:e) AND estado = 'pending' LIMIT 1");
+        $stDup->execute(array(':oid' => $adminId, ':e' => $email));
+        if ($stDup->fetchColumn()) {
+          flash('warn', 'Ya existe una invitación pendiente para ese email.');
+        } else {
+          $inviteToken = _tickex_random_token(16);
+          $base = _tickex_base_url();
+          $perfilUrl = ($base !== '' ? $base : '') . '/panel_usuario_mi_perfil.php?staff_invite=' . urlencode($inviteToken);
+
+          // Preparar registro (si no está completado)
+          $stRp = $pdo->prepare('SELECT id, completado_en, password_hash FROM registro_pendientes WHERE lower(email) = lower(:e) ORDER BY id DESC LIMIT 1');
+          $stRp->execute(array(':e' => $email));
+          $rp = $stRp->fetch(PDO::FETCH_ASSOC);
+
+          $clienteId = 0;
+          $needsReg = true;
+          $regToken = '';
+          if ($rp) {
+            $clienteId = (int)$rp['id'];
+            $ph = isset($rp['password_hash']) ? (string)$rp['password_hash'] : '';
+            $ce = isset($rp['completado_en']) ? (string)$rp['completado_en'] : '';
+            if ($ph !== '' || $ce !== '') {
+              $needsReg = false;
+            }
+          }
+
+          if ($needsReg) {
+            $regToken = _tickex_random_token(16);
+            $ahora = date('Y-m-d H:i:s');
+            $nextForReg = 'panel_usuario_mi_perfil.php?staff_invite=' . urlencode($inviteToken);
+            if ($rp) {
+              $stmtUp = $pdo->prepare("UPDATE registro_pendientes
+                SET token = :t,
+                    completado_en = NULL,
+                    next_url = :n,
+                    creado_en = :c,
+                    nombre = :fn,
+                    apellido = :ln
+                WHERE id = :id");
+              $stmtUp->execute(array(
+                ':t' => $regToken,
+                ':n' => $nextForReg,
+                ':c' => $ahora,
+                ':fn' => $nombre,
+                ':ln' => $apellido,
+                ':id' => (int)$rp['id'],
+              ));
+              $clienteId = (int)$rp['id'];
+            } else {
+              $stmtIns = $pdo->prepare('INSERT INTO registro_pendientes (email, token, nombre, apellido, next_url, creado_en) VALUES (:e, :t, :fn, :ln, :n, :c)');
+              $stmtIns->execute(array(
+                ':e' => $email,
+                ':t' => $regToken,
+                ':fn' => $nombre,
+                ':ln' => $apellido,
+                ':n' => $nextForReg,
+                ':c' => $ahora,
+              ));
+              $clienteId = (int)$pdo->lastInsertId();
+            }
+          }
+
+          $stInv = $pdo->prepare("INSERT INTO staff_admin_invitaciones (owner_admin_id, email, token, mensaje, rol_staff, estado, cliente_id, created_at)
+            VALUES (:oid, :e, :t, :m, :r, 'pending', :cid, datetime('now'))");
+          $stInv->execute(array(
+            ':oid' => $adminId,
+            ':e' => $email,
+            ':t' => $inviteToken,
+            ':m' => ($mensaje !== '' ? $mensaje : null),
+            ':r' => $rolStaff,
+            ':cid' => ($clienteId > 0 ? $clienteId : null),
+          ));
+          $invId = (int)$pdo->lastInsertId();
+
+          $registerUrl = '';
+          if ($needsReg && $regToken !== '') {
+            $registerUrl = ($base !== '' ? $base : '') . '/completar_registro.php?token=' . urlencode($regToken);
+          }
+
+          $okMail = tickex_send_mail_template(
+            $email,
+            'staff_invite',
+            array(
+              'email' => $email,
+              'perfil_url' => $perfilUrl,
+              'register_url' => $registerUrl,
+              'mensaje' => $mensaje,
+            ),
+            array(
+              'context' => 'staff_invite',
+              'related_table' => 'staff_admin_invitaciones',
+              'related_id' => $invId,
+            ),
+            array(
+              'subject' => 'Invitación a staff - Tickex',
+              'body' => "Hola,\n\nTe invitaron a ser parte del staff.\n\nSi todavía no tenés cuenta, completá el registro desde este link:\n{{register_url}}\n\nSi ya tenés cuenta, ingresá y aceptá la invitación desde tu perfil:\n{{perfil_url}}\n\nMensaje:\n{{mensaje}}\n\nTickex\n",
+              'from_email' => 'no-reply@tickex.com.ar',
+              'from_name' => 'Tickex',
+              'reply_to' => 'no-reply@tickex.com.ar',
+              'extra_params' => '-f no-reply@tickex.com.ar',
+              'is_html' => 0,
+            )
+          );
+
+          flash($okMail ? 'ok' : 'warn', $okMail ? 'Invitación enviada (requiere aceptación).' : 'Invitación registrada, pero no se pudo enviar el email (revisar mail logs).');
+        }
+      } catch (Exception $e) {
+        flash('err', 'No se pudo crear/enviar la invitación.');
+      }
+    }
+  }
+}
 
 // ===== Detectar columnas opcionales =====
 $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
@@ -249,7 +401,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 /* =========================================================
    CREAR STAFF (POST)
    ========================================================= */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST['action'] !== 'delete_staff')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_staff') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+    flash('err', 'CSRF inválido. Actualizá la página e intentá de nuevo.');
+  } else {
   // Si venimos desde asignación (prefEventoId>0) no mostramos alta aquí, se gestiona en mi staff sin evento seleccionado
   if ($prefEventoId > 0) {
     // ignorar creación en modo asignación
@@ -309,6 +465,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
             flash('err', "Error al crear staff: " . $ex->getMessage());
         }
     }
+  }
 }
     }
 
@@ -466,43 +623,130 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card">
   <h2>Mi staff</h2>
   <div style="color:var(--muted);font-size:14px;">
-    Acá creás usuarios tipo Puerta (y a futuro otros roles).
+    Staff ahora se maneja por invitación (con aceptación obligatoria) sobre cuentas de cliente.
   </div>
 </div>
 
 <?php if ($prefEventoId <= 0): ?>
 <div class="card" style="max-width:700px;">
-  <h3>Crear nuevo staff</h3>
+  <h3>Invitar staff por email</h3>
+  <div class="muted" style="margin:6px 0 10px 0;">La persona invitada se registra (si no tiene cuenta) y acepta la invitación desde su perfil.</div>
 
-  <form method="post">
-    <label>Usuario staff</label>
-    <input name="username" required>
+  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
+    <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
+    <input type="hidden" name="action" value="staff_invite">
 
-    <label>Contraseña</label>
-    <input type="text" name="password" required>
-
-    <label>Plantilla / Rol</label>
-    <select name="plantilla">
-      <option value="puerta">Puerta (check-in)</option>
-    </select>
-
-    <label>Asignar a evento</label>
-    <select name="evento_id" required>
-      <option value="">Elegí un evento...</option>
-      <?php foreach($eventos as $ev): ?>
-        <option value="<?php echo (int)$ev['id']; ?>">
-          #<?php echo (int)$ev['id']; ?> — <?php echo e($ev['nombre']); ?> (<?php echo e($ev['slug']); ?>)
-        </option>
-      <?php endforeach; ?>
-    </select>
-
-    <label>Costo de servicio ($)</label>
-    <input type="number" step="0.01" min="0" name="costo_servicio" placeholder="0" value="0">
-
-    <button class="btn" type="submit">Crear staff</button>
+    <label>Email
+      <input type="email" name="email" required placeholder="persona@email.com">
+    </label>
+    <label>Nombre (opcional)
+      <input type="text" name="nombre" placeholder="Nombre">
+    </label>
+    <label>Apellido (opcional)
+      <input type="text" name="apellido" placeholder="Apellido">
+    </label>
+    <label>Mensaje (opcional)
+      <input type="text" name="mensaje" maxlength="500" placeholder="Ej: Te invitamos a ser staff del evento">
+    </label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" type="submit">Enviar invitación</button>
+    </div>
   </form>
 </div>
 <?php endif; ?>
+
+<?php
+// Listado nuevo: staff activo y pendientes por invitación (por admin)
+$staffNuevo = array();
+$staffPendientes = array();
+try {
+  $stN = $pdo->prepare("SELECT sa.id, sa.cliente_id, sa.rol_staff, sa.created_at,
+      rp.apodo, rp.nombre, rp.apellido, rp.email
+    FROM staff_admins sa
+    LEFT JOIN registro_pendientes rp ON rp.id = sa.cliente_id
+    WHERE sa.owner_admin_id = :aid AND sa.activo = 1
+    ORDER BY sa.id DESC
+    LIMIT 100");
+  $stN->execute(array(':aid' => $adminId));
+  $staffNuevo = $stN->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+  $staffNuevo = array();
+}
+
+try {
+  $stP = $pdo->prepare("SELECT id, email, mensaje, created_at
+    FROM staff_admin_invitaciones
+    WHERE owner_admin_id = :aid AND estado = 'pending'
+    ORDER BY id DESC
+    LIMIT 100");
+  $stP->execute(array(':aid' => $adminId));
+  $staffPendientes = $stP->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+  $staffPendientes = array();
+}
+?>
+
+<div class="card" style="max-width:900px;">
+  <h3>Staff (nuevo)</h3>
+  <?php if (empty($staffNuevo)): ?>
+    <div class="muted">No hay staff activo aún.</div>
+  <?php else: ?>
+    <div style="overflow:auto;">
+      <table class="table" style="width:100%;min-width:780px;">
+        <thead>
+          <tr>
+            <th style="width:90px;">Cliente</th>
+            <th style="width:220px;">Tickex ID</th>
+            <th>Email</th>
+            <th style="width:160px;">Rol</th>
+            <th style="width:180px;">Desde</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($staffNuevo as $s): ?>
+            <tr>
+              <td>#<?php echo (int)$s['cliente_id']; ?></td>
+              <td><?php echo e(($s['apodo'] && $s['apodo'] !== '') ? (string)$s['apodo'] : ('#' . (int)$s['cliente_id'])); ?></td>
+              <td><?php echo e((string)($s['email'] ?? '')); ?></td>
+              <td><?php echo e((string)($s['rol_staff'] ?? 'staff')); ?></td>
+              <td><?php echo e((string)($s['created_at'] ?? '')); ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
+</div>
+
+<div class="card" style="max-width:900px;">
+  <h3>Invitaciones pendientes (nuevo)</h3>
+  <?php if (empty($staffPendientes)): ?>
+    <div class="muted">No hay invitaciones pendientes.</div>
+  <?php else: ?>
+    <div style="overflow:auto;">
+      <table class="table" style="width:100%;min-width:780px;">
+        <thead>
+          <tr>
+            <th style="width:80px;">ID</th>
+            <th style="width:240px;">Email</th>
+            <th>Mensaje</th>
+            <th style="width:180px;">Creada</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($staffPendientes as $p): ?>
+            <tr>
+              <td><?php echo (int)$p['id']; ?></td>
+              <td><?php echo e((string)($p['email'] ?? '')); ?></td>
+              <td><?php echo e((string)($p['mensaje'] ?? '')); ?></td>
+              <td><?php echo e((string)($p['created_at'] ?? '')); ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
+</div>
 
 <div class="card" style="max-width:900px;">
   <h3>Asignar staff existente a un evento</h3>

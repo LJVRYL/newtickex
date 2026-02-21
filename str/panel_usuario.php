@@ -33,6 +33,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
   apellido TEXT,
   apodo TEXT,
   dni TEXT,
+  cbu TEXT,
   genero TEXT,
   foto_path TEXT,
   next_url TEXT,
@@ -45,11 +46,19 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
 try {
   $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
   $hasPass = false;
+  $hasCbu = false;
   foreach ($cols as $c) {
     if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
   }
   if (!$hasPass) {
     $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
+  }
+
+  foreach ($cols as $c) {
+    if (isset($c['name']) && $c['name'] === 'cbu') { $hasCbu = true; break; }
+  }
+  if (!$hasCbu) {
+    $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN cbu TEXT");
   }
 } catch (Exception $e) {
   // ignore
@@ -63,6 +72,40 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS entradas_ocultas_usuario (
 )");
 
 $usuarioId = (int)$_SESSION['usuario_id'];
+
+// Asegurar tablas mínimas para staff (nuevo modelo: staff como rol adicional de cliente)
+try {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS staff_admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_admin_id INTEGER NOT NULL,
+    cliente_id INTEGER NOT NULL,
+    rol_staff TEXT,
+    activo INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(owner_admin_id, cliente_id)
+  )");
+  $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_admins_cliente ON staff_admins(cliente_id)");
+} catch (Exception $e) {
+  // ignore
+}
+
+$revendedorActivo = false;
+try {
+  $stRev = $pdo->prepare("SELECT id FROM revendedores WHERE cliente_id = :cid AND activo = 1 ORDER BY id DESC LIMIT 1");
+  $stRev->execute(array(':cid' => $usuarioId));
+  $revendedorActivo = (bool)$stRev->fetchColumn();
+} catch (Exception $e) {
+  $revendedorActivo = false;
+}
+
+$staffActivo = false;
+try {
+  $stStaff = $pdo->prepare("SELECT 1 FROM staff_admins WHERE cliente_id = :cid AND activo = 1 LIMIT 1");
+  $stStaff->execute(array(':cid' => $usuarioId));
+  $staffActivo = (bool)$stStaff->fetchColumn();
+} catch (Exception $e) {
+  $staffActivo = false;
+}
 
 try {
     // Datos del usuario desde registro_pendientes (clientes)
@@ -86,6 +129,10 @@ try {
     $nombreCompleto  = trim($u['nombre'] . ' ' . $u['apellido']);
     $emailConfirmado = ((int)$u['email_confirmado'] === 1);
     $rol             = $u['rol'];
+    $rolDisplay       = $rol;
+    if ($staffActivo) {
+      $rolDisplay = $rol . ' + staff';
+    }
     $emailUsuario    = $u['email'];
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'hide_ticket') {
@@ -231,6 +278,9 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
             <span class="app-email-text"><?php echo htmlspecialchars($emailUsuario, ENT_QUOTES, 'UTF-8'); ?></span>
           </div>
           <div class="app-meta">Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?></div>
+          <?php if ($staffActivo): ?>
+            <div class="app-meta">Staff: sí</div>
+          <?php endif; ?>
           <div class="app-meta">Tickex ID: <?php echo htmlspecialchars($tickexId, ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
       <?php else: ?>
@@ -257,7 +307,7 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
             </span>
           <?php endif; ?>
           <span style="margin-left:8px;color:var(--muted);">
-            Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?>
+            Rol: <?php echo htmlspecialchars($rolDisplay, ENT_QUOTES, 'UTF-8'); ?>
           </span>
         </div>
       <?php endif; ?>
@@ -286,6 +336,12 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
           <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Mis Tickex <span class="pill" style="background:var(--panel-2);border:1px solid var(--line);">Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?></span></h3>
         <?php endif; ?>
         <div class="app-row-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <?php if ($revendedorActivo): ?>
+            <a class="btn" href="panel_revendedor.php">Dashboard revendedor</a>
+          <?php endif; ?>
+          <?php if ($staffActivo): ?>
+            <a class="btn" href="panel_staff.php">Dashboard staff</a>
+          <?php endif; ?>
           <a class="btn secondary" href="panel_usuario.php?ver_todas=1">Ver todas</a>
           <a class="btn secondary" href="panel_usuario.php">Solo pendientes</a>
         </div>
