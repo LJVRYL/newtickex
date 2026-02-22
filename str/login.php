@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/turnstile.php';
 tickex_send_security_headers();
 tickex_session_start();
 
@@ -105,6 +106,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errores[] = 'Tenés que completar email y contraseña.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errores[] = 'El formato de email no es válido.';
+    }
+
+    // Captcha anti-bot (opcional, solo si hay keys configuradas)
+    if (empty($errores)) {
+      tickex_turnstile_verify_post($errores);
     }
 
     if (empty($errores)) {
@@ -402,6 +408,8 @@ include __DIR__ . '/inc/layout_top.php';
            id="password"
            name="password"
            required>
+
+    <?php tickex_turnstile_widget(array('theme' => 'auto')); ?>
 
     <button class="btn" type="submit" style="width:100%;margin-top:16px;">
       Iniciar sesión

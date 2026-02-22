@@ -3,6 +3,7 @@ require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/totalcoin.php';
 require_once __DIR__.'/inc/db.php';
 require_once __DIR__.'/inc/mail.php';
+require_once __DIR__.'/inc/turnstile.php';
 
 $title = 'Checkout TotalCoin (Tickex)';
 $errors = array();
@@ -508,6 +509,7 @@ if (!function_exists('_tickex_validate_buyer_fields')) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = isset($_POST['action']) ? (string)$_POST['action'] : 'preview';
+  $isLoggedCliente = isset($_SESSION['usuario_id']) && (int)$_SESSION['usuario_id'] > 0;
 
   // Para poder trazar cualquier fallo del paso de pago
   if ($action === 'pay') {
@@ -535,6 +537,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       } catch (Exception $_e) {
       }
     }
+  }
+
+  // Captcha anti-bot (solo para invitados; opcional si hay keys configuradas)
+  if ($action === 'pay' && !$isLoggedCliente) {
+    tickex_turnstile_verify_post($errors);
   }
 
   $concept = $eventName;
@@ -1046,6 +1053,10 @@ include __DIR__.'/inc/layout_top.php';
                 Crear cuenta con estos datos (te enviamos un email para confirmar y definir tu contraseña)
               </span>
             </label>
+
+            <div style="grid-column:1 / -1;">
+              <?php tickex_turnstile_widget(array('theme' => 'auto')); ?>
+            </div>
           <?php endif; ?>
 
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -1147,6 +1158,10 @@ include __DIR__.'/inc/layout_top.php';
                 Crear cuenta con estos datos (te enviamos un email para confirmar y definir tu contraseña)
               </span>
             </label>
+
+            <div style="grid-column:1 / -1;">
+              <?php tickex_turnstile_widget(array('theme' => 'auto')); ?>
+            </div>
           <?php endif; ?>
 
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">

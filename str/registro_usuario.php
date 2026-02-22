@@ -4,6 +4,7 @@
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/db.php';
 require_once __DIR__.'/inc/mail.php';
+require_once __DIR__.'/inc/turnstile.php';
 
 function ensure_registro_pendientes($pdo)
 {
@@ -95,6 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errores[] = 'El email es obligatorio.';
   } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $errores[] = 'El email no tiene un formato válido.';
+  }
+
+  // Captcha anti-bot (opcional, solo si hay keys configuradas)
+  if (empty($errores)) {
+    tickex_turnstile_verify_post($errores);
   }
 
   if (empty($errores)) {
@@ -251,6 +257,8 @@ include __DIR__.'/inc/layout_top.php';
     <label for="email" style="margin-top:8px;display:block;">Email</label>
     <input type="email" id="email" name="email" required
            value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
+
+    <?php tickex_turnstile_widget(array('theme' => 'auto')); ?>
 
     <button class="btn" type="submit" style="width:100%;margin-top:16px;">
       Enviarme enlace de registro
