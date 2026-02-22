@@ -342,7 +342,7 @@ require __DIR__ . '/inc/layout_top.php';
         <div class="form-group">
           <label for="slug_publico">Slug público</label>
           <input type="text" id="slug_publico" name="slug_publico" class="form-control" value="<?php echo e($config['slug_publico']); ?>" required>
-          <small class="form-text text-muted">Minúsculas/números/guiones. URL: <code><?php echo 'https://tickex.com.ar/site.php?slug=' . e($config['slug_publico']); ?></code></small>
+          <small class="form-text text-muted">Minúsculas/números/guiones. URL: <code><?php echo 'https://' . e($config['slug_publico']) . '.tickex.com.ar/site.php?slug=' . e($config['slug_publico']); ?></code></small>
         </div>
 
         <div class="form-group">
@@ -413,7 +413,7 @@ require __DIR__ . '/inc/layout_top.php';
         <?php if (empty($config['slug_publico'])): ?>
           <div class="muted">Guardá un slug para generar el QR.</div>
         <?php else: ?>
-          <?php $qrUrl = 'https://tickex.com.ar/site.php?slug=' . $config['slug_publico']; ?>
+          <?php $qrUrl = 'https://' . $config['slug_publico'] . '.tickex.com.ar/site.php?slug=' . $config['slug_publico']; ?>
           <?php $qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' . rawurlencode($qrUrl); ?>
           <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
             <div style="width:260px;max-width:100%;background:#fff;border-radius:12px;padding:10px;">
