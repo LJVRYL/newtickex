@@ -335,6 +335,19 @@ function flyer_url($ev) {
     <?php endif; ?>
   </main>
 
+  <?php if (!empty($socials)): ?>
+    <section class="main" style="padding-top:0;">
+      <div style="background:#111;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
+        <h3 style="margin:0 0 10px;">Redes</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <?php foreach ($socials as $s): ?>
+            <a class="btn btn-ghost" href="<?php echo e($s['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo e($s['label']); ?></a>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </section>
+  <?php endif; ?>
+
   <footer>
     <div class="footer-grid">
       <div>
