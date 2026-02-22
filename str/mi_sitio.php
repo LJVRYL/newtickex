@@ -414,7 +414,7 @@ require __DIR__ . '/inc/layout_top.php';
           <div class="muted">Guardá un slug para generar el QR.</div>
         <?php else: ?>
           <?php $qrUrl = 'https://' . $config['slug_publico'] . '.tickex.com.ar/site.php?slug=' . $config['slug_publico']; ?>
-          <?php $qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' . rawurlencode($qrUrl); ?>
+          <?php $qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=10&format=png&data=' . rawurlencode($qrUrl); ?>
           <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
             <div style="width:260px;max-width:100%;background:#fff;border-radius:12px;padding:10px;">
               <img src="<?php echo e($qrImg); ?>" alt="QR" style="width:100%;height:auto;display:block;">
