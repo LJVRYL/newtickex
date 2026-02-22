@@ -252,8 +252,8 @@ function flyer_url($ev) {
     .footer-col-title { font-weight:bold; margin-bottom:8px; font-size:14px; }
     .footer-link { display:block; margin-bottom:4px; opacity:0.85; }
     .footer-bottom { opacity:0.7; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
-    .wa-float { position:fixed; right:16px; bottom:16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index:50; background:#ff2e63; border:1px solid #ff2e63; color:#fff; padding:12px 14px; border-radius:999px; font-size:14px; box-shadow:0 6px 18px rgba(0,0,0,0.35); }
-    .wa-float:focus, .wa-float:hover { filter: brightness(1.05); }
+    .btn-wa { display:inline-flex; align-items:center; gap:8px; }
+    .btn-wa svg { width:18px; height:18px; display:block; }
     @media (max-width: 600px) { .main { padding:0 16px 24px; } .events-grid { grid-template-columns:1fr; } .event-card { max-width:360px; margin:0 auto; } .event-card img { max-height:none; object-fit:contain; } }
   </style>
 </head>
@@ -335,11 +335,20 @@ function flyer_url($ev) {
     <?php endif; ?>
   </main>
 
-  <?php if (!empty($socials)): ?>
+  <?php if (!empty($socials) || $whatsappHref !== ''): ?>
     <section class="main" style="padding-top:0;">
       <div style="background:#111;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;">
-        <h3 style="margin:0 0 10px;">Redes</h3>
+        <h3 style="margin:0 0 10px;">Redes y contacto</h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <?php if ($whatsappHref !== ''): ?>
+            <a class="btn btn-primary btn-wa" href="<?php echo e($whatsappHref); ?>" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">
+              <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M19.11 17.55c-.27-.14-1.6-.79-1.85-.88-.25-.09-.43-.14-.61.14-.18.27-.7.88-.86 1.06-.16.18-.32.2-.59.07-.27-.14-1.14-.42-2.17-1.34-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.41.12-.55.12-.12.27-.32.41-.48.14-.16.18-.27.27-.45.09-.18.04-.34-.02-.48-.07-.14-.61-1.47-.84-2.01-.22-.53-.45-.46-.61-.47l-.52-.01c-.18 0-.48.07-.73.34-.25.27-.96.94-.96 2.29s.98 2.66 1.12 2.84c.14.18 1.93 2.95 4.67 4.13.65.28 1.16.45 1.55.58.65.21 1.25.18 1.72.11.52-.08 1.6-.65 1.82-1.28.23-.63.23-1.17.16-1.28-.07-.11-.25-.18-.52-.32z"/>
+                <path fill="currentColor" d="M16.02 3.2c-7.02 0-12.73 5.71-12.73 12.73 0 2.25.59 4.36 1.62 6.19L3.2 28.8l6.86-1.8c1.78.97 3.82 1.53 5.96 1.53h.01c7.02 0 12.73-5.71 12.73-12.73S23.04 3.2 16.02 3.2zm0 22.97h-.01c-1.92 0-3.7-.57-5.2-1.55l-.37-.24-4.07 1.07 1.09-3.97-.25-.41c-1.03-1.59-1.62-3.49-1.62-5.54 0-5.55 4.52-10.07 10.08-10.07 2.69 0 5.22 1.05 7.12 2.95 1.9 1.9 2.95 4.43 2.95 7.12 0 5.55-4.52 10.07-10.08 10.07z"/>
+              </svg>
+              WhatsApp
+            </a>
+          <?php endif; ?>
           <?php foreach ($socials as $s): ?>
             <a class="btn btn-ghost" href="<?php echo e($s['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo e($s['label']); ?></a>
           <?php endforeach; ?>
@@ -380,9 +389,5 @@ function flyer_url($ev) {
       <span>Hecho con &hearts; en Argentina</span>
     </div>
   </footer>
-
-  <?php if ($whatsappHref !== ''): ?>
-    <a class="wa-float" href="<?php echo e($whatsappHref); ?>" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-  <?php endif; ?>
 </body>
 </html>
