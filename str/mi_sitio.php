@@ -32,11 +32,32 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS clientes_sites (
     nombre_publico TEXT NOT NULL,
     texto_hero TEXT,
     texto_intro TEXT,
+  whatsapp TEXT,
+  instagram_url TEXT,
+  tiktok_url TEXT,
+  facebook_url TEXT,
+  youtube_url TEXT,
     visible INTEGER DEFAULT 0,
     created_at TEXT,
     updated_at TEXT
 );");
 $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_sites_slug ON clientes_sites(slug_publico);");
+
+// Asegurar columnas extra en clientes_sites (compat DB existente)
+$colsSites = $pdo->query("PRAGMA table_info(clientes_sites)")->fetchAll(PDO::FETCH_ASSOC);
+$hasWhatsapp = false; $hasIg = false; $hasTt = false; $hasFb = false; $hasYt = false;
+foreach ($colsSites as $c) {
+  if ($c['name'] === 'whatsapp') $hasWhatsapp = true;
+  if ($c['name'] === 'instagram_url') $hasIg = true;
+  if ($c['name'] === 'tiktok_url') $hasTt = true;
+  if ($c['name'] === 'facebook_url') $hasFb = true;
+  if ($c['name'] === 'youtube_url') $hasYt = true;
+}
+if (!$hasWhatsapp) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN whatsapp TEXT"); } catch (Exception $e) { /* ignore */ } }
+if (!$hasIg) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN instagram_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+if (!$hasTt) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN tiktok_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+if (!$hasFb) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN facebook_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+if (!$hasYt) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN youtube_url TEXT"); } catch (Exception $e) { /* ignore */ } }
 
 // Asegurar columna publicado_site en eventos (flag de publicación)
 $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
@@ -66,16 +87,42 @@ $config = array(
     'nombre_publico' => '',
     'texto_hero'     => '',
     'texto_intro'    => '',
+  'whatsapp'       => '',
+  'instagram_url'  => '',
+  'tiktok_url'     => '',
+  'facebook_url'   => '',
+  'youtube_url'    => '',
     'visible'        => 0,
 );
 
 try {
-    $stmt = $pdo->prepare('SELECT slug_publico, nombre_publico, texto_hero, texto_intro, visible FROM clientes_sites WHERE admin_id = :admin_id LIMIT 1');
+  $stmt = $pdo->prepare('SELECT slug_publico, nombre_publico, texto_hero, texto_intro, whatsapp, instagram_url, tiktok_url, facebook_url, youtube_url, visible FROM clientes_sites WHERE admin_id = :admin_id LIMIT 1');
     $stmt->execute(array(':admin_id' => $admin_id));
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($row) { $config = $row; }
 } catch (Exception $e) {
     $errors[] = 'Error al cargar la configuración actual: ' . $e->getMessage();
+}
+
+function _tickex_normalize_url($value)
+{
+  $value = trim((string)$value);
+  if ($value === '') return '';
+  if (preg_match('~^https?://~i', $value)) return $value;
+  return 'https://' . $value;
+}
+
+function _tickex_whatsapp_to_href($value)
+{
+  $value = trim((string)$value);
+  if ($value === '') return '';
+
+  if (preg_match('~^https?://~i', $value)) return $value;
+  if (stripos($value, 'wa.me/') !== false) return (preg_match('~^https?://~i', $value) ? $value : ('https://' . $value));
+
+  $digits = preg_replace('/\D+/', '', $value);
+  if ($digits === '') return '';
+  return 'https://wa.me/' . $digits;
 }
 
 // Toggle publicación de evento
@@ -99,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Guardar config del sitio
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST['action'] !== 'toggle_event')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || ($_POST['action'] !== 'toggle_event' && $_POST['action'] !== 'save_extras'))) {
     $nombre_publico = isset($_POST['nombre_publico']) ? trim($_POST['nombre_publico']) : '';
     $slug_publico   = isset($_POST['slug_publico']) ? trim($_POST['slug_publico']) : '';
     $texto_hero     = isset($_POST['texto_hero']) ? trim($_POST['texto_hero']) : '';
@@ -176,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
             }
 
             $saved = true;
-            $config = compact('slug_publico','nombre_publico','texto_hero','texto_intro','visible');
+            $config = array_merge($config, compact('slug_publico','nombre_publico','texto_hero','texto_intro','visible'));
         } catch (Exception $e) {
             $errors[] = 'Error al guardar la configuración: ' . $e->getMessage();
         }
@@ -188,6 +235,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
         $config['visible']        = $visible;
     }
 }
+
+      // Guardar redes/whatsapp
+      if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_extras') {
+        if (empty($config['slug_publico'])) {
+          $errors[] = 'Primero guardá un slug público para habilitar redes y QR.';
+        } else {
+          $whatsapp = isset($_POST['whatsapp']) ? trim($_POST['whatsapp']) : '';
+          $instagram_url = isset($_POST['instagram_url']) ? _tickex_normalize_url($_POST['instagram_url']) : '';
+          $tiktok_url = isset($_POST['tiktok_url']) ? _tickex_normalize_url($_POST['tiktok_url']) : '';
+          $facebook_url = isset($_POST['facebook_url']) ? _tickex_normalize_url($_POST['facebook_url']) : '';
+          $youtube_url = isset($_POST['youtube_url']) ? _tickex_normalize_url($_POST['youtube_url']) : '';
+
+          if ($whatsapp !== '' && _tickex_whatsapp_to_href($whatsapp) === '') {
+            $errors[] = 'El WhatsApp ingresado no parece válido. Poné un número (con código de país) o un link.';
+          }
+
+          if (empty($errors)) {
+            $now = date('c');
+            try {
+              $stmt = $pdo->prepare('SELECT id FROM clientes_sites WHERE admin_id = :admin_id LIMIT 1');
+              $stmt->execute(array(':admin_id' => $admin_id));
+              $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+              if (!$existing) {
+                $errors[] = 'Primero guardá la configuración del sitio (nombre + slug) para poder cargar redes.';
+              } else {
+                $stmt = $pdo->prepare('UPDATE clientes_sites SET whatsapp = :whatsapp, instagram_url = :ig, tiktok_url = :tt, facebook_url = :fb, youtube_url = :yt, updated_at = :updated_at WHERE admin_id = :admin_id');
+                $stmt->execute(array(
+                  ':whatsapp' => $whatsapp,
+                  ':ig' => $instagram_url,
+                  ':tt' => $tiktok_url,
+                  ':fb' => $facebook_url,
+                  ':yt' => $youtube_url,
+                  ':updated_at' => $now,
+                  ':admin_id' => $admin_id,
+                ));
+                $saved = true;
+                $config['whatsapp'] = $whatsapp;
+                $config['instagram_url'] = $instagram_url;
+                $config['tiktok_url'] = $tiktok_url;
+                $config['facebook_url'] = $facebook_url;
+                $config['youtube_url'] = $youtube_url;
+              }
+            } catch (Exception $e) {
+              $errors[] = 'Error al guardar redes/WhatsApp: ' . $e->getMessage();
+            }
+          } else {
+            $config['whatsapp'] = $whatsapp;
+            $config['instagram_url'] = $instagram_url;
+            $config['tiktok_url'] = $tiktok_url;
+            $config['facebook_url'] = $facebook_url;
+            $config['youtube_url'] = $youtube_url;
+          }
+        }
+      }
 
 // Eventos del admin
 if ($hasCreadoPor) {
@@ -265,6 +366,71 @@ require __DIR__ . '/inc/layout_top.php';
           <?php endif; ?>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h3 style="margin-top:0;">Redes, WhatsApp y QR</h3>
+      <p class="muted" style="margin-top:4px;">Si cargás WhatsApp o redes, se muestran en tu sitio público. El QR siempre apunta a tu slug.</p>
+
+      <form method="post" action="mi_sitio.php">
+        <input type="hidden" name="action" value="save_extras">
+
+        <div class="form-group">
+          <label for="whatsapp">WhatsApp (opcional)</label>
+          <input type="text" id="whatsapp" name="whatsapp" class="form-control" value="<?php echo e($config['whatsapp']); ?>" placeholder="Ej: 54911XXXXXXXX o https://wa.me/54911XXXXXXXX">
+          <small class="form-text text-muted">Si lo dejás vacío, no se muestra el botón flotante de WhatsApp.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="instagram_url">Instagram (opcional)</label>
+          <input type="text" id="instagram_url" name="instagram_url" class="form-control" value="<?php echo e($config['instagram_url']); ?>" placeholder="https://instagram.com/tuusuario">
+        </div>
+
+        <div class="form-group">
+          <label for="tiktok_url">TikTok (opcional)</label>
+          <input type="text" id="tiktok_url" name="tiktok_url" class="form-control" value="<?php echo e($config['tiktok_url']); ?>" placeholder="https://tiktok.com/@tuusuario">
+        </div>
+
+        <div class="form-group">
+          <label for="facebook_url">Facebook (opcional)</label>
+          <input type="text" id="facebook_url" name="facebook_url" class="form-control" value="<?php echo e($config['facebook_url']); ?>" placeholder="https://facebook.com/tupagina">
+        </div>
+
+        <div class="form-group">
+          <label for="youtube_url">YouTube (opcional)</label>
+          <input type="text" id="youtube_url" name="youtube_url" class="form-control" value="<?php echo e($config['youtube_url']); ?>" placeholder="https://youtube.com/@tuusuario">
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Guardar redes y WhatsApp</button>
+        </div>
+      </form>
+
+      <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px;">
+        <h4 style="margin:0 0 8px;">QR del sitio</h4>
+        <?php if (empty($config['slug_publico'])): ?>
+          <div class="muted">Guardá un slug para generar el QR.</div>
+        <?php else: ?>
+          <?php $qrUrl = 'https://tickex.com.ar/site.php?slug=' . $config['slug_publico']; ?>
+          <?php $qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' . rawurlencode($qrUrl); ?>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+            <div style="width:260px;max-width:100%;background:#fff;border-radius:12px;padding:10px;">
+              <img src="<?php echo e($qrImg); ?>" alt="QR" style="width:100%;height:auto;display:block;">
+            </div>
+            <div style="min-width:220px;flex:1;">
+              <div style="font-weight:700;">URL del QR</div>
+              <div style="margin-top:6px;word-break:break-word;"><code><?php echo e($qrUrl); ?></code></div>
+              <div style="margin-top:10px;">
+                <a class="btn secondary" href="<?php echo e($qrImg); ?>" target="_blank" rel="noopener noreferrer">Abrir QR</a>
+                <a class="btn secondary" href="<?php echo e($qrUrl); ?>" target="_blank" rel="noopener noreferrer">Abrir sitio</a>
+              </div>
+              <div class="muted" style="font-size:12px;margin-top:10px;">Este QR es fijo para tu slug (ideal para afiches, volantes y stickers).</div>
+            </div>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
   </div>
 

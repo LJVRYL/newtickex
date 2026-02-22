@@ -47,9 +47,29 @@ if (!$hasPublicar) {
     try { $pdo->exec("ALTER TABLE eventos ADD COLUMN publicado_site INTEGER DEFAULT 0"); } catch (Exception $e) { /* ignore */ }
 }
 
+// Asegurar columnas extra en clientes_sites (compat DB existente)
+try {
+  $colsSites = $pdo->query("PRAGMA table_info(clientes_sites)")->fetchAll(PDO::FETCH_ASSOC);
+  $hasWhatsapp = false; $hasIg = false; $hasTt = false; $hasFb = false; $hasYt = false;
+  foreach ($colsSites as $c) {
+    if ($c['name'] === 'whatsapp') $hasWhatsapp = true;
+    if ($c['name'] === 'instagram_url') $hasIg = true;
+    if ($c['name'] === 'tiktok_url') $hasTt = true;
+    if ($c['name'] === 'facebook_url') $hasFb = true;
+    if ($c['name'] === 'youtube_url') $hasYt = true;
+  }
+  if (!$hasWhatsapp) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN whatsapp TEXT"); } catch (Exception $e) { /* ignore */ } }
+  if (!$hasIg) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN instagram_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+  if (!$hasTt) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN tiktok_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+  if (!$hasFb) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN facebook_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+  if (!$hasYt) { try { $pdo->exec("ALTER TABLE clientes_sites ADD COLUMN youtube_url TEXT"); } catch (Exception $e) { /* ignore */ } }
+} catch (Exception $e) {
+  // ignore
+}
+
 // Config del sitio
 try {
-    $stmt = $pdo->prepare('SELECT admin_id, nombre_publico, texto_hero, texto_intro, visible FROM clientes_sites WHERE slug_publico = :slug LIMIT 1');
+  $stmt = $pdo->prepare('SELECT admin_id, nombre_publico, texto_hero, texto_intro, whatsapp, instagram_url, tiktok_url, facebook_url, youtube_url, visible FROM clientes_sites WHERE slug_publico = :slug LIMIT 1');
     $stmt->execute(array(':slug' => $slug));
     $site = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -88,6 +108,39 @@ $nombre_publico = $site['nombre_publico'];
 $url_publico = $slug . '.tickex.com.ar';
 $texto_hero     = $site['texto_hero'] !== '' ? $site['texto_hero'] : 'Entradas oficiales para nuestros eventos';
 $texto_intro    = $site['texto_intro'] !== '' ? $site['texto_intro'] : 'Encontrá acá todas las fechas disponibles.';
+
+function _tickex_normalize_url($value)
+{
+  $value = trim((string)$value);
+  if ($value === '') return '';
+  if (preg_match('~^https?://~i', $value)) return $value;
+  return 'https://' . $value;
+}
+
+function _tickex_whatsapp_to_href($value)
+{
+  $value = trim((string)$value);
+  if ($value === '') return '';
+
+  if (preg_match('~^https?://~i', $value)) return $value;
+  if (stripos($value, 'wa.me/') !== false) return (preg_match('~^https?://~i', $value) ? $value : ('https://' . $value));
+
+  $digits = preg_replace('/\D+/', '', $value);
+  if ($digits === '') return '';
+  return 'https://wa.me/' . $digits;
+}
+
+$socials = array();
+$ig = isset($site['instagram_url']) ? _tickex_normalize_url($site['instagram_url']) : '';
+$tt = isset($site['tiktok_url']) ? _tickex_normalize_url($site['tiktok_url']) : '';
+$fb = isset($site['facebook_url']) ? _tickex_normalize_url($site['facebook_url']) : '';
+$yt = isset($site['youtube_url']) ? _tickex_normalize_url($site['youtube_url']) : '';
+if ($ig !== '' && $ig !== 'https://') $socials[] = array('label' => 'Instagram', 'url' => $ig);
+if ($tt !== '' && $tt !== 'https://') $socials[] = array('label' => 'TikTok', 'url' => $tt);
+if ($fb !== '' && $fb !== 'https://') $socials[] = array('label' => 'Facebook', 'url' => $fb);
+if ($yt !== '' && $yt !== 'https://') $socials[] = array('label' => 'YouTube', 'url' => $yt);
+
+$whatsappHref = isset($site['whatsapp']) ? _tickex_whatsapp_to_href($site['whatsapp']) : '';
 
 // Cargar eventos publicados del admin
 if ($hasCreadoPor) {
@@ -199,6 +252,8 @@ function flyer_url($ev) {
     .footer-col-title { font-weight:bold; margin-bottom:8px; font-size:14px; }
     .footer-link { display:block; margin-bottom:4px; opacity:0.85; }
     .footer-bottom { opacity:0.7; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+    .wa-float { position:fixed; right:16px; bottom:16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index:50; background:#ff2e63; border:1px solid #ff2e63; color:#fff; padding:12px 14px; border-radius:999px; font-size:14px; box-shadow:0 6px 18px rgba(0,0,0,0.35); }
+    .wa-float:focus, .wa-float:hover { filter: brightness(1.05); }
     @media (max-width: 600px) { .main { padding:0 16px 24px; } .events-grid { grid-template-columns:1fr; } .event-card { max-width:360px; margin:0 auto; } .event-card img { max-height:none; object-fit:contain; } }
   </style>
 </head>
@@ -298,11 +353,23 @@ function flyer_url($ev) {
         <span class="footer-link">Botón de arrepentimiento</span>
         <span class="footer-link">Contacto</span>
       </div>
+      <?php if (!empty($socials)): ?>
+        <div>
+          <div class="footer-col-title">Redes</div>
+          <?php foreach ($socials as $s): ?>
+            <a class="footer-link" href="<?php echo e($s['url']); ?>" target="_blank" rel="noopener noreferrer"><?php echo e($s['label']); ?></a>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </div>
     <div class="footer-bottom">
       <span>© Tickex <?php echo date('Y'); ?></span>
       <span>Hecho con &hearts; en Argentina</span>
     </div>
   </footer>
+
+  <?php if ($whatsappHref !== ''): ?>
+    <a class="wa-float" href="<?php echo e($whatsappHref); ?>" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+  <?php endif; ?>
 </body>
 </html>
