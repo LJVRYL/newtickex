@@ -5,6 +5,17 @@
 // - Env: TICKEX_TURNSTILE_SITE_KEY / TICKEX_TURNSTILE_SECRET_KEY
 // - Const: TICKEX_TURNSTILE_SITE_KEY / TICKEX_TURNSTILE_SECRET_KEY
 
+// Opción local (no versionada): si existe, puede definir las constantes.
+// Archivo esperado: str/.secrets/turnstile.php
+try {
+  $secretsFile = __DIR__ . '/../.secrets/turnstile.php';
+  if (@is_file($secretsFile)) {
+    require_once $secretsFile;
+  }
+} catch (Throwable $_t) {
+  // ignore
+}
+
 if (!function_exists('tickex_turnstile_site_key')) {
   function tickex_turnstile_site_key()
   {
