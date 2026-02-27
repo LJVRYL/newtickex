@@ -12,7 +12,7 @@ try {
   if (@is_file($secretsFile)) {
     require_once $secretsFile;
   }
-} catch (Throwable $_t) {
+} catch (Exception $_t) {
   // ignore
 }
 

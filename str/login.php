@@ -338,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($cli && $okCli) {
                     $_SESSION['usuario_id']     = (int)$cli['id'];
                     $_SESSION['usuario_email']  = $cli['email'];
-                    $_SESSION['usuario_nombre'] = trim(($cli['nombre'] ?? '') . ' ' . ($cli['apellido'] ?? ''));
+                    $_SESSION['usuario_nombre'] = trim((isset($cli['nombre']) ? (string)$cli['nombre'] : '') . ' ' . (isset($cli['apellido']) ? (string)$cli['apellido'] : ''));
                   $_SESSION['first_name']      = isset($cli['nombre']) ? (string)$cli['nombre'] : '';
                   $_SESSION['last_name']       = isset($cli['apellido']) ? (string)$cli['apellido'] : '';
                   $_SESSION['dni']             = isset($cli['dni']) ? (string)$cli['dni'] : '';

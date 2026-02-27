@@ -42,13 +42,13 @@ if ($affCandidate !== '' && preg_match('/^\d+$/', $affCandidate)) {
   $revendedorId = (int)$affCandidate;
 }
 $defaults = array(
-  'amount'      => $_GET['amount'] ?? '',
-  'concept'     => $_GET['concept'] ?? ($_GET['event'] ?? ''),
-  'dni'         => $_GET['dni'] ?? '',
-  'ref'         => $_GET['ref'] ?? (isset($_GET['event']) ? ('str-' . preg_replace('/[^a-zA-Z0-9_-]/','', (string)$_GET['event']) . '-' . time()) : ''),
-  'last_name'   => $_GET['last_name'] ?? '',
-  'first_name'  => $_GET['first_name'] ?? '',
-  'email'       => $_GET['email'] ?? '',
+  'amount'      => isset($_GET['amount']) ? (string)$_GET['amount'] : '',
+  'concept'     => isset($_GET['concept']) ? (string)$_GET['concept'] : (isset($_GET['event']) ? (string)$_GET['event'] : ''),
+  'dni'         => isset($_GET['dni']) ? (string)$_GET['dni'] : '',
+  'ref'         => isset($_GET['ref']) ? (string)$_GET['ref'] : (isset($_GET['event']) ? ('str-' . preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$_GET['event']) . '-' . time()) : ''),
+  'last_name'   => isset($_GET['last_name']) ? (string)$_GET['last_name'] : '',
+  'first_name'  => isset($_GET['first_name']) ? (string)$_GET['first_name'] : '',
+  'email'       => isset($_GET['email']) ? (string)$_GET['email'] : '',
 );
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
 
@@ -71,7 +71,7 @@ if ($tcGo === 1 && $tcRid !== '' && $paymentUrl === null) {
     } else {
       $errors[] = 'No se encontró la orden para continuar al pago. (RID: ' . e($tcRid) . ')';
     }
-  } catch (Throwable $_t) {
+  } catch (Exception $_t) {
     $errors[] = 'No se pudo cargar la orden para continuar al pago.';
   }
 }
@@ -160,10 +160,10 @@ if ($revendedorId > 0) {
   }
 }
 
-$sessionEmail = $_SESSION['usuario_email'] ?? ($_SESSION['email'] ?? ($cu['email'] ?? ($_SESSION['usuario'] ?? '')));
-$sessionFirst = $_SESSION['first_name'] ?? '';
-$sessionLast  = $_SESSION['last_name'] ?? '';
-$sessionDni   = $_SESSION['dni'] ?? '';
+$sessionEmail = isset($_SESSION['usuario_email']) ? (string)$_SESSION['usuario_email'] : (isset($_SESSION['email']) ? (string)$_SESSION['email'] : (isset($cu['email']) ? (string)$cu['email'] : (isset($_SESSION['usuario']) ? (string)$_SESSION['usuario'] : '')));
+$sessionFirst = isset($_SESSION['first_name']) ? (string)$_SESSION['first_name'] : '';
+$sessionLast  = isset($_SESSION['last_name']) ? (string)$_SESSION['last_name'] : '';
+$sessionDni   = isset($_SESSION['dni']) ? (string)$_SESSION['dni'] : '';
 
 // Si el usuario está logueado como cliente pero no tenemos datos en sesión,
 // intentar cargarlos desde registro_pendientes para no caer en loop de login.
@@ -245,9 +245,13 @@ if ($eventId > 0) {
       if ($creatorCol && isset($evRow[$creatorCol]) && (int)$evRow[$creatorCol] > 0) {
         $eventOwnerAdminId = (int)$evRow[$creatorCol];
       }
-      $eventName = $evRow['nombre'] ?? $eventName;
-      $eventDate = $evRow['fecha_desde'] ?? $eventDate;
-      $eventLoc  = $evRow['lugar'] ?? ($evRow['ubicacion'] ?? $eventLoc);
+      if (isset($evRow['nombre']) && $evRow['nombre'] !== null) $eventName = $evRow['nombre'];
+      if (isset($evRow['fecha_desde']) && $evRow['fecha_desde'] !== null) $eventDate = $evRow['fecha_desde'];
+      if (isset($evRow['lugar']) && $evRow['lugar'] !== null) {
+        $eventLoc = $evRow['lugar'];
+      } elseif (isset($evRow['ubicacion']) && $evRow['ubicacion'] !== null) {
+        $eventLoc = $evRow['ubicacion'];
+      }
 
       if (!empty($evRow['flyer_filename'])) {
         $ff = $evRow['flyer_filename'];
@@ -305,7 +309,7 @@ if ($eventId > 0) {
         }
         $ticketTypes[] = array(
           'Id'    => $r['id'],
-          'Name'  => $r['nombre'] ?? 'Entrada',
+          'Name'  => isset($r['nombre']) ? $r['nombre'] : 'Entrada',
           'Price' => isset($r['precio']) ? (float)$r['precio'] : 0,
           'Available' => isset($r['cantidad_disponible']) ? (int)$r['cantidad_disponible'] : (isset($r['cantidad_total']) ? (int)$r['cantidad_total'] : null),
         );
@@ -357,7 +361,7 @@ $nextUrl = $_SERVER['REQUEST_URI'];
 // Login en el mismo host (soporta localhost/dev). Evita hardcodear el dominio productivo.
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] !== '' ? $_SERVER['HTTP_HOST'] : 'localhost';
-$basePath = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
+$basePath = rtrim(dirname(isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '/'), '/\\');
 if ($basePath === '' || $basePath === '.') { $basePath = ''; }
 $loginBase = $scheme . '://' . $host . $basePath . '/login.php';
 
@@ -513,7 +517,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // Para poder trazar cualquier fallo del paso de pago
   if ($action === 'pay') {
-    $tmpRefForId = isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] ?? '');
+    $tmpRefForId = isset($_POST['ref']) ? (string)$_POST['ref'] : (string)(isset($defaults['ref']) ? $defaults['ref'] : '');
     if ($tmpRefForId === '') $tmpRefForId = 'str-' . $eventId;
     $lastDebugId = 'TC-' . date('Ymd-His') . '-' . substr(sha1($tmpRefForId . '|' . (string)$eventId . '|' . microtime(true)), 0, 8);
     try {
@@ -545,7 +549,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   $concept = $eventName;
-  $ref = trim($_POST['ref'] ?? ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())));
+  $ref = trim(isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())));
   if ($ref === '') $errors[] = 'Referencia requerida';
 
   $affPost = isset($_POST['aff']) ? (int)$_POST['aff'] : 0;
@@ -580,16 +584,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $preview['selected'] = $selectedTickets;
     $preview['total'] = $total;
     $preview['ref'] = $ref;
-    $preview['dni'] = trim((string)($defaults['dni'] ?? ''));
-    $preview['first_name'] = trim((string)($defaults['first_name'] ?? ''));
-    $preview['last_name'] = trim((string)($defaults['last_name'] ?? ''));
-    $preview['email'] = trim((string)($defaults['email'] ?? ''));
+    $preview['dni'] = trim((string)(isset($defaults['dni']) ? $defaults['dni'] : ''));
+    $preview['first_name'] = trim((string)(isset($defaults['first_name']) ? $defaults['first_name'] : ''));
+    $preview['last_name'] = trim((string)(isset($defaults['last_name']) ? $defaults['last_name'] : ''));
+    $preview['email'] = trim((string)(isset($defaults['email']) ? $defaults['email'] : ''));
   } elseif ($action === 'pay') {
     $step = 'confirm';
-    $dni = trim((string)($_POST['dni'] ?? $defaults['dni']));
-    $last = trim((string)($_POST['last_name'] ?? $defaults['last_name']));
-    $first = trim((string)($_POST['first_name'] ?? $defaults['first_name']));
-    $email = trim((string)($_POST['email'] ?? $defaults['email']));
+    $dni = trim((string)(isset($_POST['dni']) ? $_POST['dni'] : $defaults['dni']));
+    $last = trim((string)(isset($_POST['last_name']) ? $_POST['last_name'] : $defaults['last_name']));
+    $first = trim((string)(isset($_POST['first_name']) ? $_POST['first_name'] : $defaults['first_name']));
+    $email = trim((string)(isset($_POST['email']) ? $_POST['email'] : $defaults['email']));
     $createAccount = 0;
     if (isset($_POST['create_account'])) {
       $v = (string)$_POST['create_account'];
@@ -694,7 +698,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   'mail_ok' => (bool)$mailOk,
                 ));
               }
-            } catch (Throwable $_t) {
+            } catch (Exception $_t) {
               // ignore
             }
           } else {
@@ -706,11 +710,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   'reg_id' => (int)$ex['id'],
                 ));
               }
-            } catch (Throwable $_t) {
+            } catch (Exception $_t) {
               // ignore
             }
           }
-        } catch (Throwable $_t) {
+        } catch (Exception $_t) {
           try {
             if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
               tc_debug_log($lastDebugId, 'register_error', array(
@@ -718,7 +722,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'msg' => (string)$_t->getMessage(),
               ));
             }
-          } catch (Throwable $_t2) {
+          } catch (Exception $_t2) {
             // ignore
           }
           // No bloquear pago por error de registro/email
@@ -731,7 +735,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
               tc_debug_log($lastDebugId, 'gateway_start', array('event_id' => (int)$eventId, 'ref' => (string)$ref, 'amount' => (float)$total));
             }
-          } catch (Throwable $_t) {
+          } catch (Exception $_t) {
             // ignore
           }
 
@@ -741,7 +745,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
               tc_debug_log($lastDebugId, 'gateway_ok', array('event_id' => (int)$eventId, 'ref' => (string)$ref));
             }
-          } catch (Throwable $_t) {
+          } catch (Exception $_t) {
             // ignore
           }
 
@@ -831,7 +835,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   $ridForGo = substr($paymentUrl, $posGo + 10);
                 }
               }
-            } catch (Throwable $_t) {
+            } catch (Exception $_t) {
               $ridForGo = '';
             }
 
@@ -849,7 +853,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   'rid' => (string)$ridForGo,
                 ));
               }
-            } catch (Throwable $_t) {
+            } catch (Exception $_t) {
               // ignore
             }
 
@@ -865,7 +869,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // quedarnos en esta misma respuesta y dejar que el browser navegue con JS.
             $redirectFallback = array('auto' => true, 'reason' => ($ridForGo !== '' ? 'prg_unavailable' : 'no_rid'), 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
-        } catch (Throwable $e) {
+        } catch (Exception $e) {
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público
           try {
@@ -884,7 +888,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'callback_base' => isset($cfg['callback_base']) ? (string)$cfg['callback_base'] : null,
               ));
             }
-          } catch (Throwable $_e) {
+          } catch (Exception $_e) {
             // ignore
           }
           $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
@@ -1023,7 +1027,7 @@ include __DIR__.'/inc/layout_top.php';
           <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time()))); ?>">
           <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
 
-          <?php foreach (($preview['selected'] ?? array()) as $ln): ?>
+          <?php foreach ((isset($preview['selected']) ? $preview['selected'] : array()) as $ln): ?>
             <input type="hidden" name="selected_id[]" value="<?php echo e((string)$ln['id']); ?>">
             <input type="hidden" name="selected_qty[]" value="<?php echo (int)$ln['qty']; ?>">
           <?php endforeach; ?>
