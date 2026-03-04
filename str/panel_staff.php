@@ -164,8 +164,23 @@ $rowsEntradas = array();
 if ($activeEventId > 0) {
   try {
     $filters = array();
-    if ($q !== '') $filters['q'] = $q;
     $rowsEntradas = get_unified_entries($pdo, $activeEventId, $filters);
+
+    if ($q !== '') {
+      $qNeedle = function_exists('mb_strtolower') ? mb_strtolower($q, 'UTF-8') : strtolower($q);
+      $rowsEntradas = array_values(array_filter($rowsEntradas, function ($row) use ($qNeedle) {
+        $haystack = array(
+          isset($row['nombre']) ? (string)$row['nombre'] : '',
+          isset($row['ticket_ref']) ? (string)$row['ticket_ref'] : '',
+          isset($row['email']) ? (string)$row['email'] : '',
+          isset($row['tipo']) ? (string)$row['tipo'] : '',
+        );
+        $txt = implode(' ', $haystack);
+        $txt = function_exists('mb_strtolower') ? mb_strtolower($txt, 'UTF-8') : strtolower($txt);
+        return strpos($txt, $qNeedle) !== false;
+      }));
+    }
+
     if (count($rowsEntradas) > 300) {
       $rowsEntradas = array_slice($rowsEntradas, 0, 300);
     }

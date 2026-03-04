@@ -40,7 +40,7 @@ include __DIR__ . '/inc/layout_top.php';
 
   <div class="scan-card">
     <div id="qr-reader-page"></div>
-    <div class="muted" style="font-size:12px;margin-top:10px;">Permití cámara y enfocá el código QR del ingreso.</div>
+    <div id="scan-status" class="muted" style="font-size:12px;margin-top:10px;">Permití cámara y enfocá el código QR del ingreso.</div>
   </div>
 </div>
 
@@ -49,6 +49,11 @@ include __DIR__ . '/inc/layout_top.php';
   (function () {
     var eventoId = <?php echo (int)$eventoId; ?>;
     var qrScanner = new Html5Qrcode('qr-reader-page');
+    var statusEl = document.getElementById('scan-status');
+
+    function setStatus(msg) {
+      if (statusEl) statusEl.textContent = msg;
+    }
 
     function extractCode(text) {
       try {
@@ -61,21 +66,37 @@ include __DIR__ . '/inc/layout_top.php';
       return text;
     }
 
-    qrScanner.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: 260 },
-      function (decodedText) {
-        var code = extractCode(decodedText || '');
-        if (!code) return;
-        qrScanner.stop().then(function () {
-          var target = 'checkin.php?c=' + encodeURIComponent(code);
-          if (eventoId > 0) target += '&evento_id=' + encodeURIComponent(String(eventoId));
-          window.location.href = target;
+    function onScan(decodedText) {
+      var code = extractCode(decodedText || '');
+      if (!code) return;
+      qrScanner.stop().then(function () {
+        var target = 'checkin.php?c=' + encodeURIComponent(code);
+        if (eventoId > 0) target += '&evento_id=' + encodeURIComponent(String(eventoId));
+        window.location.href = target;
+      });
+    }
+
+    function tryStartWith(config) {
+      return qrScanner.start(config, { fps: 10, qrbox: 260 }, onScan);
+    }
+
+    setStatus('Iniciando cámara...');
+    tryStartWith({ facingMode: 'environment' })
+      .catch(function () {
+        return Html5Qrcode.getCameras().then(function (cameras) {
+          if (cameras && cameras.length > 0) {
+            return tryStartWith({ deviceId: { exact: cameras[0].id } });
+          }
+          throw new Error('No se detectaron cámaras disponibles.');
         });
-      }
-    ).catch(function () {
-      alert('No se pudo iniciar la cámara. Revisá permisos del navegador.');
-    });
+      })
+      .then(function () {
+        setStatus('Cámara activa. Enfocá el QR del ingreso.');
+      })
+      .catch(function (err) {
+        var msg = (err && err.message) ? err.message : String(err || 'Error desconocido');
+        setStatus('No se pudo iniciar la cámara. ' + msg + ' Si estás en la app, habilitá permiso de cámara de la app en Android.');
+      });
   })();
 </script>
 
