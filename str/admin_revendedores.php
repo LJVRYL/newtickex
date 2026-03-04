@@ -211,6 +211,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ));
             $invId = (int)$pdo->lastInsertId();
 
+            if ($clienteId > 0) {
+              require_once __DIR__ . '/inc/notificaciones.php';
+              add_notification(
+                $clienteId,
+                'Te invitaron a ser parte del staff de un evento. Revisá tu perfil para aceptar.',
+                'staff_invite',
+                array('admin_id' => $adminId, 'inv_id' => $invId)
+              );
+            }
+
             $registerUrl = '';
             if ($needsReg && $regToken !== '') {
               $registerUrl = ($base !== '' ? $base : '') . '/completar_registro.php?token=' . urlencode($regToken);

@@ -3,7 +3,9 @@ require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/totalcoin.php';
 require_once __DIR__.'/inc/db.php';
 require_once __DIR__.'/inc/mail.php';
+
 require_once __DIR__.'/inc/turnstile.php';
+require_once __DIR__.'/inc/arca.php'; // Integración ARCA/AFIP
 
 $title = 'Checkout TotalCoin (Tickex)';
 $errors = array();
@@ -517,6 +519,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // Para poder trazar cualquier fallo del paso de pago
   if ($action === 'pay') {
+    // Notificación: "Te llegó un Tickex"
+    if (empty($errors)) {
+      require_once __DIR__ . '/inc/notificaciones.php';
+      // Buscar el usuario (cliente) por email
+      $pdoNotif = db();
+      $stUser = $pdoNotif->prepare('SELECT id FROM registro_pendientes WHERE email = :email LIMIT 1');
+      $stUser->execute([':email' => $email]);
+      $userIdNotif = (int)$stUser->fetchColumn();
+      if ($userIdNotif > 0) {
+        add_notification($userIdNotif, '¡Te llegó un Tickex! Ya podés ver tu entrada en Mis Tickex.', 'tickex', [ 'evento_id' => $eventId, 'ref' => $ref ]);
+      }
+    }
     $tmpRefForId = isset($_POST['ref']) ? (string)$_POST['ref'] : (string)(isset($defaults['ref']) ? $defaults['ref'] : '');
     if ($tmpRefForId === '') $tmpRefForId = 'str-' . $eventId;
     $lastDebugId = 'TC-' . date('Ymd-His') . '-' . substr(sha1($tmpRefForId . '|' . (string)$eventId . '|' . microtime(true)), 0, 8);
@@ -749,54 +763,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ignore
           }
 
-        // Persistir orden (requestId) para auditoría/atribución (revendedor)
-        if ($paymentUrl) {
-          $requestId = '';
-          try {
-            $u = @parse_url($paymentUrl);
-            if (is_array($u) && isset($u['query'])) {
-              $q = array();
-              @parse_str($u['query'], $q);
-              if (isset($q['requestId'])) {
-                $requestId = (string)$q['requestId'];
-              }
-            }
-            if ($requestId === '') {
-              $pos = strpos($paymentUrl, 'requestId=');
-              if ($pos !== false) {
-                $requestId = substr($paymentUrl, $pos + 10);
-              }
-            }
-          } catch (Exception $_e) {}
-
-          if ($requestId !== '') {
+          // Persistir orden (requestId) para auditoría/atribución (revendedor)
+          if ($paymentUrl) {
+            $requestId = '';
             try {
-              $pdoSave = db();
-              $ticketsJson = '';
-              try { $ticketsJson = json_encode($selectedTickets); } catch (Exception $_e) { $ticketsJson = ''; }
-              $ip = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
-              $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
-              $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, updated_at)
-                VALUES (:rid, :st, :eid, :ref, :c, :am, :dni, :bl, :bf, :be, :rev, :tj, :pu, :ip, :ua, datetime('now'))");
-              $stIns->execute(array(
-                ':rid' => $requestId,
-                ':st'  => 'created',
-                ':eid' => $eventId,
-                ':ref' => $ref,
-                ':c'   => $concept,
-                ':am'  => $total,
-                ':dni' => $dni,
-                ':bl'  => $last,
-                ':bf'  => $first,
-                ':be'  => $email,
-                ':rev' => ($revendedorId > 0 ? $revendedorId : null),
-                ':tj'  => $ticketsJson,
-                ':pu'  => $paymentUrl,
-                ':ip'  => $ip,
-                ':ua'  => $ua,
-              ));
+              $u = @parse_url($paymentUrl);
+              if (is_array($u) && isset($u['query'])) {
+                $q = array();
+                @parse_str($u['query'], $q);
+                if (isset($q['requestId'])) {
+                  $requestId = (string)$q['requestId'];
+                }
+              }
+              if ($requestId === '') {
+                $pos = strpos($paymentUrl, 'requestId=');
+                if ($pos !== false) {
+                  $requestId = substr($paymentUrl, $pos + 10);
+                }
+              }
+            } catch (Exception $_e) {}
 
-              // si ya existía, actualizar los campos de atribución
+            if ($requestId !== '') {
+              try {
+                $pdoSave = db();
+                $ticketsJson = '';
+                try { $ticketsJson = json_encode($selectedTickets); } catch (Exception $_e) { $ticketsJson = ''; }
+                $ip = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
+                $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
+                $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, updated_at)
+                  VALUES (:rid, :st, :eid, :ref, :c, :am, :dni, :bl, :bf, :be, :rev, :tj, :pu, :ip, :ua, datetime('now'))");
+                $stIns->execute(array(
+                  ':rid' => $requestId,
+                  ':st'  => 'created',
+                  ':eid' => $eventId,
+                  ':ref' => $ref,
+                  ':c'   => $concept,
+                  ':am'  => $total,
+                  ':dni' => $dni,
+                  ':bl'  => $last,
+                  ':bf'  => $first,
+                  ':be'  => $email,
+                  ':rev' => ($revendedorId > 0 ? $revendedorId : null),
+                  ':tj'  => $ticketsJson,
+                  ':pu'  => $paymentUrl,
+                  ':ip'  => $ip,
+                  ':ua'  => $ua,
+                ));
+
+                // si ya existía, actualizar los campos de atribución
+                // --- INICIO: Integración de facturación automática ARCA para compras pagas ---
+                $facturaDatos = [
+                  'dni' => $dni,
+                  'nombre' => $first,
+                  'apellido' => $last,
+                  'email' => $email,
+                  'evento_id' => $eventId,
+                  'concepto' => $concept,
+                  'monto' => $total,
+                  'entradas' => $selectedTickets,
+                ];
+                $facturaResp = arca_emitir_factura($facturaDatos);
+                if (!empty($facturaResp['success'])) {
+                  // Si hay PDF, enviarlo por email al comprador
+                  if (!empty($facturaResp['pdf']) && !empty($email)) {
+                    // TODO: Usar función de envío de email con adjunto (PDF de factura)
+                    // Ejemplo: tickex_send_factura_pdf($email, $facturaResp['pdf'], $facturaResp);
+                  }
+                } else {
+                  // Loguear error de facturación (no bloquear entrega de ticket)
+                  error_log('Error al emitir factura ARCA: ' . ($facturaResp['error'] ?? 'desconocido'));
+                }
+                // --- FIN: Integración de facturación automática ARCA ---
               $stUp = $pdoSave->prepare("UPDATE tc_orders SET evento_id=:eid, ref=:ref, concept=:c, amount=:am, buyer_dni=:dni, buyer_last=:bl, buyer_first=:bf, buyer_email=:be, revendedor_id=:rev, selected_tickets_json=:tj, payment_url=:pu, updated_at=datetime('now') WHERE request_id=:rid");
               $stUp->execute(array(
                 ':rid' => $requestId,
@@ -899,6 +936,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       } else {
         // Orden 100% gratuita: se marca como éxito sin pasar por TotalCoin
         $freeSuccess = true;
+
+        // --- INICIO: Integración de facturación automática ARCA ---
+        // Datos mínimos para facturación (ajustar según estructura real)
+        $facturaDatos = [
+          'dni' => $dni,
+          'nombre' => $first,
+          'apellido' => $last,
+          'email' => $email,
+          'evento_id' => $eventId,
+          'concepto' => $concept,
+          'monto' => $total,
+          'entradas' => $selectedTickets,
+        ];
+        $facturaResp = arca_emitir_factura($facturaDatos);
+        if (!empty($facturaResp['success'])) {
+          // Si hay PDF, enviarlo por email al comprador
+          if (!empty($facturaResp['pdf']) && !empty($email)) {
+            // TODO: Usar función de envío de email con adjunto (PDF de factura)
+            // Ejemplo: tickex_send_factura_pdf($email, $facturaResp['pdf'], $facturaResp);
+          }
+        } else {
+          // Loguear error de facturación (no bloquear entrega de ticket)
+          error_log('Error al emitir factura ARCA: ' . ($facturaResp['error'] ?? 'desconocido'));
+        }
+        // --- FIN: Integración de facturación automática ARCA ---
       }
     }
   }

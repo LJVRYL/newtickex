@@ -25,6 +25,21 @@ function db(){
             // ignore
         }
 
+        // Crear tabla de notificaciones si no existe
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS notificaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                mensaje TEXT NOT NULL,
+                tipo TEXT DEFAULT "info",
+                extra TEXT,
+                created_at DATETIME DEFAULT (datetime("now")),
+                leida INTEGER DEFAULT 0
+            )');
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);

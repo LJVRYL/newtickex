@@ -4,6 +4,7 @@ require_once __DIR__ . '/inc/security.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/notificaciones.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
   header('Location: login.php');
@@ -25,12 +26,28 @@ $flashErr = '';
 
 // Cargar usuario una sola vez (se usa en handlers POST y en la UI)
 try {
-  $stmt = $pdo->prepare("\
-    SELECT id, nombre, apellido, email, dni, apodo, genero, creado_en, completado_en, password_hash
-    FROM registro_pendientes
-    WHERE id = :id
-    LIMIT 1
-  ");
+  $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
+  $has = array();
+  foreach ($cols as $c) {
+    if (isset($c['name'])) {
+      $has[(string)$c['name']] = true;
+    }
+  }
+
+  $sel = array();
+  $sel[] = "id";
+  $sel[] = isset($has['nombre']) ? "nombre" : "'' AS nombre";
+  $sel[] = isset($has['apellido']) ? "apellido" : "'' AS apellido";
+  $sel[] = isset($has['email']) ? "email" : "'' AS email";
+  $sel[] = isset($has['dni']) ? "dni" : "'' AS dni";
+  $sel[] = isset($has['apodo']) ? "apodo" : "'' AS apodo";
+  $sel[] = isset($has['genero']) ? "genero" : "'' AS genero";
+  $sel[] = isset($has['creado_en']) ? "creado_en" : "'' AS creado_en";
+  $sel[] = isset($has['completado_en']) ? "completado_en" : "'' AS completado_en";
+  $sel[] = isset($has['password_hash']) ? "password_hash" : "'' AS password_hash";
+
+  $sqlUser = "SELECT " . implode(', ', $sel) . " FROM registro_pendientes WHERE id = :id LIMIT 1";
+  $stmt = $pdo->prepare($sqlUser);
   $stmt->execute(array(':id' => $usuarioId));
   $u = $stmt->fetch(PDO::FETCH_ASSOC);
   if (!$u) {
@@ -182,6 +199,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $stU = $pdo->prepare("UPDATE staff_admin_invitaciones SET estado='accepted', cliente_id=:cid, updated_at=datetime('now') WHERE id=:id");
                 $stU->execute(array(':cid' => $usuarioId, ':id' => $invId));
+
+                if ($ownerAdminId > 0) {
+                  $nombreNotif = trim((string)(isset($u['nombre']) ? $u['nombre'] : ''));
+                  if ($nombreNotif === '') {
+                    $nombreNotif = trim((string)(isset($u['email']) ? $u['email'] : ('Usuario #' . $usuarioId)));
+                  }
+                  add_notification(
+                    $ownerAdminId,
+                    $nombreNotif . ' aceptó tu invitación para sumarse al staff.',
+                    'staff_accept',
+                    array('cliente_id' => $usuarioId, 'inv_id' => $invId)
+                  );
+                }
+
                 $flashOk = 'Invitación de staff aceptada. Ya sos staff.';
               }
             }
@@ -346,6 +377,22 @@ try {
   $stSI = $pdo->prepare($sql);
   $stSI->execute($params);
   $staffInvites = $stSI->fetchAll(PDO::FETCH_ASSOC);
+
+  if (!empty($staffInvites) && function_exists('add_notification_once_by_key')) {
+    foreach ($staffInvites as $ivn) {
+      $invIdN = isset($ivn['id']) ? (int)$ivn['id'] : 0;
+      if ($invIdN <= 0) continue;
+      $adminDisp = _tickex_admin_display($pdo, (int)$ivn['owner_admin_id']);
+      add_notification_once_by_key(
+        $usuarioId,
+        'staff_invite_' . $invIdN,
+        'Te invitaron a sumarte al staff de ' . $adminDisp . '. Entrá a Mi Perfil para aceptar o rechazar.',
+        'staff_invite',
+        array('inv_id' => $invIdN, 'admin_id' => (int)$ivn['owner_admin_id']),
+        $pdo
+      );
+    }
+  }
 } catch (Exception $e) {
   $staffInvites = array();
 }

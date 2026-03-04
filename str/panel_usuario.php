@@ -4,6 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 session_start();
+require_once __DIR__ . '/inc/notificaciones.php';
 
 $flashOk = '';
 $flashError = '';
@@ -105,6 +106,33 @@ try {
   $staffActivo = (bool)$stStaff->fetchColumn();
 } catch (Exception $e) {
   $staffActivo = false;
+}
+
+$staffInvitesPend = array();
+try {
+  $stInvP = $pdo->prepare("SELECT id, owner_admin_id, mensaje, created_at
+                           FROM staff_admin_invitaciones
+                           WHERE estado = 'pending' AND (cliente_id = :cid OR lower(email) = lower(:e))
+                           ORDER BY id DESC LIMIT 20");
+  $stInvP->execute(array(':cid' => $usuarioId, ':e' => isset($_SESSION['usuario_email']) ? (string)$_SESSION['usuario_email'] : ''));
+  $staffInvitesPend = $stInvP->fetchAll(PDO::FETCH_ASSOC);
+
+  if (!empty($staffInvitesPend) && function_exists('add_notification_once_by_key')) {
+    foreach ($staffInvitesPend as $sip) {
+      $invIdS = isset($sip['id']) ? (int)$sip['id'] : 0;
+      if ($invIdS <= 0) continue;
+      add_notification_once_by_key(
+        $usuarioId,
+        'staff_invite_' . $invIdS,
+        'Tenés una invitación pendiente para sumarte al staff. Entrá a Mi Perfil para aceptarla o rechazarla.',
+        'staff_invite',
+        array('inv_id' => $invIdS, 'admin_id' => (int)$sip['owner_admin_id']),
+        $pdo
+      );
+    }
+  }
+} catch (Exception $e) {
+  $staffInvitesPend = array();
 }
 
 try {
@@ -324,6 +352,18 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
 <?php if ($flashError !== ''): ?>
   <div class="card" style="max-width:900px;margin:0 auto 12px auto;">
     <div class="flash err"><?php echo e($flashError); ?></div>
+  </div>
+<?php endif; ?>
+
+<?php if (!empty($staffInvitesPend)): ?>
+  <div class="card" style="max-width:900px;margin:0 auto 12px auto;border:1px solid rgba(255,255,255,.18);">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700;">Tenés <?php echo (int)count($staffInvitesPend); ?> invitación(es) pendiente(s) de staff</div>
+        <div class="muted" style="font-size:13px;margin-top:4px;">Podés aceptarlas o rechazarlas desde tu perfil.</div>
+      </div>
+      <a class="btn" href="panel_usuario_mi_perfil.php">Ver invitaciones</a>
+    </div>
   </div>
 <?php endif; ?>
 

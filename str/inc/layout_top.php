@@ -1,4 +1,6 @@
 <?php
+$cu = isset($cu) ? $cu : (function_exists('current_user') ? current_user() : array());
+require_once __DIR__ . '/notificaciones.php';
 // Fallback: algunas páginas incluyen layout_top sin definir e()
 if (!function_exists('e')) {
     function e($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
@@ -37,6 +39,29 @@ if (!empty($_SESSION['ui_theme']) && in_array($_SESSION['ui_theme'], array('them
   $themeClass = $_SESSION['ui_theme'];
 }
 $isLogged = !empty($_SESSION['usuario']);
+$userIdNotif = 0;
+$notifs = array();
+$unreadCount = 0;
+if ($isLogged) {
+  if (isset($cu['id']) && (int)$cu['id'] > 0) {
+    $userIdNotif = (int)$cu['id'];
+  } elseif (!empty($_SESSION['usuario_id'])) {
+    $userIdNotif = (int)$_SESSION['usuario_id'];
+  } elseif (!empty($_SESSION['user_id'])) {
+    $userIdNotif = (int)$_SESSION['user_id'];
+  } elseif (!empty($_SESSION['admin_id'])) {
+    $userIdNotif = (int)$_SESSION['admin_id'];
+  }
+
+  if ($userIdNotif > 0 && function_exists('get_user_notifications')) {
+    $notifs = get_user_notifications($userIdNotif);
+    foreach ($notifs as $n) {
+      if (empty($n['leida']) || (int)$n['leida'] === 0) {
+        $unreadCount++;
+      }
+    }
+  }
+}
 $bodyClass = trim($themeClass . ($isLogged ? '' : ' no-nav'));
 $role = isset($_SESSION['rol']) ? $_SESSION['rol'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
 $isClient = ($role === 'cliente');
@@ -74,8 +99,7 @@ if ($page === 'login.php') {
     <div class="wrap">
     <a class="logo" href="<?php echo $isClient ? 'panel_usuario.php' : 'panel_admin.php'; ?>">TICKEX</a>
         <?php if ($isLogged): ?>
-            <?php if (!$isClient): ?>
-              <?php if (empty($hideNav)): ?>
+            <?php if (empty($hideNav)): ?>
                 <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
                   <span></span>
                   <span></span>
@@ -84,23 +108,43 @@ if ($page === 'login.php') {
                 </button>
 
                 <div class="quick-links" aria-label="Accesos rápidos">
-                  <a href="panel_admin.php">Panel</a>
-                  <a href="crear_evento.php">Crear evento</a>
+                  <?php if ($isClient): ?>
+                    <a href="panel_usuario.php">Mis Tickex</a>
+                    <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
+                    <?php if ($isApp): ?>
+                      <a href="logout_usuario.php">Salir</a>
+                    <?php endif; ?>
+                  <?php else: ?>
+                    <a href="panel_admin.php">Panel</a>
+                    <a href="crear_evento.php">Crear evento</a>
+                  <?php endif; ?>
                 </div>
                 <?php include __DIR__ . '/nav.php'; ?>
-              <?php endif; ?>
-            <?php else: ?>
-              <div class="quick-links" aria-label="Accesos rápidos">
-                <a href="panel_usuario.php">Mis Tickex</a>
-                <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
-                <?php if ($isApp): ?>
-                  <a href="logout_usuario.php">Salir</a>
-                <?php endif; ?>
-              </div>
             <?php endif; ?>
         <?php endif; ?>
         <div class="userchip">
             <?php if (!empty($_SESSION['usuario'])): ?>
+              <div style="position:relative;display:inline-block;margin-right:10px;vertical-align:middle;">
+                <button id="btnNotif" type="button" aria-label="Notificaciones" title="Notificaciones" style="background:none;border:none;cursor:pointer;color:inherit;font-size:18px;line-height:1;position:relative;padding:2px 4px;">
+                  🔔
+                  <?php if ($unreadCount > 0): ?>
+                    <span style="position:absolute;top:-6px;right:-8px;min-width:16px;height:16px;padding:0 4px;border-radius:10px;background:#d22;color:#fff;font-size:10px;line-height:16px;text-align:center;"><?php echo (int)$unreadCount; ?></span>
+                  <?php endif; ?>
+                </button>
+                <div id="notifMenu" style="display:none;position:absolute;right:0;top:30px;width:340px;max-width:90vw;max-height:60vh;overflow:auto;background:#0f1720;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:1100;">
+                  <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.12);font-weight:600;">Notificaciones</div>
+                  <?php if (!empty($notifs)): ?>
+                    <?php foreach ($notifs as $n): ?>
+                      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);<?php echo (empty($n['leida']) ? 'background:rgba(255,255,255,.04);' : ''); ?>">
+                        <div style="font-size:13px;line-height:1.35;"><?php echo e($n['mensaje']); ?></div>
+                        <div class="muted" style="font-size:11px;margin-top:4px;"><?php echo e(date('d/m/Y H:i', strtotime((string)$n['created_at']))); ?></div>
+                      </div>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <div class="muted" style="padding:12px;">No tenés notificaciones por ahora.</div>
+                  <?php endif; ?>
+                </div>
+              </div>
               <?php if ($isApp && $isClient): ?>
                 <?php // En modo app cliente, el logout se muestra arriba en quick-links ?>
               <?php else: ?>
@@ -166,5 +210,29 @@ foreach ($flashes as $f) {
   if (overlay) {
     overlay.addEventListener('click', closeNav);
   }
+</script>
+<?php endif; ?>
+
+<?php if (!empty($_SESSION['usuario'])): ?>
+<script>
+  (function () {
+    var btnNotif = document.getElementById('btnNotif');
+    var notifMenu = document.getElementById('notifMenu');
+    if (!btnNotif || !notifMenu) return;
+
+    btnNotif.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      notifMenu.style.display = (notifMenu.style.display === 'block') ? 'none' : 'block';
+    });
+
+    document.addEventListener('click', function () {
+      notifMenu.style.display = 'none';
+    });
+
+    notifMenu.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+  })();
 </script>
 <?php endif; ?>

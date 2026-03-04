@@ -8,6 +8,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'], $_POST[
     $nuevoRol = $_POST['nuevo_rol'] === 'admin' ? 'admin' : 'cliente';
     $stmt = $pdo->prepare("UPDATE usuarios_admin SET rol = :rol WHERE id = :id");
     $stmt->execute([':rol' => $nuevoRol, ':id' => $usuarioId]);
+    // Notificación: invitación a ser administrador
+    if ($nuevoRol === 'admin') {
+      require_once __DIR__ . '/inc/notificaciones.php';
+      // Buscar el cliente correspondiente
+      $stCli = $pdo->prepare('SELECT id FROM registro_pendientes WHERE id = :id LIMIT 1');
+      $stCli->execute([':id' => $usuarioId]);
+      $cliId = (int)$stCli->fetchColumn();
+      if ($cliId > 0) {
+        add_notification($cliId, '¡Te invitaron a ser usuario administrador! Ya podés acceder al panel de administración.', 'admin_invite', [ 'admin_id' => $usuarioId ]);
+      }
+    }
     header('Location: superadmin_usuarios.php');
     exit;
   }
