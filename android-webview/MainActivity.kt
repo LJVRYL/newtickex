@@ -98,28 +98,30 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest?) {
-                if (request == null) return
+                runOnUiThread {
+                    if (request == null) return@runOnUiThread
 
-                val wantsVideo = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
-                if (!wantsVideo) {
-                    request.grant(request.resources)
-                    return
-                }
+                    val wantsVideo = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                    if (!wantsVideo) {
+                        request.grant(request.resources)
+                        return@runOnUiThread
+                    }
 
-                val hasCamera = ContextCompat.checkSelfPermission(
-                    this@MainActivity,
-                    Manifest.permission.CAMERA
-                ) == PackageManager.PERMISSION_GRANTED
-
-                if (hasCamera) {
-                    request.grant(request.resources)
-                } else {
-                    pendingPermissionRequest = request
-                    ActivityCompat.requestPermissions(
+                    val hasCamera = ContextCompat.checkSelfPermission(
                         this@MainActivity,
-                        arrayOf(Manifest.permission.CAMERA),
-                        CAMERA_PERMISSION_REQUEST_CODE
-                    )
+                        Manifest.permission.CAMERA
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasCamera) {
+                        request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    } else {
+                        pendingPermissionRequest = request
+                        ActivityCompat.requestPermissions(
+                            this@MainActivity,
+                            arrayOf(Manifest.permission.CAMERA),
+                            CAMERA_PERMISSION_REQUEST_CODE
+                        )
+                    }
                 }
             }
 
@@ -205,7 +207,7 @@ class MainActivity : AppCompatActivity() {
 
             if (req != null) {
                 if (granted) {
-                    req.grant(req.resources)
+                    req.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
                 } else {
                     req.deny()
                 }

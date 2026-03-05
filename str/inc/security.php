@@ -20,7 +20,7 @@ if (!function_exists('tickex_send_security_headers')) {
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: strict-origin-when-cross-origin');
-        header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+        header("Permissions-Policy: geolocation=(), microphone=(), camera=(self)");
         header("Content-Security-Policy: base-uri 'self'; frame-ancestors 'self'; form-action 'self'");
         header('X-Permitted-Cross-Domain-Policies: none');
 
