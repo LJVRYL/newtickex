@@ -42,6 +42,81 @@ function get_checkin_column($pdo) {
     return 'checked_in'; // fallback
 }
 
+function ensure_bridge_checkin_usage_table($pdo) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS bridge_checkin_uses (
+            bridge_ticket_id INTEGER PRIMARY KEY,
+            used_count INTEGER NOT NULL DEFAULT 0,
+            updated_at DATETIME DEFAULT (datetime('now'))
+        )");
+    } catch (Exception $e) {
+        // ignore
+    }
+}
+
+function get_bridge_checkin_used_counts($pdo, $ticketIds) {
+    $out = array();
+    if (!is_array($ticketIds) || empty($ticketIds)) return $out;
+    ensure_bridge_checkin_usage_table($pdo);
+    $ids = array();
+    foreach ($ticketIds as $id) {
+        $v = (int)$id;
+        if ($v > 0 && !in_array($v, $ids, true)) $ids[] = $v;
+    }
+    if (empty($ids)) return $out;
+    try {
+        $ph = array();
+        $params = array();
+        foreach ($ids as $i => $idv) {
+            $k = ':i' . $i;
+            $ph[] = $k;
+            $params[$k] = $idv;
+        }
+        $st = $pdo->prepare("SELECT bridge_ticket_id, used_count FROM bridge_checkin_uses WHERE bridge_ticket_id IN (" . implode(',', $ph) . ")");
+        $st->execute($params);
+        while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+            $out[(int)$r['bridge_ticket_id']] = max(0, (int)$r['used_count']);
+        }
+    } catch (Exception $e) {
+        // ignore
+    }
+    return $out;
+}
+
+function increment_bridge_checkin_use($pdo, $bridgeTicketId, $maxUses) {
+    $result = array('ok' => false, 'used' => 0, 'max' => max(1, (int)$maxUses), 'full' => false, 'changed' => false);
+    $bridgeTicketId = (int)$bridgeTicketId;
+    if ($bridgeTicketId <= 0) return $result;
+    ensure_bridge_checkin_usage_table($pdo);
+    try {
+        $pdo->beginTransaction();
+        $st = $pdo->prepare("SELECT used_count FROM bridge_checkin_uses WHERE bridge_ticket_id = :id LIMIT 1");
+        $st->execute(array(':id' => $bridgeTicketId));
+        $used = (int)$st->fetchColumn();
+        $max = max(1, (int)$maxUses);
+        $newUsed = $used;
+        if ($used < $max) {
+            $newUsed = $used + 1;
+            if ($used > 0 || $st->rowCount() > 0) {
+                $u = $pdo->prepare("UPDATE bridge_checkin_uses SET used_count = :u, updated_at = datetime('now') WHERE bridge_ticket_id = :id");
+                $u->execute(array(':u' => $newUsed, ':id' => $bridgeTicketId));
+            } else {
+                $i = $pdo->prepare("INSERT INTO bridge_checkin_uses (bridge_ticket_id, used_count, updated_at) VALUES (:id, :u, datetime('now'))");
+                $i->execute(array(':id' => $bridgeTicketId, ':u' => $newUsed));
+            }
+        }
+        $pdo->commit();
+        $result['ok'] = true;
+        $result['used'] = $newUsed;
+        $result['max'] = $max;
+        $result['full'] = ($newUsed >= $max);
+        $result['changed'] = ($newUsed > $used);
+    } catch (Exception $e) {
+        try { $pdo->rollBack(); } catch (Exception $_) {}
+    }
+    return $result;
+}
+
 /**
  * Asegura que exista la tabla de mapeo entre evento STR y slug del bridge
  */
@@ -305,6 +380,15 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
             $bStmt = $pdo->prepare($bSql);
             $bStmt->execute($bParams);
             $tickexEntries = $bStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $bridgeIds = array();
+            foreach ($tickexEntries as $r0) {
+                $tid0 = 0;
+                if (isset($r0['id'])) $tid0 = (int)$r0['id'];
+                elseif (isset($r0['legacy_ticket_id'])) $tid0 = (int)$r0['legacy_ticket_id'];
+                if ($tid0 > 0) $bridgeIds[] = $tid0;
+            }
+            $usedMap = get_bridge_checkin_used_counts($pdo, $bridgeIds);
             
             // detectar columna de tipo para duplicar 2x1
             $tipoCols = array('selected_type_name','selected_type','ticket_type','ticket_name','product_name','entry_type','event_name','ticket_class','category','nombre','name','tipo');
@@ -457,6 +541,10 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
                 if (isset($row['is_checked_in'])) $isCheckedIn = ((int)$row['is_checked_in'] === 1);
                 elseif (isset($row['checked_in'])) $isCheckedIn = ((int)$row['checked_in'] === 1);
 
+                $usedCount = isset($usedMap[$ticketId]) ? (int)$usedMap[$ticketId] : ($isCheckedIn ? $multiplier : 0);
+                if ($usedCount < 0) $usedCount = 0;
+                if ($usedCount > $multiplier) $usedCount = $multiplier;
+
                 $checkedInAt = isset($row['checked_in_at']) ? $row['checked_in_at'] : null;
 
                 // Fecha: preferir last_updated_at, luego created_at o fecha
@@ -475,7 +563,7 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
                         'tipo'        => $ttypeDisplay,
                         'price'       => $priceVal,
                         'is_paid'     => $isPaid,
-                        'is_checked_in' => $isCheckedIn,
+                        'is_checked_in' => ($i < $usedCount),
                         'checked_in_at' => $checkedInAt,
                         'created_at'  => $createdAt,
                         'raw_row'     => $row,  // guardar para referencia

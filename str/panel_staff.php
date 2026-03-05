@@ -118,13 +118,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       try {
         if ($entrySource === 'TICKEX') {
           $allowedTickex = false;
+          $entryMultiplier = 0;
           $entriesEvent = get_unified_entries($pdo, $eidPost);
           foreach ($entriesEvent as $ue) {
             $srcU = isset($ue['source']) ? strtoupper((string)$ue['source']) : 'STR';
             $idU = isset($ue['ticket_id']) ? (int)$ue['ticket_id'] : 0;
             if ($srcU === 'TICKEX' && $idU === $entryId) {
               $allowedTickex = true;
-              break;
+              $entryMultiplier++;
             }
           }
           if (!$allowedTickex) {
@@ -132,12 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           } else {
           $stCheckTbl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='senforms_bridge_tickets' LIMIT 1");
           if ($stCheckTbl && $stCheckTbl->fetch(PDO::FETCH_ASSOC)) {
-            $st = $pdo->prepare('UPDATE senforms_bridge_tickets SET is_checked_in = 1, checked_in_at = datetime(\'now\') WHERE id = :id AND COALESCE(is_checked_in,0)=0');
-            $st->execute(array(':id' => $entryId));
-            if ($st->rowCount() > 0) {
-              $flashOk = 'Check-in realizado.';
+            $maxUses = max(1, $entryMultiplier);
+            $use = increment_bridge_checkin_use($pdo, $entryId, $maxUses);
+            if (!empty($use['ok']) && !empty($use['changed'])) {
+              if (!empty($use['full'])) {
+                $st = $pdo->prepare('UPDATE senforms_bridge_tickets SET is_checked_in = 1, checked_in_at = datetime(\'now\') WHERE id = :id');
+                $st->execute(array(':id' => $entryId));
+              }
+              $flashOk = 'Check-in realizado (' . (int)$use['used'] . '/' . (int)$use['max'] . ').';
             } else {
-              $flashErr = 'La entrada ya estaba checkeada o no se encontró en bridge.';
+              $flashErr = 'Esta entrada ya agotó sus ingresos.';
             }
           } else {
             $flashErr = 'No se puede checkear esta entrada en este entorno.';
