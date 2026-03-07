@@ -28,6 +28,86 @@ if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), tru
 $error = '';
 $okMsg = '';
 
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
+
+function ensure_plantillas_entrada_schema($pdo) {
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS plantillas_entrada (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_id INTEGER,
+      creado_por_admin_id INTEGER,
+      categoria TEXT DEFAULT 'GENERALES',
+      nombre TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'PAGA',
+      precio_default REAL NOT NULL DEFAULT 0,
+      cantidad_default INTEGER NOT NULL DEFAULT 0,
+      hora_limite_default TEXT,
+      descripcion TEXT,
+      reglas_default TEXT,
+      activo INTEGER NOT NULL DEFAULT 1,
+      visible_publico INTEGER NOT NULL DEFAULT 1,
+      venta_hasta TEXT,
+      creado_en DATETIME DEFAULT (datetime('now'))
+    )");
+
+    $cols = $pdo->query("PRAGMA table_info(plantillas_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+    $has = array();
+    foreach ($cols as $c) {
+      $n = isset($c['name']) ? (string)$c['name'] : '';
+      if ($n !== '') $has[$n] = true;
+    }
+
+    $required = array(
+      'admin_id' => 'INTEGER',
+      'creado_por_admin_id' => 'INTEGER',
+      'categoria' => "TEXT DEFAULT 'GENERALES'",
+      'nombre' => "TEXT DEFAULT ''",
+      'tipo' => "TEXT DEFAULT 'PAGA'",
+      'precio_default' => 'REAL NOT NULL DEFAULT 0',
+      'cantidad_default' => 'INTEGER NOT NULL DEFAULT 0',
+      'hora_limite_default' => 'TEXT',
+      'descripcion' => 'TEXT',
+      'reglas_default' => 'TEXT',
+      'activo' => 'INTEGER NOT NULL DEFAULT 1',
+      'visible_publico' => 'INTEGER NOT NULL DEFAULT 1',
+      'venta_hasta' => 'TEXT',
+      'creado_en' => "DATETIME DEFAULT (datetime('now'))",
+    );
+    foreach ($required as $col => $def) {
+      if (!isset($has[$col])) {
+        $pdo->exec("ALTER TABLE plantillas_entrada ADD COLUMN $col $def");
+      }
+    }
+  } catch (Exception $e) {
+    // ignore: se manejará con mensajes existentes si luego falla una query
+  }
+}
+
+ensure_plantillas_entrada_schema($pdo);
+
+$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
+$hasCategoria = false;
+$hasTipoVenta = false;
+$hasHoraLimite = false;
+$visCol = '';
+if (is_array($colsTE)) {
+  foreach ($colsTE as $c) {
+    $n = isset($c['name']) ? strtolower((string)$c['name']) : '';
+    if ($n === 'categoria') $hasCategoria = true;
+    if ($n === 'tipo_venta') $hasTipoVenta = true;
+    if ($n === 'hora_limite') $hasHoraLimite = true;
+    if ($n === 'visible' || $n === 'activo') $visCol = (string)$c['name'];
+  }
+}
+
+$hasTablaPlantillas = false;
+try {
+  $chkTpl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='plantillas_entrada' LIMIT 1");
+  if ($chkTpl && $chkTpl->fetch(PDO::FETCH_ASSOC)) $hasTablaPlantillas = true;
+} catch (Exception $e) {
+  $hasTablaPlantillas = false;
+}
+
 // =======================
 // ELIMINAR TIPO DEL EVENTO (tachito)
 // =======================
@@ -152,17 +232,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
 }
 
     // ===== Tipos ya asociados al evento =====
-    // Inicializar $colsTE antes de usarla
-    $colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-    $hasCategoria = false;
-    if (is_array($colsTE)) {
-      foreach ($colsTE as $c) {
-        if (isset($c['name']) && strtolower($c['name']) === 'categoria') {
-          $hasCategoria = true;
-          break;
-        }
-      }
-    }
     $orderBy = $hasCategoria ? 'categoria ASC, nombre ASC, id ASC' : 'nombre ASC, id ASC';
     $stTE = $pdo->prepare("SELECT * FROM tipos_entrada WHERE evento_id = ? ORDER BY $orderBy");
     $stTE->execute(array($eventoId));
@@ -177,34 +246,13 @@ if ($eventoId > 0) {
   $evento = $stEv->fetch(PDO::FETCH_ASSOC);
 }
 
-// Detectar columna de visibilidad
-$visCol = '';
-$colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-foreach ($colsTE as $c) {
-  if (!empty($c['name']) && (strtolower($c['name']) === 'visible' || strtolower($c['name']) === 'activo')) {
-    $visCol = $c['name'];
-    break;
-  }
-}
-
 // ===== Plantillas (Mis Entradas) del admin =====
-// Detectar si existe la tabla plantillas_entrada
-$hasTablaPlantillas = false;
-$tablas = $pdo->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_ASSOC);
-foreach ($tablas as $t) {
-  if (isset($t['name']) && $t['name'] === 'plantillas_entrada') {
-    $hasTablaPlantillas = true;
-    break;
-  }
-}
 if ($hasTablaPlantillas) {
   if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
     $sqlTplList = "SELECT * FROM plantillas_entrada WHERE activo = 1 ORDER BY categoria ASC, nombre ASC";
     $stTplList = $pdo->prepare($sqlTplList);
     $stTplList->execute();
   } else {
-    // Definir $adminId correctamente
-    $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
     $sqlTplList = "SELECT * FROM plantillas_entrada WHERE activo = 1 AND creado_por_admin_id = ? ORDER BY categoria ASC, nombre ASC";
     $stTplList = $pdo->prepare($sqlTplList);
     $stTplList->execute(array($adminId));
