@@ -287,7 +287,7 @@ include __DIR__ . '/inc/layout_top.php';
   <a href="panel_staff.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
   <a href="staff_scan_qr.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" class="center" aria-label="QR" title="QR"><span class="i">▣</span><span>QR</span></a>
   <a href="panel_staff_venta_puerta.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
-  <a href="panel_usuario_mi_perfil.php"><span class="i">☰</span><span>Más</span></a>
+  <a href="panel_staff_checkin_log.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">🧾</span><span>Log</span></a>
 </nav>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

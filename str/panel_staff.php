@@ -502,6 +502,7 @@ include __DIR__ . '/inc/layout_top.php';
 <div id="staffSheet" class="staff-sheet" aria-hidden="true">
   <div class="staff-sheet-box">
     <div class="staff-sheet-links">
+      <a href="panel_staff_checkin_log.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>">Actividad check-ins</a>
       <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
       <a href="panel_usuario.php">Dashboard usuario</a>
       <a href="logout_usuario.php">Cerrar sesión</a>
