@@ -27,9 +27,21 @@ $title = 'Escanear QR';
 include __DIR__ . '/inc/layout_top.php';
 ?>
 <style>
+  .topbar{display:none !important}
+  .nav,.nav-overlay{display:none !important}
+  body{padding-left:0 !important}
+  .wrap{max-width:980px;margin:0 auto}
   .scan-page{max-width:680px;margin:0 auto;padding-bottom:20px}
   .scan-card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px}
   #qr-reader-page{width:100%}
+  .footer{display:none !important}
+  .staff-bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:140;background:rgba(11,16,32,.98);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 1fr auto 1fr 1fr;gap:6px;align-items:end}
+  .staff-bottom-nav a{background:none;border:none;color:var(--muted);text-decoration:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;cursor:pointer}
+  .staff-bottom-nav .i{font-size:18px;line-height:1}
+  .staff-bottom-nav .center{width:58px;height:58px;border-radius:50%;margin-top:-26px;background:linear-gradient(135deg,#ffdd33,#ff8a00);color:#111;border:2px solid rgba(255,255,255,.18);box-shadow:0 8px 20px rgba(0,0,0,.35)}
+  .staff-bottom-nav .center .i{font-size:22px}
+  .scan-page{padding-bottom:98px}
+  @media (min-width:1024px){.staff-bottom-nav{max-width:860px;left:50%;right:auto;transform:translateX(-50%);width:100%}}
 </style>
 
 <div class="scan-page">
@@ -43,6 +55,14 @@ include __DIR__ . '/inc/layout_top.php';
     <div id="scan-status" class="muted" style="font-size:12px;margin-top:10px;">Permití cámara y enfocá el código QR del ingreso.</div>
   </div>
 </div>
+
+<nav class="staff-bottom-nav" aria-label="Navegación staff">
+  <a href="panel_usuario.php"><span class="i">🏠</span><span>Inicio</span></a>
+  <a href="panel_staff.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
+  <a href="staff_scan_qr.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>" class="center" aria-label="QR" title="QR"><span class="i">▣</span><span>QR</span></a>
+  <a href="panel_staff_venta_puerta.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
+  <a href="panel_staff_checkin_log.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">🧾</span><span>Log</span></a>
+</nav>
 
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
