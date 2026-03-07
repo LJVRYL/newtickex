@@ -863,6 +863,9 @@ function get_economic_stats($pdo, $evento_id) {
     $stats = array(
         'entradas_vendidas' => 0,
         'total_recaudado' => 0,
+        'bridge_gross' => 0,
+        'bridge_fee_3pct' => 0,
+        'bridge_net' => 0,
         'por_tipo' => array(), // array( tipo => array('cantidad' => X, 'monto' => Y), ... )
         'manual_income' => 0,
         'manual_income_ingresos' => 0,
@@ -896,6 +899,7 @@ function get_economic_stats($pdo, $evento_id) {
         
         // ==== TICKEX: entradas pagadas (is_paid = 1) con precio real del bridge ====
         try {
+            $bridgeGross = 0.0;
             // Detectar bridge (tabla o view)
             $candidates = array('v_senforms_bridge_status', 'senforms_bridge_tickets');
             $source = null;
@@ -1005,6 +1009,7 @@ function get_economic_stats($pdo, $evento_id) {
                     $tipo = isset($row['tipo']) && $row['tipo'] ? trim((string)$row['tipo']) : 'Tickex';
                     $qty = isset($row['qty']) ? (int)$row['qty'] : 0;
                     $monto = isset($row['monto']) ? (float)$row['monto'] : 0;
+                    $bridgeGross += $monto;
 
                     $stats['entradas_vendidas'] += $qty;
                     $stats['total_recaudado'] += $monto;
@@ -1016,6 +1021,12 @@ function get_economic_stats($pdo, $evento_id) {
                     $stats['por_tipo'][$tipo]['monto'] += $monto;
                     $stats['por_tipo'][$tipo]['origen'] = 'TICKEX';
                 }
+
+                $bridgeFee = round($bridgeGross * 0.03, 2);
+                $stats['bridge_gross'] = $bridgeGross;
+                $stats['bridge_fee_3pct'] = $bridgeFee;
+                $stats['bridge_net'] = $bridgeGross - $bridgeFee;
+                $stats['total_recaudado'] -= $bridgeFee;
             }
         } catch (Exception $e) {
             // Ignorar error bridge

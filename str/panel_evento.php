@@ -364,6 +364,57 @@ $title = "Panel del Evento – " . (isset($evento['nombre']) ? $evento['nombre']
 include __DIR__.'/inc/layout_top.php';
 ?>
 
+<style>
+  .pe-wrap{max-width:1100px;margin:0 auto}
+  .pe-table-wrap{overflow:auto;margin-top:10px}
+  .pe-table-wrap .table{min-width:860px}
+  .pe-action-btn{min-width:160px;justify-content:center;background:var(--panel-2);color:var(--text);border:1px solid var(--line);box-shadow:none;font-size:13px;font-weight:600;padding:10px 12px;border-radius:10px;display:inline-flex;align-items:center;gap:6px}
+  .pe-action-primary{min-width:160px;justify-content:center;background:var(--ok);color:#fff;border:1px solid var(--ok);box-shadow:none;font-size:13px;font-weight:700;padding:10px 12px;border-radius:10px;display:inline-flex;align-items:center;gap:6px}
+  .pe-manual-form-grid .pe-submit-wrap{display:flex;align-items:flex-end}
+  .pe-manual-form-grid .pe-submit-wrap .btn{width:100%}
+
+  @media (max-width: 768px){
+    .pe-wrap{max-width:100%}
+    .pe-actions{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px !important}
+    .pe-actions .btn{min-width:0 !important;width:100% !important;font-size:12px !important;padding:8px 9px !important;line-height:1.2}
+    .pe-actions .pe-action-primary{grid-column:1 / -1}
+
+    .pe-kpis{display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px !important}
+    .pe-kpis > .card{min-width:0 !important;padding:9px !important;margin:0 !important}
+    .pe-kpis > .card .muted{font-size:11px !important;line-height:1.2}
+    .pe-kpis > .card div[style*='font-size:22px']{font-size:16px !important;line-height:1.15}
+
+    .pe-econ-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px !important;margin-bottom:12px !important}
+    .pe-econ-grid .card{padding:9px !important}
+    .pe-econ-grid .card .muted{font-size:11px !important;line-height:1.2}
+    .pe-econ-grid .card div[style*='font-size:28px']{font-size:18px !important;line-height:1.15}
+    .pe-econ-grid .card div[style*='font-size:24px']{font-size:17px !important;line-height:1.15}
+
+    .pe-manual-form-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px !important;align-items:end !important}
+    .pe-manual-form-grid > div{min-width:0}
+    .pe-manual-form-grid > div:first-child{grid-column:1 / -1}
+    .pe-manual-form-grid .pe-submit-wrap{grid-column:1 / -1}
+
+    .pe-filter-grid{grid-template-columns:1fr !important;gap:8px !important}
+    .pe-table-wrap .table{min-width:720px !important}
+    .pe-table-wrap .table th,
+    .pe-table-wrap .table td{padding:6px 6px !important;font-size:12px !important;line-height:1.25}
+    .pe-table-wrap .btn-ref-toggle,
+    .pe-table-wrap .btn-delete-entry{padding:4px 7px !important;font-size:11px !important}
+
+    #ingresos-egresos .btn{font-size:12px !important;padding:8px 10px !important}
+
+    #quickLoadFrame{min-height:420px !important}
+  }
+
+  @media (max-width: 480px){
+    .pe-kpis{grid-template-columns:repeat(3,minmax(0,1fr)) !important}
+    .pe-econ-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
+  }
+</style>
+
+<div class="pe-wrap">
+
 <div class="card">
   <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;">
     <div style="flex:1 1 320px;min-width:260px;">
@@ -388,18 +439,14 @@ include __DIR__.'/inc/layout_top.php';
 
   </div>
 
-  <?php 
-    $btnStyle = 'min-width:160px;justify-content:center;background:var(--panel-2);color:var(--text);border:1px solid var(--line);box-shadow:none;font-size:13px;font-weight:600;padding:10px 12px;border-radius:10px;';
-    $btnPrimary = 'min-width:160px;justify-content:center;background:var(--ok);color:#fff;border:1px solid var(--ok);box-shadow:none;font-size:13px;font-weight:700;padding:10px 12px;border-radius:10px;';
-  ?>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;justify-content:flex-start;">
-    <button class="btn" style="<?php echo $btnPrimary; ?>" id="toggleQuickLoad">+ Cargar entrada</button>
-    <a class="btn" style="<?php echo $btnStyle; ?>" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
-    <a class="btn" style="<?php echo $btnStyle; ?>" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
-    <a class="btn" style="<?php echo $btnStyle; ?>" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
-    <a class="btn" style="<?php echo $btnStyle; ?>" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
-    <a class="btn" style="<?php echo $btnStyle; ?>" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Comprar</a>
-    <a class="btn" style="<?php echo $btnStyle; ?>" href="panel_evento.php" title="Volver">
+  <div class="pe-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;justify-content:flex-start;">
+    <button class="btn pe-action-primary" id="toggleQuickLoad">+ Cargar entrada</button>
+    <a class="btn pe-action-btn" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
+    <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
+    <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
+    <a class="btn pe-action-btn" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
+    <a class="btn pe-action-btn" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Comprar</a>
+    <a class="btn pe-action-btn" href="panel_evento.php" title="Volver">
       ⬅ Volver
     </a>
   </div>
@@ -413,7 +460,7 @@ include __DIR__.'/inc/layout_top.php';
   </div>
 </div>
 
-<div class="card" style="display:flex;gap:12px;flex-wrap:wrap;">
+<div class="card pe-kpis" style="display:flex;gap:12px;flex-wrap:wrap;">
   <div class="card" style="flex:1 1 180px;min-width:180px;">
     <div class="muted">Emitidas</div>
     <div style="font-size:22px;font-weight:700;">
@@ -467,7 +514,7 @@ include __DIR__.'/inc/layout_top.php';
     $ecoStats = get_economic_stats($pdo, $eventoId);
   ?>
   
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
+  <div class="pe-econ-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
     <div class="card" style="margin:0;background:var(--panel-2);">
       <div class="muted" style="font-size:12px;">Entradas vendidas</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;">
@@ -479,6 +526,13 @@ include __DIR__.'/inc/layout_top.php';
       <div class="muted" style="font-size:12px;">Total recaudado</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
+      </div>
+    </div>
+
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Costo servicio bridge (3%)</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
+        $<?php echo number_format((float)($ecoStats['bridge_fee_3pct'] ?? 0), 2); ?>
       </div>
     </div>
 
@@ -507,7 +561,7 @@ include __DIR__.'/inc/layout_top.php';
   </div>
   
   <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <a class="btn" href="economia_evento.php?evento_id=<?php echo (int)$eventoId; ?>" style="min-width:160px;justify-content:center;background:var(--panel-2);color:var(--text);border:1px solid var(--line);box-shadow:none;font-size:13px;font-weight:600;padding:10px 12px;border-radius:10px;">Desglose</a>
+    <a class="btn pe-action-btn" href="economia_evento.php?evento_id=<?php echo (int)$eventoId; ?>">Desglose</a>
     <span class="muted">(detalle por tipo en página separada)</span>
   </div>
 </div>
@@ -523,7 +577,7 @@ include __DIR__.'/inc/layout_top.php';
   <form id="formManualIncome" style="margin-bottom:16px;">
     <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
     
-    <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
+    <div class="pe-manual-form-grid" style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
       <div>
         <label>Tipo</label>
         <select name="tipo">
@@ -546,7 +600,7 @@ include __DIR__.'/inc/layout_top.php';
         <input type="text" name="descripcion" placeholder="detalles">
       </div>
       
-      <div>
+      <div class="pe-submit-wrap">
         <button class="btn" type="submit">Agregar</button>
       </div>
     </div>
@@ -561,7 +615,7 @@ include __DIR__.'/inc/layout_top.php';
   ?>
   
   <?php if (!empty($incomes)): ?>
-    <div style="overflow:auto;margin-top:10px;">
+    <div class="pe-table-wrap">
       <table class="table">
         <tr>
           <th>Concepto</th>
@@ -621,7 +675,7 @@ include __DIR__.'/inc/layout_top.php';
   <form method="get" style="margin-top:10px;">
     <input type="hidden" name="id" value="<?php echo $eventoId; ?>">
 
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;">
+    <div class="pe-filter-grid" style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;">
       <div>
         <label>Buscar</label>
         <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="nombre / email / código">
@@ -657,7 +711,7 @@ include __DIR__.'/inc/layout_top.php';
     </div>
   <?php else: ?>
 
-  <div style="overflow:auto;margin-top:10px;">
+  <div class="pe-table-wrap">
     <table class="table">
       <tr>
         <th>Origen</th>
@@ -843,5 +897,7 @@ if (quickBtn && quickPanel) {
   });
 }
 </script>
+
+</div>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>
