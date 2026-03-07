@@ -57,6 +57,50 @@ function _tickex_staff_perm_labels($catalog, $keys)
   return $out;
 }
 
+function _staff_norm_ticket_ref($ref)
+{
+  $v = trim((string)$ref);
+  if ($v === '') return '';
+  return preg_replace('/-\d+$/', '', $v);
+}
+
+function _staff_bridge_ticket_id_by_ref($pdo, $ticketRef)
+{
+  $ref = trim((string)$ticketRef);
+  if ($ref === '') return 0;
+  try {
+    $stTbl = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='senforms_bridge_tickets' LIMIT 1");
+    if (!$stTbl || !$stTbl->fetch(PDO::FETCH_ASSOC)) return 0;
+    $cols = detect_table_columns($pdo, 'senforms_bridge_tickets');
+    $conds = array();
+    foreach (array('ticket_ref', 'order_id', 'codigo') as $c) {
+      if (isset($cols[$c])) $conds[] = $c . ' = :r';
+    }
+    if (empty($conds)) return 0;
+    $sql = 'SELECT id FROM senforms_bridge_tickets WHERE (' . implode(' OR ', $conds) . ') ORDER BY id DESC LIMIT 1';
+    $st = $pdo->prepare($sql);
+    $st->execute(array(':r' => $ref));
+    return (int)$st->fetchColumn();
+  } catch (Exception $e) {
+    return 0;
+  }
+}
+
+function _staff_log_checkin($pdo, $usuarioId, $eventoId, $source, $sourceTicketId, $ticketRef, $attendeeName, $result, $detail)
+{
+  log_checkin_audit($pdo, array(
+    'actor_user_id' => (int)$usuarioId,
+    'evento_id' => (int)$eventoId,
+    'source' => strtoupper((string)$source),
+    'source_ticket_id' => (int)$sourceTicketId,
+    'ticket_ref' => (string)$ticketRef,
+    'attendee_name' => (string)$attendeeName,
+    'action' => 'manual_swipe',
+    'result' => (string)$result,
+    'detail' => (string)$detail,
+  ));
+}
+
 $eventosStaff = array();
 try {
   $stE = $pdo->prepare("SELECT e.id, e.nombre, e.slug
@@ -106,46 +150,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
   if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
     $flashErr = 'CSRF inválido.';
+    _staff_log_checkin($pdo, $usuarioId, (int)($_POST['evento_id'] ?? 0), 'UNKNOWN', 0, '', '', 'error', 'csrf_invalido');
   } else {
     $entryId = isset($_POST['entry_id']) ? (int)$_POST['entry_id'] : 0;
     $entrySource = isset($_POST['entry_source']) ? strtoupper(trim((string)$_POST['entry_source'])) : 'STR';
     $eidPost = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
-    if ($entryId <= 0 || $eidPost <= 0) {
+    $entryRefPost = isset($_POST['entry_ref']) ? trim((string)$_POST['entry_ref']) : '';
+    $entryNamePost = isset($_POST['entry_name']) ? trim((string)$_POST['entry_name']) : '';
+    if ($eidPost <= 0 || ($entryId <= 0 && !($entrySource === 'TICKEX' && $entryRefPost !== ''))) {
       $flashErr = 'Entrada inválida.';
+      _staff_log_checkin($pdo, $usuarioId, $eidPost, $entrySource, $entryId, $entryRefPost, $entryNamePost, 'error', 'entrada_invalida');
     } elseif (!in_array($eidPost, $staffEventIds, true)) {
       $flashErr = 'No tenés permiso para operar ese evento.';
+      _staff_log_checkin($pdo, $usuarioId, $eidPost, $entrySource, $entryId, $entryRefPost, $entryNamePost, 'error', 'sin_permiso_evento');
     } else {
       try {
         if ($entrySource === 'TICKEX') {
           $allowedTickex = false;
           $entryMultiplier = 0;
+          $resolvedTicketId = $entryId;
+          $refNormPost = _staff_norm_ticket_ref($entryRefPost);
           $entriesEvent = get_unified_entries($pdo, $eidPost);
           foreach ($entriesEvent as $ue) {
             $srcU = isset($ue['source']) ? strtoupper((string)$ue['source']) : 'STR';
             $idU = isset($ue['ticket_id']) ? (int)$ue['ticket_id'] : 0;
-            if ($srcU === 'TICKEX' && $idU === $entryId) {
+            $refU = isset($ue['ticket_ref']) ? _staff_norm_ticket_ref((string)$ue['ticket_ref']) : '';
+            $matchId = ($entryId > 0 && $idU === $entryId);
+            $matchRef = ($refNormPost !== '' && $refU !== '' && $refNormPost === $refU);
+            if ($srcU === 'TICKEX' && ($matchId || $matchRef)) {
               $allowedTickex = true;
               $entryMultiplier++;
+              if ($resolvedTicketId <= 0 && $idU > 0) $resolvedTicketId = $idU;
+              if ($entryNamePost === '' && isset($ue['nombre'])) $entryNamePost = (string)$ue['nombre'];
+              if ($entryRefPost === '' && isset($ue['ticket_ref'])) $entryRefPost = (string)$ue['ticket_ref'];
             }
           }
           if (!$allowedTickex) {
             $flashErr = 'La entrada no corresponde al evento seleccionado.';
+            _staff_log_checkin($pdo, $usuarioId, $eidPost, 'TICKEX', $entryId, $entryRefPost, $entryNamePost, 'error', 'ticket_fuera_de_evento');
           } else {
+          if ($resolvedTicketId <= 0 && $entryRefPost !== '') {
+            $resolvedTicketId = _staff_bridge_ticket_id_by_ref($pdo, _staff_norm_ticket_ref($entryRefPost));
+          }
           $stCheckTbl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='senforms_bridge_tickets' LIMIT 1");
           if ($stCheckTbl && $stCheckTbl->fetch(PDO::FETCH_ASSOC)) {
             $maxUses = max(1, $entryMultiplier);
-            $use = increment_bridge_checkin_use($pdo, $entryId, $maxUses);
+            if ($resolvedTicketId <= 0) {
+              $flashErr = 'No se pudo identificar el ticket para check-in.';
+              _staff_log_checkin($pdo, $usuarioId, $eidPost, 'TICKEX', 0, $entryRefPost, $entryNamePost, 'error', 'ticket_no_resuelto');
+            } else {
+            $use = increment_bridge_checkin_use($pdo, $resolvedTicketId, $maxUses);
             if (!empty($use['ok']) && !empty($use['changed'])) {
               if (!empty($use['full'])) {
                 $st = $pdo->prepare('UPDATE senforms_bridge_tickets SET is_checked_in = 1, checked_in_at = datetime(\'now\') WHERE id = :id');
-                $st->execute(array(':id' => $entryId));
+                $st->execute(array(':id' => $resolvedTicketId));
               }
               $flashOk = 'Check-in realizado (' . (int)$use['used'] . '/' . (int)$use['max'] . ').';
+              _staff_log_checkin($pdo, $usuarioId, $eidPost, 'TICKEX', $resolvedTicketId, $entryRefPost, $entryNamePost, 'ok', 'checkin_' . (int)$use['used'] . '_de_' . (int)$use['max']);
             } else {
               $flashErr = 'Esta entrada ya agotó sus ingresos.';
+              _staff_log_checkin($pdo, $usuarioId, $eidPost, 'TICKEX', $resolvedTicketId, $entryRefPost, $entryNamePost, 'duplicate', 'intento_repetido_tickex');
+            }
             }
           } else {
             $flashErr = 'No se puede checkear esta entrada en este entorno.';
+            _staff_log_checkin($pdo, $usuarioId, $eidPost, 'TICKEX', $resolvedTicketId, $entryRefPost, $entryNamePost, 'error', 'tabla_bridge_inexistente');
           }
           }
         } else {
@@ -154,12 +223,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           $st->execute(array(':id' => $entryId, ':eid' => $eidPost));
           if ($st->rowCount() > 0) {
             $flashOk = 'Check-in realizado.';
+            _staff_log_checkin($pdo, $usuarioId, $eidPost, 'STR', $entryId, $entryRefPost, $entryNamePost, 'ok', 'checkin_realizado');
           } else {
             $flashErr = 'La entrada ya estaba checkeada o no corresponde al evento.';
+            _staff_log_checkin($pdo, $usuarioId, $eidPost, 'STR', $entryId, $entryRefPost, $entryNamePost, 'duplicate', 'intento_repetido_o_fuera_evento');
           }
         }
       } catch (Exception $e) {
         $flashErr = 'No se pudo realizar el check-in.';
+        _staff_log_checkin($pdo, $usuarioId, $eidPost, $entrySource, $entryId, $entryRefPost, $entryNamePost, 'error', 'excepcion_checkin');
       }
     }
   }
@@ -394,6 +466,8 @@ include __DIR__ . '/inc/layout_top.php';
                   <input type="hidden" name="action" value="staff_checkin">
                   <input type="hidden" name="entry_id" value="<?php echo (int)$entryId; ?>">
                   <input type="hidden" name="entry_source" value="<?php echo e($src); ?>">
+                  <input type="hidden" name="entry_ref" value="<?php echo e($codigo); ?>">
+                  <input type="hidden" name="entry_name" value="<?php echo e((string)($r['nombre'] ?? '')); ?>">
                   <input type="hidden" name="evento_id" value="<?php echo (int)$activeEventId; ?>">
                   <input type="hidden" name="q" value="<?php echo e($q); ?>">
                   <div class="swipe-wrap" data-swipe>
@@ -421,7 +495,7 @@ include __DIR__ . '/inc/layout_top.php';
     </span>
     <span>QR</span>
   </a>
-  <a href="panel_staff_mis_tickex.php"><span class="i">🎫</span><span>Ingresos</span></a>
+  <a href="panel_staff_venta_puerta.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
   <button type="button" id="btnMore"><span class="i">☰</span><span>Más</span></button>
 </nav>
 

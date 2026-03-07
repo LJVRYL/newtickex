@@ -117,6 +117,52 @@ function increment_bridge_checkin_use($pdo, $bridgeTicketId, $maxUses) {
     return $result;
 }
 
+function ensure_checkin_audit_log_table($pdo) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS checkin_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at DATETIME DEFAULT (datetime('now')),
+            actor_user_id INTEGER,
+            evento_id INTEGER,
+            source TEXT,
+            source_ticket_id INTEGER,
+            ticket_ref TEXT,
+            attendee_name TEXT,
+            action TEXT,
+            result TEXT,
+            detail TEXT
+        )");
+    } catch (Exception $e) {
+        // ignore
+    }
+}
+
+function log_checkin_audit($pdo, $data = array()) {
+    if (!is_array($data)) return false;
+    ensure_checkin_audit_log_table($pdo);
+    try {
+        $st = $pdo->prepare("INSERT INTO checkin_audit_log (
+            actor_user_id, evento_id, source, source_ticket_id, ticket_ref, attendee_name, action, result, detail
+        ) VALUES (
+            :actor_user_id, :evento_id, :source, :source_ticket_id, :ticket_ref, :attendee_name, :action, :result, :detail
+        )");
+        $st->execute(array(
+            ':actor_user_id' => isset($data['actor_user_id']) ? (int)$data['actor_user_id'] : null,
+            ':evento_id' => isset($data['evento_id']) ? (int)$data['evento_id'] : null,
+            ':source' => isset($data['source']) ? (string)$data['source'] : '',
+            ':source_ticket_id' => isset($data['source_ticket_id']) ? (int)$data['source_ticket_id'] : null,
+            ':ticket_ref' => isset($data['ticket_ref']) ? (string)$data['ticket_ref'] : '',
+            ':attendee_name' => isset($data['attendee_name']) ? (string)$data['attendee_name'] : '',
+            ':action' => isset($data['action']) ? (string)$data['action'] : 'checkin',
+            ':result' => isset($data['result']) ? (string)$data['result'] : '',
+            ':detail' => isset($data['detail']) ? (string)$data['detail'] : '',
+        ));
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
 /**
  * Asegura que exista la tabla de mapeo entre evento STR y slug del bridge
  */

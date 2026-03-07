@@ -129,7 +129,7 @@ include __DIR__ . '/inc/layout_top.php';
     </span>
     <span>QR</span>
   </a>
-  <a href="panel_staff_mis_tickex.php"><span class="i">🎫</span><span>Ingresos</span></a>
+  <a href="panel_staff_venta_puerta.php"><span class="i">💸</span><span>Venta</span></a>
   <button type="button" id="btnMore"><span class="i">☰</span><span>Más</span></button>
 </nav>
 
