@@ -63,6 +63,24 @@ function ensure_staff_cost_column($pdo) {
 }
 ensure_staff_cost_column($pdo);
 
+function ensure_staff_event_cost_column($pdo) {
+  try {
+    $cols = array();
+    $st = $pdo->query("PRAGMA table_info(staff_eventos)");
+    if ($st) {
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+        if (isset($ci['name'])) $cols[$ci['name']] = true;
+      }
+    }
+    if (!isset($cols['costo_servicio'])) {
+      $pdo->exec("ALTER TABLE staff_eventos ADD COLUMN costo_servicio REAL DEFAULT 0");
+    }
+  } catch (Exception $e) {
+    // continuar
+  }
+}
+ensure_staff_event_cost_column($pdo);
+
 function _tickex_base_url()
 {
   $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '';
@@ -432,6 +450,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   }
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_staff_event_cost') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+    flash('err', 'CSRF inválido.');
+  } else {
+    $clienteId = isset($_POST['cliente_id']) ? (int)$_POST['cliente_id'] : 0;
+    $eventoIdCost = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
+    $costo = isset($_POST['costo_servicio']) ? (float)$_POST['costo_servicio'] : 0;
+    if ($clienteId <= 0 || $eventoIdCost <= 0) {
+      flash('warn', 'Datos inválidos para actualizar costo.');
+    } else {
+      try {
+        $permitido = false;
+        if (_tickex_is_super($tipoGlobal)) {
+          $permitido = true;
+        } else {
+          $stOwn = $pdo->prepare('SELECT 1 FROM staff_admins WHERE owner_admin_id = :aid AND cliente_id = :cid AND activo = 1 LIMIT 1');
+          $stOwn->execute(array(':aid' => $adminId, ':cid' => $clienteId));
+          $permitido = (bool)$stOwn->fetchColumn();
+        }
+
+        if (!$permitido) {
+          flash('err', 'No tenés permiso para modificar este costo.');
+        } else {
+          $up = $pdo->prepare('UPDATE staff_eventos SET costo_servicio = :c WHERE staff_id = :sid AND evento_id = :eid');
+          $up->execute(array(':c' => $costo, ':sid' => $clienteId, ':eid' => $eventoIdCost));
+          flash('ok', 'Costo de staff actualizado para este evento.');
+        }
+      } catch (Exception $e) {
+        flash('err', 'No se pudo actualizar el costo de staff.');
+      }
+    }
+  }
+}
+
   /* =========================================================
      ASIGNAR STAFF EXISTENTE A UN EVENTO (POST)
      ========================================================= */
@@ -443,6 +496,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
     $rolEventoSet = trim(isset($_POST['rol_evento']) ? $_POST['rol_evento'] : 'puerta');
     if (!isset($staffRolesMap[$rolEventoSet])) $rolEventoSet = 'puerta';
+    $costoAsign = isset($_POST['costo_servicio']) ? (float)$_POST['costo_servicio'] : 0;
     $allEvents    = isset($_POST['all_events']) && (int)$_POST['all_events'] === 1;
 
     // evento_id puede venir como array (multi-select)
@@ -495,9 +549,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $del->execute(array(':id' => $staffIdAsign));
 
             if (!empty($selectedIds)) {
-              $ins = $pdo->prepare('INSERT OR IGNORE INTO staff_eventos (staff_id, evento_id) VALUES (:sid, :eid)');
+              $ins = $pdo->prepare('INSERT OR REPLACE INTO staff_eventos (staff_id, evento_id, costo_servicio) VALUES (:sid, :eid, :c)');
               foreach ($selectedIds as $eid => $v) {
-                $ins->execute(array(':sid' => $staffIdAsign, ':eid' => $eid));
+                $ins->execute(array(':sid' => $staffIdAsign, ':eid' => $eid, ':c' => $costoAsign));
               }
             }
 
@@ -547,9 +601,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
               foreach (array_keys($eventosAsign) as $eid) { $selectedIds[$eid] = true; }
 
               if (!empty($selectedIds)) {
-                $ins = $pdo->prepare("INSERT OR IGNORE INTO staff_eventos (staff_id, evento_id) VALUES (:sid, :eid)");
+                $ins = $pdo->prepare("INSERT OR REPLACE INTO staff_eventos (staff_id, evento_id, costo_servicio) VALUES (:sid, :eid, :c)");
                 foreach ($selectedIds as $eid => $v) {
-                  $ins->execute(array(':sid'=>$staffIdAsign, ':eid'=>$eid));
+                  $ins->execute(array(':sid'=>$staffIdAsign, ':eid'=>$eid, ':c'=>$costoAsign));
                 }
                 $first = array_key_first($selectedIds);
                 $upd = $pdo->prepare("UPDATE usuarios_admin SET evento_id = :eid, rol_evento = :rol, activo = 1 WHERE id = :id");
@@ -860,7 +914,8 @@ if ($prefEventoId > 0) {
     $stAE = $pdo->prepare("SELECT DISTINCT se.staff_id AS cliente_id,
         rp.apodo, rp.email, rp.nombre, rp.apellido,
         sa.rol_staff,
-        se.evento_id
+        se.evento_id,
+        COALESCE(se.costo_servicio, 0) AS costo_servicio
       FROM staff_eventos se
       LEFT JOIN registro_pendientes rp ON rp.id = se.staff_id
       LEFT JOIN staff_admins sa ON sa.cliente_id = se.staff_id AND sa.activo = 1
@@ -950,7 +1005,7 @@ if ($prefEventoId > 0) {
 <div class="card" style="max-width:900px;">
   <h3>Asignar staff existente a un evento</h3>
 
-  <form method="post" style="display:grid;grid-template-columns:1.2fr 1fr 0.8fr auto;gap:10px;align-items:end;">
+  <form method="post" style="display:grid;grid-template-columns:1.2fr 1fr 0.8fr 0.8fr auto;gap:10px;align-items:end;">
     <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <input type="hidden" name="action" value="assign_staff_event">
 
@@ -998,6 +1053,11 @@ if ($prefEventoId > 0) {
           </option>
         <?php endforeach; ?>
       </select>
+    </div>
+
+    <div>
+      <label>Costo staff ($)</label>
+      <input type="number" name="costo_servicio" min="0" step="0.01" value="0" placeholder="0.00">
     </div>
 
     <div>
@@ -1049,6 +1109,7 @@ if ($prefEventoId > 0) {
             <th>Tickex ID</th>
             <th>Email</th>
             <th>Rol</th>
+            <th>Costo staff</th>
           </tr>
         </thead>
         <tbody>
@@ -1058,6 +1119,16 @@ if ($prefEventoId > 0) {
             <td><?php echo e((!empty($s['apodo']) ? (string)$s['apodo'] : ('#' . (int)$s['cliente_id']))); ?></td>
             <td><?php echo e((string)($s['email'] ?? '')); ?></td>
             <td><?php echo e(tickex_staff_role_label($pdo, $adminId, (string)($s['rol_staff'] ?: 'puerta'))); ?></td>
+            <td>
+              <form method="post" style="display:flex;gap:6px;align-items:center;">
+                <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
+                <input type="hidden" name="action" value="update_staff_event_cost">
+                <input type="hidden" name="cliente_id" value="<?php echo (int)$s['cliente_id']; ?>">
+                <input type="hidden" name="evento_id" value="<?php echo (int)$prefEventoId; ?>">
+                <input type="number" name="costo_servicio" min="0" step="0.01" value="<?php echo e((string)number_format((float)($s['costo_servicio'] ?? 0), 2, '.', '')); ?>" style="width:110px;">
+                <button class="btn secondary" type="submit" style="padding:4px 8px;">Guardar</button>
+              </form>
+            </td>
           </tr>
         <?php endforeach; ?>
         </tbody>

@@ -97,6 +97,25 @@ function stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasC
 
 function get_staff_cost_by_event($pdo, $eventoId) {
   try {
+    $stSe = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='staff_eventos' LIMIT 1");
+    if ($stSe && $stSe->fetch(PDO::FETCH_ASSOC)) {
+      $colsSe = array();
+      $stCols = $pdo->query("PRAGMA table_info(staff_eventos)");
+      if ($stCols) {
+        foreach ($stCols->fetchAll(PDO::FETCH_ASSOC) as $ci) {
+          if (isset($ci['name'])) $colsSe[$ci['name']] = true;
+        }
+      }
+      if (isset($colsSe['costo_servicio'])) {
+        $stmtSe = $pdo->prepare("SELECT COUNT(*) AS cnt, SUM(COALESCE(costo_servicio,0)) AS total FROM staff_eventos WHERE evento_id = :eid");
+        $stmtSe->execute(array(':eid' => $eventoId));
+        $rowSe = $stmtSe->fetch(PDO::FETCH_ASSOC);
+        $cntSe = isset($rowSe['cnt']) ? (int)$rowSe['cnt'] : 0;
+        $sumSe = isset($rowSe['total']) ? (float)$rowSe['total'] : 0;
+        if ($cntSe > 0) return $sumSe;
+      }
+    }
+
     $cols = array();
     $st = $pdo->query("PRAGMA table_info(usuarios_admin)");
     if ($st) {
