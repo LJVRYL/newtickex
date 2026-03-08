@@ -80,7 +80,12 @@ function get_venues($pdo, $adminId = 0, $isSuper = false) {
         }
         $st = $pdo->prepare("SELECT * FROM venues WHERE COALESCE(activo,1)=1 AND COALESCE(created_by_admin_id,0) = :aid ORDER BY nombre ASC, id DESC");
         $st->execute(array(':aid' => (int)$adminId));
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($rows)) return $rows;
+
+        // fallback legacy: mostrar venues activos aunque no coincida created_by_admin_id
+        $stAll = $pdo->query("SELECT * FROM venues WHERE COALESCE(activo,1)=1 ORDER BY nombre ASC, id DESC");
+        return $stAll ? $stAll->fetchAll(PDO::FETCH_ASSOC) : array();
     } catch (Exception $e) {
         return array();
     }

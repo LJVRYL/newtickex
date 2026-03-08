@@ -17,7 +17,14 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 }
 
 $isSuper = in_array($rol, array('super_admin','superadmin'), true);
-$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0);
+$adminId = 0;
+if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0) {
+  $adminId = (int)$_SESSION['user_id'];
+} elseif (isset($_SESSION['admin_id']) && (int)$_SESSION['admin_id'] > 0) {
+  $adminId = (int)$_SESSION['admin_id'];
+} elseif (isset($cu['id']) && (int)$cu['id'] > 0) {
+  $adminId = (int)$cu['id'];
+}
 $pdo = db();
 
 ensure_venues_table($pdo);
