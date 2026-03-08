@@ -3,6 +3,7 @@ require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/unified_tickets.php';
 require_once __DIR__.'/inc/manual_income.php';
 require_once __DIR__.'/inc/produccion.php';
+require_once __DIR__.'/inc/venues.php';
 require_once __DIR__.'/inc/senforms.php';
 
 require_login();
@@ -370,6 +371,7 @@ $paid      = $stats['paid'];
 $stEvento = get_unified_stats($pdo, $eventoId);
 $staffCostEvent = get_staff_cost_by_event($pdo, $eventoId);
 $artistCostEvent = get_artist_cost_by_event($pdo, $eventoId);
+$venueCostEvent = get_venue_cost_by_event($pdo, $eventoId);
 $gratis = 0;
 if (!empty($rows)) {
   foreach ($rows as $r) {
@@ -463,6 +465,7 @@ include __DIR__.'/inc/layout_top.php';
     <a class="btn pe-action-btn" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
     <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
     <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
+    <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
     <a class="btn pe-action-btn" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
     <a class="btn pe-action-btn" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Comprar</a>
     <a class="btn pe-action-btn" href="panel_evento.php" title="Volver">
@@ -569,6 +572,13 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </div>
 
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Costo venue</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
+        $<?php echo number_format($venueCostEvent, 2); ?>
+      </div>
+    </div>
+
     <?php if ($ecoStats['manual_income'] != 0): ?>
     <div class="card" style="margin:0;background:var(--panel-2);">
       <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
@@ -577,6 +587,15 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </div>
     <?php endif; ?>
+
+    <?php $resultadoNeto = (float)$ecoStats['total_recaudado'] - (float)$staffCostEvent - (float)$artistCostEvent - (float)$venueCostEvent; ?>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Resultado neto</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($resultadoNeto >= 0 ? 'var(--ok)' : 'var(--warn)'); ?>;">
+        $<?php echo number_format($resultadoNeto, 2); ?>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Recaudado - staff - artística - venue</div>
+    </div>
   </div>
   
   <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
