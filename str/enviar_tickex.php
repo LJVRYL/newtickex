@@ -143,32 +143,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
 
             // Envío automático de email
-            $asunto = "¡Recibiste una entrada de cortesía!";
-            $mensaje = "Hola $nombreIns,\n\nTe han asignado una entrada de cortesía para el evento.\n\n";
-            $mensaje .= "Código de entrada: $codigo\n";
-            $mensaje .= "Tipo: $tipoId\n";
-            $mensaje .= "Fecha de registro: $fecha\n";
-            $mensaje .= "\nMostrá este código en la puerta del evento para ingresar.\n\n";
-            $mensaje .= "Si tenés dudas, respondé este email.\n\n";
-            $mensaje .= "¡Nos vemos!\nEquipo Tickex";
+            $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : 'str.tickex.com.ar';
+            $scheme = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && (string)$_SERVER['SERVER_PORT'] === '443')) ? 'https' : 'http';
+            $baseUrl = $scheme . '://' . $host;
+            if (stripos($host, 'localhost') !== false || preg_match('/^\d+\.\d+\.\d+\.\d+$/', $host)) {
+              $baseUrl = 'https://str.tickex.com.ar';
+            }
 
-            $mailOk = tickex_send_mail_template($email, 'tickex_cortesia', array(
-              'nombre' => $nombreIns,
-              'codigo' => $codigo,
-              'tipo'   => $tipoId,
-              'fecha'  => $fecha,
-            ), array(
+            $ticketUrl = $baseUrl . '/ticket.php?c=' . urlencode($codigo);
+            $checkinUrl = $baseUrl . '/checkin.php?c=' . urlencode($codigo);
+            $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urlencode($checkinUrl);
+
+            $asunto = "¡Recibiste una entrada de cortesía!";
+            $mensajeTxt = "Hola $nombreIns,\n\nTe han asignado una entrada de cortesía para el evento.\n\n";
+            $mensajeTxt .= "Código de entrada: $codigo\n";
+            $mensajeTxt .= "Tipo: $tipoId\n";
+            $mensajeTxt .= "Fecha de registro: $fecha\n\n";
+            $mensajeTxt .= "Ver tu ticket: $ticketUrl\n";
+            $mensajeTxt .= "Link de check-in: $checkinUrl\n\n";
+            $mensajeTxt .= "Mostrá el QR en la puerta para ingresar.\n\n";
+            $mensajeTxt .= "¡Nos vemos!\nEquipo Tickex";
+
+            $mensajeHtml = '';
+            $mensajeHtml .= '<div style="font-family:Arial,sans-serif;color:#111;line-height:1.45">';
+            $mensajeHtml .= '<h2 style="margin:0 0 10px">Tu Tickex de cortesía</h2>';
+            $mensajeHtml .= '<p>Hola <strong>' . htmlspecialchars($nombreIns, ENT_QUOTES, 'UTF-8') . '</strong>, te asignamos una entrada de cortesía.</p>';
+            $mensajeHtml .= '<p style="margin:10px 0">';
+            $mensajeHtml .= 'Código: <strong>' . htmlspecialchars($codigo, ENT_QUOTES, 'UTF-8') . '</strong><br>';
+            $mensajeHtml .= 'Tipo: <strong>' . htmlspecialchars($tipoId, ENT_QUOTES, 'UTF-8') . '</strong><br>';
+            $mensajeHtml .= 'Fecha: <strong>' . htmlspecialchars($fecha, ENT_QUOTES, 'UTF-8') . '</strong>';
+            $mensajeHtml .= '</p>';
+            $mensajeHtml .= '<p style="margin:12px 0">';
+            $mensajeHtml .= '<a href="' . htmlspecialchars($ticketUrl, ENT_QUOTES, 'UTF-8') . '">Ver ticket</a> · ';
+            $mensajeHtml .= '<a href="' . htmlspecialchars($checkinUrl, ENT_QUOTES, 'UTF-8') . '">Link check-in</a>';
+            $mensajeHtml .= '</p>';
+            $mensajeHtml .= '<div style="margin:12px 0">';
+            $mensajeHtml .= '<img src="' . htmlspecialchars($qrUrl, ENT_QUOTES, 'UTF-8') . '" alt="QR Ticket" style="width:220px;max-width:100%;border:1px solid #ddd;border-radius:8px;padding:6px;background:#fff">';
+            $mensajeHtml .= '</div>';
+            $mensajeHtml .= '<p style="font-size:13px;color:#555">Si no ves la imagen del QR, abrí el enlace de ticket para visualizarlo desde el navegador.</p>';
+            $mensajeHtml .= '</div>';
+
+            $mailOk = tickex_send_mail($email, $asunto, $mensajeHtml, array(
               'context'       => 'tickex_cortesia',
               'related_table' => 'entradas',
               'related_id'    => $entradaId,
-            ), array(
-              'subject'      => $asunto,
-              'body'         => $mensaje,
-              'from_email'   => 'info@tickex.com.ar',
-              'from_name'    => 'Tickex',
-              'reply_to'     => 'info@tickex.com.ar',
-              'extra_params' => '-f info@tickex.com.ar',
-              'is_html'      => 0,
+              'from_email'    => 'info@tickex.com.ar',
+              'from_name'     => 'Tickex',
+              'reply_to'      => 'info@tickex.com.ar',
+              'extra_params'  => '-f info@tickex.com.ar',
+              'is_html'       => 1,
+              'headers_extra' => "X-Alt-Text: " . str_replace("\n", ' | ', $mensajeTxt),
             ));
 
             // Mejor feedback: intentar traer trace_id del log para correlacionar con Exim/Gmail
