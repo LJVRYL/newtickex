@@ -1141,8 +1141,8 @@ include __DIR__.'/inc/layout_top.php';
     <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
 
     <div class="card" style="background:var(--panel-2);border-color:var(--line);margin:0 0 12px 0;">
-      <h3 style="margin:0 0 8px;">Seleccioná tus entradas</h3>
-      <div style="font-size:14px;color:var(--muted);margin-bottom:10px;">Elegí la cantidad (máx 10 por tipo). Si dejás en 0, no se agrega.</div>
+      <h3 style="margin:0 0 8px;">Elige tus entradas</h3>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:10px;">Selecciona cuántas entradas de cada tipo deseas comprar.</div>
 
       <div id="stepSelect">
         <?php foreach ($entryOptions as $idx => $opt): 
@@ -1157,37 +1157,42 @@ include __DIR__.'/inc/layout_top.php';
           if ($maxQty > 10) $maxQty = 10;
           $isSoldOut = ($avail !== null && $avail <= 0);
         ?>
-          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;">
+          <div class="card" style="padding:16px;margin-bottom:12px;border:1px solid var(--line);background:var(--panel);">
             <input type="hidden" name="ticket_id[<?php echo $idx; ?>]" value="<?php echo e($opt['id']); ?>">
-            <div style="min-width:220px;flex:1;">
-              <div style="font-weight:700;line-height:1.2;" data-ticket-name="<?php echo e($opt['name']); ?>"><?php echo e($opt['name']); ?></div>
-              <div style="color:var(--muted);">
-                $<?php echo e(number_format($opt['price'],0,',','.')); ?>
-                <?php if($avail !== null): ?> · Disponibles: <?php echo (int)$avail; ?><?php endif; ?>
-                <?php if($isSoldOut): ?> · Agotado<?php endif; ?>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="color:var(--muted);">Cantidad</span>
+            <h4 style="margin:0 0 8px 0;font-size:18px;" data-ticket-name="<?php echo e($opt['name']); ?>"><?php echo e($opt['name']); ?></h4>
+            <div style="font-size:24px;font-weight:700;color:var(--primary);margin-bottom:8px;">$<?php echo e(number_format($opt['price'],0,',','.')); ?></div>
+            <div style="display:flex;align-items:center;gap:8px;opacity:<?php echo $isSoldOut ? '0.6' : '1'; ?>;">
               <select
                 name="qty[<?php echo $idx; ?>]"
                 data-idx="<?php echo $idx; ?>"
                 data-price="<?php echo e((string)$opt['price']); ?>"
                 data-name="<?php echo e((string)$opt['name']); ?>"
-                style="min-width:70px;"
+                style="padding:4px 8px;"
                 <?php echo $isSoldOut ? 'disabled' : ''; ?>
               >
-                <?php for($i=0;$i<=$maxQty;$i++): ?>
-                  <option value="<?php echo $i; ?>" <?php echo $i===0?'selected':''; ?>><?php echo $i; ?></option>
-                <?php endfor; ?>
+                <?php if(!$isSoldOut): ?>
+                  <?php for($i=0;$i<=$maxQty;$i++): ?>
+                    <option value="<?php echo $i; ?>" <?php echo $i===0?'selected':''; ?>><?php echo $i; ?></option>
+                  <?php endfor; ?>
+                <?php else: ?>
+                  <option value="0">0</option>
+                <?php endif; ?>
               </select>
+              <?php if($isSoldOut): ?>
+                <span style="color:#d32f2f;font-weight:600;">Agotado</span>
+              <?php endif; ?>
             </div>
+            <?php if(!$isSoldOut && $avail !== null && $avail <= 5): ?>
+              <div style="color:#f57c00;font-size:12px;font-weight:500;margin-top:4px;">
+                Últimas entradas
+              </div>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
 
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px;">
           <div style="font-size:18px;font-weight:700;">Total: <span id="totalDisplay">$0</span></div>
-          <button class="btn" type="button" id="btnContinue">Continuar</button>
+          <button class="btn" type="button" id="btnContinue">Comprar entradas</button>
         </div>
       </div>
 
