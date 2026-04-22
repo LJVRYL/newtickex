@@ -201,29 +201,29 @@ include __DIR__ . '/inc/layout_top.php';
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
       <?php foreach ($eventos as $ev): ?>
         <div class="card clickable-event-card" style="margin:0;cursor:pointer;" onclick="window.location.href='panel_evento.php?evento_id=<?php echo (int)$ev['id']; ?>';" role="button" tabindex="0">
-          <div style="display:flex;gap:12px;">
-            <div style="width:80px;height:80px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              <?php $fly = isset($ev['flyer_filename']) ? $ev['flyer_filename'] : ''; ?>
-              <?php if ($fly && file_exists(__DIR__ . '/' . $fly)): ?>
-                <img src="<?php echo e($fly); ?>" alt="Flyer" style="width:100%;height:100%;object-fit:cover;">
-              <?php else: ?>
-                <span class="muted" style="font-size:12px;">Sin flyer</span>
-              <?php endif; ?>
+          <div style="width:100%;height:220px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;">
+            <?php $fly = isset($ev['flyer_filename']) ? $ev['flyer_filename'] : ''; ?>
+            <?php if ($fly && file_exists(__DIR__ . '/' . $fly)): ?>
+              <img src="<?php echo e($fly); ?>" alt="Flyer" style="width:100%;height:100%;object-fit:cover;">
+            <?php else: ?>
+              <span class="muted" style="font-size:12px;">Sin flyer</span>
+            <?php endif; ?>
+          </div>
+          <div style="padding:12px 10px 14px;">
+            <div style="font-weight:700;font-size:16px;line-height:1.25;margin-bottom:6px;min-height:44px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+              <?php echo e($ev['nombre']); ?>
             </div>
-            <div style="flex:1 1 auto;min-width:0;">
-              <div style="font-weight:700;"><?php echo e($ev['nombre']); ?></div>
-              <div class="muted" style="font-size:12px;margin-top:4px;">
-                Fecha: <?php
-                  $fd = isset($ev['fecha_desde']) ? $ev['fecha_desde'] : '';
-                  $fh = isset($ev['fecha_hasta']) ? $ev['fecha_hasta'] : '';
-                  if ($fd === '' && $fh === '') {
-                    echo 'Sin fecha';
-                  } else {
-                    echo e($fd);
-                    if ($fh !== '') echo ' → '.e($fh);
-                  }
-                ?>
-              </div>
+            <div class="muted" style="font-size:13px;line-height:1.4;">
+              <?php
+                $fd = isset($ev['fecha_desde']) ? $ev['fecha_desde'] : '';
+                $fh = isset($ev['fecha_hasta']) ? $ev['fecha_hasta'] : '';
+                if ($fd === '' && $fh === '') {
+                  echo 'Sin fecha';
+                } else {
+                  echo e($fd);
+                  if ($fh !== '') echo ' → '.e($fh);
+                }
+              ?>
             </div>
           </div>
         </div>
