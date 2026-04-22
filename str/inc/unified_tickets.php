@@ -33,6 +33,20 @@ function detect_table_columns($pdo, $table_name) {
 }
 
 /**
+ * Construye la cláusula SQL para excluir entradas ocultas no escaneadas
+ */
+function build_hidden_entries_where_clause($pdo, $colCheck = null) {
+    if ($colCheck === null) {
+        $colCheck = get_checkin_column($pdo);
+    }
+    $cols = detect_table_columns($pdo, 'entradas');
+    if (!isset($cols['oculto'])) {
+        return '';
+    }
+    return " AND (oculto = 0 OR COALESCE($colCheck,0) = 1)";
+}
+
+/**
  * Obtiene la columna de check-in de entradas
  */
 function get_checkin_column($pdo) {
@@ -248,6 +262,11 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
         $where[] = "$colCheck = 1";
     } elseif (isset($filters['estado']) && $filters['estado'] === 'pendiente') {
         $where[] = "$colCheck = 0";
+    }
+
+    $hiddenClause = build_hidden_entries_where_clause($pdo, $colCheck);
+    if ($hiddenClause !== '') {
+        $where[] = substr($hiddenClause, 5); // remove leading ' AND '
     }
     
     $sql = "SELECT * FROM entradas WHERE " . implode(" AND ", $where) . " ORDER BY id DESC";
@@ -669,13 +688,42 @@ function get_unified_stats($pdo, $evento_id) {
     // ===== CONTAR STR =====
     try {
         $colCheck = get_checkin_column($pdo);
-        $stmtT = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ?");
-        $stmtT->execute(array($evento_id));
-        $strTotal = (int)$stmtT->fetchColumn();
-        $stats['total'] += $strTotal;
-        $stats['paid'] += $strTotal; // STR siempre pagadas por defecto
+        $hiddenClause = build_hidden_entries_where_clause($pdo, $colCheck);
+
+        // Count STR entries by classification (paid vs gratis)
+        $sqlStr = "SELECT tipo, monto_pagado FROM entradas WHERE evento_id = ?" . $hiddenClause;
+        $stmtStr = $pdo->prepare($sqlStr);
+        $stmtStr->execute(array($evento_id));
+        $strRows = $stmtStr->fetchAll(PDO::FETCH_ASSOC);
         
-        $stmtC = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1");
+        $strTotal = count($strRows);
+        $strPaid = 0;
+        
+        foreach ($strRows as $row) {
+            $tipoUp = strtoupper(trim($row['tipo'] ?? ''));
+            $monto = isset($row['monto_pagado']) ? (float)$row['monto_pagado'] : 0;
+            
+            $isPaid = false;
+            if ($tipoUp === 'PAGA' || $tipoUp === 'PREPAGA') {
+                $isPaid = true;
+            } elseif ($tipoUp === 'FREE' || $tipoUp === 'GRATIS') {
+                $isPaid = false;
+            } elseif ($tipoUp === 'PUERTA') {
+                $isPaid = ($monto > 0);
+            } else {
+                $isPaid = ($monto > 0);
+            }
+            
+            if ($isPaid) {
+                $strPaid++;
+            }
+        }
+        
+        $stats['total'] += $strTotal;
+        $stats['paid'] += $strPaid;
+        
+        $sqlCheck = "SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1" . $hiddenClause;
+        $stmtC = $pdo->prepare($sqlCheck);
         $stmtC->execute(array($evento_id));
         $stats['checkins'] += (int)$stmtC->fetchColumn();
 
