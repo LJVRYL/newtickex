@@ -7,6 +7,7 @@ require_once __DIR__.'/inc/venues.php';
 require_once __DIR__.'/inc/senforms.php';
 
 require_login();
+$csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
 
 // roles permitidos (compat con tu DB)
 $cu = current_user();
@@ -471,7 +472,7 @@ include __DIR__.'/inc/layout_top.php';
     <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
     <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
     <a class="btn pe-action-btn" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
-    <a class="btn pe-action-btn" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Comprar</a>
+    <a class="btn danger" href="eliminar_evento.php?id=<?php echo (int)$eventoId; ?>&csrf=<?php echo urlencode($csrf); ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Eliminar</a>
     <a class="btn pe-action-btn" href="panel_evento.php" title="Volver">
       ⬅ Volver
     </a>

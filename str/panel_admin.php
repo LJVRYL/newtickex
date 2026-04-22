@@ -200,8 +200,7 @@ include __DIR__ . '/inc/layout_top.php';
   <?php else: ?>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
       <?php foreach ($eventos as $ev): ?>
-        <?php $st = get_unified_stats($pdo, (int)$ev['id']); ?>
-        <div class="card" style="margin:0;">
+        <div class="card clickable-event-card" style="margin:0;cursor:pointer;" onclick="window.location.href='panel_evento.php?evento_id=<?php echo (int)$ev['id']; ?>';" role="button" tabindex="0">
           <div style="display:flex;gap:12px;">
             <div style="width:80px;height:80px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
               <?php $fly = isset($ev['flyer_filename']) ? $ev['flyer_filename'] : ''; ?>
@@ -213,7 +212,6 @@ include __DIR__ . '/inc/layout_top.php';
             </div>
             <div style="flex:1 1 auto;min-width:0;">
               <div style="font-weight:700;"><?php echo e($ev['nombre']); ?></div>
-              <div class="muted" style="font-size:12px;">Slug: <?php echo e($ev['slug']); ?></div>
               <div class="muted" style="font-size:12px;margin-top:4px;">
                 Fecha: <?php
                   $fd = isset($ev['fecha_desde']) ? $ev['fecha_desde'] : '';
@@ -227,20 +225,6 @@ include __DIR__ . '/inc/layout_top.php';
                 ?>
               </div>
             </div>
-          </div>
-
-          <div style="margin-top:10px;font-size:13px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-            <div><span class="muted">Vendidas</span><br><strong><?php echo (int)$st['total']; ?></strong></div>
-            <div><span class="muted">Check-ins</span><br><strong><?php echo (int)$st['checkins']; ?></strong></div>
-            <div><span class="muted">Faltan</span><br><strong><?php echo isset($st['faltan']) ? (int)$st['faltan'] : ((isset($st['pendiente'])) ? (int)$st['pendiente'] : 0); ?></strong></div>
-            <div><span class="muted">Disponibles</span><br><strong><?php echo ($st['disponibles'] !== null ? (int)$st['disponibles'] : '-'); ?></strong></div>
-            <div><span class="muted">Stock total</span><br><strong><?php echo ($st['stock_total'] !== null ? (int)$st['stock_total'] : '-'); ?></strong></div>
-          </div>
-
-          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-            <a class="btn secondary" style="display:inline-flex;align-items:center;gap:6px;" href="editar_evento.php?id=<?php echo (int)$ev['id']; ?>">✏ Editar</a>
-            <a class="btn danger" style="display:inline-flex;align-items:center;gap:6px;" href="eliminar_evento.php?id=<?php echo (int)$ev['id']; ?>&csrf=<?php echo urlencode($csrf); ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Borrar</a>
-            <a class="btn btn-panel" style="display:inline-flex;align-items:center;gap:6px;" href="panel_evento.php?evento_id=<?php echo (int)$ev['id']; ?>">Ver panel</a>
           </div>
         </div>
       <?php endforeach; ?>
