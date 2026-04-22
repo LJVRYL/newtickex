@@ -83,7 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tipoId   = isset($_POST['tipo_id']) ? trim($_POST['tipo_id']) : '';
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
     $nombre   = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
-  $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
+    $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
+    $hidden   = (isset($_POST['oculto']) && in_array($rol, array('super_admin','superadmin'), true)) ? 1 : 0;
 
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
     if ($tipoId === '') $errors[] = 'Seleccioná un tipo de entrada.';
@@ -130,15 +131,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha  = date('Y-m-d H:i:s');
         $nombreIns = $nombre !== '' ? $nombre : $email;
         try {
-            $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
-            $stmt->execute(array(
-                ':n'  => $nombreIns,
-                ':e'  => $email,
-                ':f'  => $fecha,
-                ':c'  => $codigo,
-                ':t'  => $tipoId,
-                ':ev' => $eventoId,
-            ));
+            $cols = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
+            $hasOculto = false;
+            foreach ($cols as $c) {
+                if (isset($c['name']) && $c['name'] === 'oculto') {
+                    $hasOculto = true;
+                    break;
+                }
+            }
+            if (!$hasOculto) {
+                try {
+                    $pdo->exec("ALTER TABLE entradas ADD COLUMN oculto INTEGER NOT NULL DEFAULT 0");
+                    $hasOculto = true;
+                } catch (Exception $e) {
+                    // ignore if alter fails
+                }
+            }
+
+            if ($hasOculto) {
+                $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id, oculto) VALUES (:n,:e,:f,:c,0,:t,0,:ev,:h)");
+                $params = array(
+                    ':n'  => $nombreIns,
+                    ':e'  => $email,
+                    ':f'  => $fecha,
+                    ':c'  => $codigo,
+                    ':t'  => $tipoId,
+                    ':ev' => $eventoId,
+                    ':h'  => $hidden,
+                );
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
+                $params = array(
+                    ':n'  => $nombreIns,
+                    ':e'  => $email,
+                    ':f'  => $fecha,
+                    ':c'  => $codigo,
+                    ':t'  => $tipoId,
+                    ':ev' => $eventoId,
+                );
+            }
+            $stmt->execute($params);
             $entradaId = (int)$pdo->lastInsertId();
             $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
 
@@ -289,6 +321,16 @@ include __DIR__.'/inc/layout_top.php';
       <label>Nombre visible en entrada (opcional)</label>
       <input name="nombre" placeholder="Nombre / apodo para el ticket">
     </div>
+    <?php if (in_array($rol, array('super_admin','superadmin'), true)): ?>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" name="oculto" value="1"> Crear como ticket oculto
+      </label>
+      <div class="muted" style="font-size:12px;">
+        El ticket no aparecerá en el listado del evento hasta que sea escaneado.
+      </div>
+    </div>
+    <?php endif; ?>
     <div style="grid-column:1 / -1;">
       <button class="btn" type="submit">Crear y enviar</button>
     </div>

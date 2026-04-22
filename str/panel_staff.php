@@ -219,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           }
         } else {
           $colCheck = get_checkin_column($pdo);
-          $st = $pdo->prepare("UPDATE entradas SET $colCheck = 1, checked_in_at = datetime('now') WHERE id = :id AND evento_id = :eid AND COALESCE($colCheck,0)=0");
+          $st = $pdo->prepare("UPDATE entradas SET $colCheck = 1, checked_in_at = datetime('now'), oculto = 0 WHERE id = :id AND evento_id = :eid AND COALESCE($colCheck,0)=0");
           $st->execute(array(':id' => $entryId, ':eid' => $eidPost));
           if ($st->rowCount() > 0) {
             $flashOk = 'Check-in realizado.';

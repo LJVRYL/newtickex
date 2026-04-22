@@ -107,7 +107,8 @@ try {
             checked_in_at TEXT,
             tipo TEXT NOT NULL DEFAULT 'FREE',
             monto_pagado INTEGER NOT NULL DEFAULT 0,
-            evento_id INTEGER NOT NULL DEFAULT 1
+            evento_id INTEGER NOT NULL DEFAULT 1,
+            oculto INTEGER NOT NULL DEFAULT 0
         )
     ");
 

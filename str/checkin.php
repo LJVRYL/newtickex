@@ -349,7 +349,7 @@ if ($ticket && $puedeCheckin && $eventoOk) {
         ));
       }
     } else {
-      $upd = $pdo->prepare("UPDATE entradas SET checked_in=1, checked_in_at=:f WHERE id=:id");
+      $upd = $pdo->prepare("UPDATE entradas SET checked_in=1, checked_in_at=:f, oculto=0 WHERE id=:id");
       $upd->execute(array(':f'=>$ahora, ':id'=>(int)$ticket['id']));
       $ticket['checked_in'] = 1;
       $ticket['checked_in_at'] = $ahora;

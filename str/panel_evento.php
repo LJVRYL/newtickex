@@ -69,11 +69,15 @@ if ($stmtTipos && $stmtTipos->fetch(PDO::FETCH_ASSOC)) {
 function stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasCantTotal) {
   $out = array('total'=>0,'checkins'=>0,'faltan'=>0,'disponibles'=>null,'stock_total'=>null);
 
-  $stmtT = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ?");
+  $hiddenClause = build_hidden_entries_where_clause($pdo, $colCheck);
+
+  $sqlTotal = "SELECT COUNT(*) FROM entradas WHERE evento_id = ?" . $hiddenClause;
+  $stmtT = $pdo->prepare($sqlTotal);
   $stmtT->execute(array($eventoId));
   $out['total'] = (int)$stmtT->fetchColumn();
 
-  $stmtC = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1");
+  $sqlCheck = "SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1" . $hiddenClause;
+  $stmtC = $pdo->prepare($sqlCheck);
   $stmtC->execute(array($eventoId));
   $out['checkins'] = (int)$stmtC->fetchColumn();
   $out['faltan'] = max(0, $out['total'] - $out['checkins']);

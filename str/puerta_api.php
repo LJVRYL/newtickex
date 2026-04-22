@@ -43,9 +43,9 @@ if ($action === 'checkin') {
     $id = intval($_POST['id'] ?? 0);
     $eventoId = isset($_SESSION['evento_id']) ? (int)$_SESSION['evento_id'] : 0;
     if ($id > 0 && $eventoId > 0) {
-        // Solo STR: marcar checked_in=1
+        // Solo STR: marcar checked_in=1 y normalizar tickets ocultos
         $colCheck = get_checkin_column($pdo);
-        $stmt = $pdo->prepare("UPDATE entradas SET $colCheck = 1, checked_in_at = datetime('now') WHERE id = :id AND evento_id = :eid");
+        $stmt = $pdo->prepare("UPDATE entradas SET $colCheck = 1, checked_in_at = datetime('now'), oculto = 0 WHERE id = :id AND evento_id = :eid");
         $stmt->execute([':id' => $id, ':eid' => $eventoId]);
         echo json_encode(['success' => true]);
         exit;
