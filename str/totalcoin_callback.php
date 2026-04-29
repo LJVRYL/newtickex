@@ -25,19 +25,28 @@ if ($uuid !== '') {
           $pdo->beginTransaction();
           try {
             $eventoId = (int)$order['evento_id'];
-            $buyerName = trim($order['buyer_first'] . ' ' . $order['buyer_last']);
-            $buyerEmail = $order['buyer_email'];
+            $buyerName = trim(($order['buyer_first'] ?? '') . ' ' . ($order['buyer_last'] ?? ''));
+            $buyerEmail = $order['buyer_email'] ?? '';
             $fechaReg = date('Y-m-d H:i:s');
 
             foreach ($tickets as $ticket) {
-              $tipoId = (int)$ticket['id'];
-              $tipoName = $ticket['name'];
-              $qty = (int)$ticket['qty'];
-              $price = (int)$ticket['price'];
+              $tipoId = (int)($ticket['id'] ?? 0);
+              $tipoName = $ticket['name'] ?? 'General';
+              $qty = (int)($ticket['qty'] ?? 1);
+              $price = (int)($ticket['price'] ?? 0);
 
               for ($i = 0; $i < $qty; $i++) {
-                // Generar código único
-                $codigo = bin2hex(random_bytes(5));
+                // Generar código único (fallback si random_bytes no existe)
+                $codigo = '';
+                if (function_exists('random_bytes')) {
+                  try {
+                    $codigo = bin2hex(random_bytes(5));
+                  } catch (Exception $_e) {
+                    $codigo = substr(sha1(uniqid('', true)), 0, 10);
+                  }
+                } else {
+                  $codigo = substr(sha1(uniqid('', true)), 0, 10);
+                }
 
                 // Insertar entrada
                 $stIns = $pdo->prepare("INSERT INTO entradas (evento_id, nombre, email, fecha_registro, codigo, checked_in, checked_in_at, tipo, monto_pagado) VALUES (:eid, :nom, :em, :fec, :cod, 0, NULL, :tipo, :monto)");
@@ -64,9 +73,11 @@ if ($uuid !== '') {
             $pdo->commit();
             $processed = true;
           } catch (Exception $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+              $pdo->rollBack();
+            }
             // Log error
-            error_log('Error procesando orden TotalCoin: ' . $e->getMessage());
+            error_log('Error procesando orden TotalCoin ' . $uuid . ': ' . $e->getMessage());
           }
         }
       }
