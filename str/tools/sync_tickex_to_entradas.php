@@ -20,19 +20,24 @@ if (isset($haveEn['checkin'])) $colCheck = 'checkin';
 elseif (isset($haveEn['checked_in'])) $colCheck = 'checked_in';
 
 /* existe map + view? */
-$hasMap  = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map' LIMIT 1")->fetchColumn();
+$hasBridgeMap  = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_event_map' LIMIT 1")->fetchColumn();
+$hasLegacyMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map' LIMIT 1")->fetchColumn();
 $hasView = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type IN ('view','table') AND name='v_senforms_bridge_status' LIMIT 1")->fetchColumn();
-if (!$hasMap || !$hasView) {
-  echo "No hay tickex_event_map o v_senforms_bridge_status. Nada para sincronizar.\n";
+if ((!$hasBridgeMap && !$hasLegacyMap) || !$hasView) {
+  echo "No hay bridge_event_map/tickex_event_map o v_senforms_bridge_status. Nada para sincronizar.\n";
   exit(0);
 }
 
 /* mapping */
-$stMap = $pdo->prepare("SELECT event_slug FROM tickex_event_map WHERE str_event_id = :id LIMIT 1");
+if ($hasBridgeMap) {
+  $stMap = $pdo->prepare("SELECT bridge_slug AS event_slug FROM bridge_event_map WHERE evento_id = :id LIMIT 1");
+} else {
+  $stMap = $pdo->prepare("SELECT event_slug FROM tickex_event_map WHERE str_event_id = :id LIMIT 1");
+}
 $stMap->execute(array(':id' => $eventoId));
 $m = $stMap->fetch(PDO::FETCH_ASSOC);
 if (!$m || empty($m['event_slug'])) {
-  echo "No hay mapping en tickex_event_map para str_event_id=$eventoId\n";
+  echo "No hay mapping en bridge_event_map/tickex_event_map para str_event_id=$eventoId\n";
   exit(0);
 }
 $eventSlug = (string)$m['event_slug'];

@@ -6,9 +6,20 @@ if (!isset($pdo) || !($pdo instanceof PDO) || !isset($eventoId)) { return; }
 
 try {
   // Chequeos mínimos (tabla mapeo + view)
-  $hasMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map' LIMIT 1")->fetchColumn();
+  $hasBridgeMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_event_map' LIMIT 1")->fetchColumn();
+  $hasLegacyMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map' LIMIT 1")->fetchColumn();
   $hasView = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type IN ('view','table') AND name='v_senforms_bridge_status' LIMIT 1")->fetchColumn();
-  if (!$hasMap || !$hasView) { return; }
+  if ((!$hasBridgeMap && !$hasLegacyMap) || !$hasView) { return; }
+
+  $mapTable = $hasBridgeMap ? 'bridge_event_map' : 'tickex_event_map';
+  $mapSql = $mapTable === 'bridge_event_map'
+    ? "SELECT bridge_slug AS event_slug FROM bridge_event_map WHERE evento_id = :id LIMIT 1"
+    : "SELECT event_slug, event_public_id FROM tickex_event_map WHERE str_event_id = :id LIMIT 1";
+
+  $stMap = $pdo->prepare($mapSql);
+  $stMap->execute(array(':id' => (int)$eventoId));
+  $m = $stMap->fetch(PDO::FETCH_ASSOC);
+  if (!$m || empty($m['event_slug'])) { return; }
 
   $tickex = array(
     'has' => false,
@@ -20,12 +31,6 @@ try {
   );
   $rowsTx = array();
   $tickexUrl = '';
-
-  $stMap = $pdo->prepare("SELECT event_slug, event_public_id FROM tickex_event_map WHERE str_event_id = :id LIMIT 1");
-  $stMap->execute(array(':id' => (int)$eventoId));
-  $m = $stMap->fetch(PDO::FETCH_ASSOC);
-
-  if (!$m || empty($m['event_slug'])) { return; }
 
   $tickex['has'] = true;
   $tickex['event_slug'] = (string)$m['event_slug'];

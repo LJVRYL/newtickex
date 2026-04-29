@@ -33,17 +33,12 @@ function detect_table_columns($pdo, $table_name) {
 }
 
 /**
- * Construye la cláusula SQL para excluir entradas ocultas no escaneadas
+ * Construye la cláusula SQL para excluir entradas ocultas no escaneadas.
+ *
+ * Actualmente deshabilitado para que todas las ventas se muestren en el panel.
  */
 function build_hidden_entries_where_clause($pdo, $colCheck = null) {
-    if ($colCheck === null) {
-        $colCheck = get_checkin_column($pdo);
-    }
-    $cols = detect_table_columns($pdo, 'entradas');
-    if (!isset($cols['oculto'])) {
-        return '';
-    }
-    return " AND (oculto = 0 OR COALESCE($colCheck,0) = 1)";
+    return '';
 }
 
 /**
@@ -54,6 +49,26 @@ function get_checkin_column($pdo) {
     if (isset($cols['checkin'])) return 'checkin';
     if (isset($cols['checked_in'])) return 'checked_in';
     return 'checked_in'; // fallback
+}
+
+function has_table($pdo, $table_name) {
+    try {
+        $stmt = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = :name LIMIT 1");
+        $stmt->execute(array(':name' => $table_name));
+        return (bool)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+function get_bridge_mapping_table_name($pdo) {
+    if (has_table($pdo, 'bridge_event_map')) {
+        return 'bridge_event_map';
+    }
+    if (has_table($pdo, 'tickex_event_map')) {
+        return 'tickex_event_map';
+    }
+    return null;
 }
 
 function ensure_bridge_checkin_usage_table($pdo) {
@@ -182,13 +197,22 @@ function log_checkin_audit($pdo, $data = array()) {
  */
 function ensure_bridge_event_map_table($pdo) {
     try {
-        $sql = "CREATE TABLE IF NOT EXISTS bridge_event_map (
+        $pdo->exec("CREATE TABLE IF NOT EXISTS bridge_event_map (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             evento_id INTEGER NOT NULL,
             bridge_slug TEXT NOT NULL,
             created_at DATETIME DEFAULT (datetime('now'))
-        )";
-        $pdo->exec($sql);
+        )");
+
+        if (has_table($pdo, 'tickex_event_map') && has_table($pdo, 'bridge_event_map')) {
+            $count = (int)$pdo->query("SELECT COUNT(*) FROM bridge_event_map")->fetchColumn();
+            if ($count === 0) {
+                $pdo->exec("INSERT OR IGNORE INTO bridge_event_map (evento_id, bridge_slug, created_at)
+                    SELECT str_event_id, event_slug, datetime('now')
+                    FROM tickex_event_map
+                    WHERE event_slug IS NOT NULL AND event_slug <> ''");
+            }
+        }
     } catch (Exception $e) {
         // no bloquear flujo si falla
     }
@@ -199,10 +223,20 @@ function ensure_bridge_event_map_table($pdo) {
  * @return array lista de slugs (strings) o array vacío
  */
 function get_mapped_bridge_slugs($pdo, $evento_id) {
-    ensure_bridge_event_map_table($pdo);
+    $table = get_bridge_mapping_table_name($pdo);
+    if (!$table) {
+        return array();
+    }
+
     try {
-        $stmt = $pdo->prepare("SELECT bridge_slug FROM bridge_event_map WHERE evento_id = :eid ORDER BY id ASC");
-        $stmt->execute(array(':eid' => $evento_id));
+        if ($table === 'bridge_event_map') {
+            $stmt = $pdo->prepare("SELECT bridge_slug AS bridge_slug FROM bridge_event_map WHERE evento_id = :eid ORDER BY id ASC");
+            $stmt->execute(array(':eid' => $evento_id));
+        } else {
+            $stmt = $pdo->prepare("SELECT event_slug AS bridge_slug FROM tickex_event_map WHERE str_event_id = :eid ORDER BY id ASC");
+            $stmt->execute(array(':eid' => $evento_id));
+        }
+
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $slugs = array();
         foreach ($rows as $r) {
