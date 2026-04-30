@@ -6,6 +6,7 @@ $uuid  = $_GET['uuid'] ?? ($_GET['requestId'] ?? '');
 $updated = false;
 $processed = false;
 $debugMsg = '';
+$logFile = __DIR__ . '/totalcoin_callback.log';
 
 // Persistir estado si tenemos requestId
 $updated = false;
@@ -27,6 +28,7 @@ if ($uuid !== '') {
       
       if (!$order) {
         $debugMsg .= "Orden no encontrada. ";
+        file_put_contents($logFile, date('Y-m-d H:i:s') . " Orden no encontrada para UUID: $uuid\n", FILE_APPEND);
       } else {
         $debugMsg .= "Orden encontrada. ";
         $processedAt = $order['processed_at'] ?? $order['processed_at'] ?? null;
@@ -91,20 +93,29 @@ if ($uuid !== '') {
               $pdo->commit();
               $processed = true;
               $debugMsg .= "Entradas creadas: $entradAsCreadas. ";
+              file_put_contents($logFile, date('Y-m-d H:i:s') . " Procesamiento exitoso para UUID: $uuid - Entradas: $entradAsCreadas\n", FILE_APPEND);
             } catch (Exception $e) {
               if ($pdo->inTransaction()) {
                 $pdo->rollBack();
               }
               $debugMsg .= "Error CREATE: " . $e->getMessage() . ". ";
+              file_put_contents($logFile, date('Y-m-d H:i:s') . " Error procesando orden TotalCoin $uuid: " . $e->getMessage() . "\n", FILE_APPEND);
               error_log('Error procesando orden TotalCoin ' . $uuid . ': ' . $e->getMessage());
             }
+          } else {
+            $debugMsg .= "JSON inválido. ";
+            file_put_contents($logFile, date('Y-m-d H:i:s') . " JSON inválido para UUID: $uuid - JSON: $ticketsJson\n", FILE_APPEND);
           }
+        } else {
+          $debugMsg .= "Ya procesada o sin tickets. ";
+          file_put_contents($logFile, date('Y-m-d H:i:s') . " Ya procesada o sin tickets para UUID: $uuid\n", FILE_APPEND);
         }
       }
     }
   } catch (Exception $e) {
     $updated = false;
     $debugMsg .= "Error UPDATE: " . $e->getMessage() . ". ";
+    file_put_contents($logFile, date('Y-m-d H:i:s') . " Error UPDATE para UUID: $uuid - " . $e->getMessage() . "\n", FILE_APPEND);
   }
 }
 
