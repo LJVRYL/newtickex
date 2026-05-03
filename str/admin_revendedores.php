@@ -19,11 +19,31 @@ $pdo = db();
 $title = 'Mis revendedores';
 $csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
 
+// Obtener adminId de forma más robusta
 $adminId = 0;
-foreach (array('user_id','admin_id') as $k) {
-  if (isset($_SESSION[$k]) && (int)$_SESSION[$k] > 0) { $adminId = (int)$_SESSION[$k]; break; }
+
+// Primero intentar de $_SESSION
+foreach (array('user_id','admin_id','usuario_id') as $k) {
+  if (isset($_SESSION[$k]) && (int)$_SESSION[$k] > 0) { 
+    $adminId = (int)$_SESSION[$k]; 
+    break; 
+  }
 }
-if ($adminId <= 0 && isset($cu['id'])) $adminId = (int)$cu['id'];
+
+// Si no se encontró, intentar de $cu (current_user)
+if ($adminId <= 0 && isset($cu['id'])) {
+  $adminId = (int)$cu['id'];
+}
+
+// Como fallback, intentar de la sesión del usuario actual
+if ($adminId <= 0 && isset($_SESSION['usuario'])) {
+  // El usuario ya está logueado, intentar obtener su ID de otra forma
+  try {
+    $st = $pdo->prepare('SELECT id FROM usuarios_admin WHERE username = :u LIMIT 1');
+    $st->execute(array(':u' => $_SESSION['usuario']));
+    $adminId = (int)$st->fetchColumn();
+  } catch (Exception $e) {}
+}
 
 if ($tipoGlobal === 'admin_evento' && $adminId <= 0) {
   http_response_code(500);
@@ -543,10 +563,12 @@ $rows = array();
 try {
   $where = array();
   $params = array();
+  // Los admin_evento ven solo sus revendedores, super_admin ve todos
   if ($tipoGlobal === 'admin_evento') {
     $where[] = 'owner_admin_id = :oid';
     $params[':oid'] = $adminId;
   }
+  // super_admin y superadmin ven todos los revendedores (sin filtro)
   if ($q !== '') {
     $where[] = '(nombre LIKE :q OR codigo LIKE :q OR CAST(id AS TEXT) = :qid)';
     $params[':q'] = '%' . $q . '%';
@@ -564,12 +586,14 @@ try {
 
 $solicitudes = array();
 try {
-  $w = array("estado = 'pending'", "(direction IS NULL OR direction = '' OR direction = 'client_to_admin')");
+  $w = array("estado = 'pending'");
   $p = array();
+  // admin_evento ve solo los suyos, super_admin ve todos
   if ($tipoGlobal === 'admin_evento') {
     $w[] = 'owner_admin_id = :oid';
     $p[':oid'] = $adminId;
   }
+  // Mostrar todas las solicitudes pendientes (tanto client_to_admin como admin_to_client)
   $sql = 'SELECT * FROM revendedor_solicitudes';
   if (!empty($w)) $sql .= ' WHERE ' . implode(' AND ', $w);
   $sql .= ' ORDER BY id DESC LIMIT 200';
@@ -584,6 +608,7 @@ $retiros = array();
 try {
   $w = array("estado = 'pending'");
   $p = array();
+  // admin_evento ve solo los suyos, super_admin ve todos
   if ($tipoGlobal === 'admin_evento') {
     $w[] = 'owner_admin_id = :oid';
     $p[':oid'] = $adminId;
@@ -598,6 +623,26 @@ try {
   $retiros = array();
 }
 
+// Obtener invitaciones de staff pendientes
+$staffInvites = array();
+try {
+  $w = array("estado = 'pending'");
+  $p = array();
+  // admin_evento ve solo los suyos, super_admin ve todos
+  if ($tipoGlobal === 'admin_evento') {
+    $w[] = 'owner_admin_id = :oid';
+    $p[':oid'] = $adminId;
+  }
+  $sql = 'SELECT * FROM staff_admin_invitaciones';
+  if (!empty($w)) $sql .= ' WHERE ' . implode(' AND ', $w);
+  $sql .= ' ORDER BY id DESC LIMIT 200';
+  $st = $pdo->prepare($sql);
+  $st->execute($p);
+  $staffInvites = $st->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+  $staffInvites = array();
+}
+
 include __DIR__ . '/inc/layout_top.php';
 ?>
 
@@ -606,6 +651,9 @@ include __DIR__ . '/inc/layout_top.php';
     <div>
       <h1 style="margin:0;">Revendedores</h1>
       <div class="muted" style="margin-top:4px;">Compartí links con <strong>?aff=ID</strong> para atribuir ventas por cookie.</div>
+      <div class="muted" style="margin-top:8px;font-size:12px;background:#1a1a2e;padding:8px;border-radius:4px;">
+        Debug: tipoGlobal=<strong><?php echo e($tipoGlobal); ?></strong> | adminId=<strong><?php echo (int)$adminId; ?></strong>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <a class="btn secondary" href="panel_admin.php">⬅ Volver</a>
@@ -707,6 +755,55 @@ include __DIR__ . '/inc/layout_top.php';
                   <input type="hidden" name="decision" value="reject">
                   <button class="btn danger" type="submit">Rechazar</button>
                 </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
+</div>
+
+<div class="card" style="max-width:1100px;margin:16px auto;">
+  <h2 style="margin-top:0;">Invitaciones de staff enviadas</h2>
+  <?php if (empty($staffInvites)): ?>
+    <div class="muted">No hay invitaciones de staff pendientes.</div>
+  <?php else: ?>
+    <div style="overflow:auto;">
+      <table class="table" style="width:100%;min-width:860px;">
+        <thead>
+          <tr>
+            <th style="width:60px;">ID</th>
+            <th style="width:220px;">Email</th>
+            <th style="width:140px;">Rol</th>
+            <th>Mensaje</th>
+            <th style="width:140px;">Enviado</th>
+            <th style="width:100px;">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($staffInvites as $si): ?>
+            <tr>
+              <td><?php echo (int)$si['id']; ?></td>
+              <td>
+                <div style="font-weight:700;"><?php echo e((string)$si['email']); ?></div>
+                <?php if (!empty($si['cliente_id'])): ?>
+                  <div class="muted" style="font-size:12px;">Cliente #<?php echo (int)$si['cliente_id']; ?></div>
+                <?php endif; ?>
+              </td>
+              <td><?php echo e((string)($si['rol_staff'] ?? 'staff_evento')); ?></td>
+              <td><?php echo e((string)($si['mensaje'] ?? '')); ?></td>
+              <td><?php echo e((string)($si['created_at'] ?? '')); ?></td>
+              <td>
+                <?php if ($si['estado'] === 'pending'): ?>
+                  <span class="badge" style="background:#854d0e;color:#fef3c7;">Pendiente</span>
+                <?php elseif ($si['estado'] === 'accepted'): ?>
+                  <span class="badge" style="background:#065f46;color:#a7f3d0;">Aceptado</span>
+                <?php elseif ($si['estado'] === 'rejected'): ?>
+                  <span class="badge" style="background:#7f1d1d;color:#fecaca;">Rechazado</span>
+                <?php else: ?>
+                  <span class="badge"><?php echo e($si['estado']); ?></span>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>
