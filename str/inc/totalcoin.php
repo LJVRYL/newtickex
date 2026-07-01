@@ -234,6 +234,23 @@ if (!function_exists('tc_checkout')) {
             $fields['CF'] = $cb['failed'];
         }
 
+        $debugId = 'TC-' . date('Ymd-His') . '-' . substr(sha1($cfg['checkout_url'] . '|' . $referencia . '|' . microtime(true)), 0, 8);
+        $debugResultPre = null;
+        try {
+            if (function_exists('tc_debug_log')) {
+                $debugResultPre = tc_debug_log($debugId, 'TotalCoin checkout request', array(
+                    'callback_base' => $cfg['callback_base'],
+                    'checkout_url' => $cfg['checkout_url'],
+                    'fields' => $fields,
+                    'CS' => isset($fields['CS']) ? $fields['CS'] : null,
+                    'CP' => isset($fields['CP']) ? $fields['CP'] : null,
+                    'CF' => isset($fields['CF']) ? $fields['CF'] : null,
+                ));
+            }
+        } catch (Exception $_e) {
+            // ignore
+        }
+
         list($status, $body) = tc_http_post_form($cfg['checkout_url'], $fields, $token);
         if ($status === 403 || stripos($body, '403 Forbidden') !== false) {
             // Reintento automático en modo test si estaba en prod
@@ -271,6 +288,21 @@ if (!function_exists('tc_checkout')) {
         }
         if ($requestId === '') {
             throw new RuntimeException('TotalCoin checkout empty requestId: ' . $body);
+        }
+
+        try {
+            if (function_exists('tc_debug_log')) {
+                tc_debug_log($debugId, 'TotalCoin checkout response', array(
+                    'status' => $status,
+                    'body' => tc__sanitize_log_value($body),
+                    'requestId' => $requestId,
+                    'callback_base' => $cfg['callback_base'],
+                    'checkout_url' => $cfg['checkout_url'],
+                    'log_result' => $debugResultPre,
+                ));
+            }
+        } catch (Exception $_e) {
+            // ignore
         }
         return $cfg['payment_page'] . $requestId;
     }
