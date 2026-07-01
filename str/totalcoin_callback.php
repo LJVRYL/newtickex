@@ -8,6 +8,38 @@ $processed = false;
 $debugMsg = '';
 $logFile = __DIR__ . '/totalcoin_callback.log';
 
+$callbackLogFile = __DIR__ . '/../uploads/totalcoin_callback_request.log';
+$rawBody = file_get_contents('php://input');
+$headers = array();
+if (function_exists('getallheaders')) {
+  $headers = getallheaders();
+} else {
+  foreach ($_SERVER as $key => $value) {
+    if (strpos($key, 'HTTP_') === 0 || $key === 'CONTENT_TYPE' || $key === 'CONTENT_LENGTH') {
+      $name = str_replace('HTTP_', '', $key);
+      $name = str_replace('_', '-', strtolower($name));
+      $headers[$name] = $value;
+    }
+  }
+}
+$logLines = array(
+  str_repeat('-', 50),
+  date('Y-m-d H:i:s'),
+  'REQUEST_METHOD: ' . ($_SERVER['REQUEST_METHOD'] ?? ''),
+  'REQUEST_URI: ' . ($_SERVER['REQUEST_URI'] ?? ''),
+  'QUERY_STRING: ' . ($_SERVER['QUERY_STRING'] ?? ''),
+  'GET: ' . json_encode($_GET, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+  'POST: ' . json_encode($_POST, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+  'RAW BODY: ' . $rawBody,
+  'CONTENT_TYPE: ' . ($_SERVER['CONTENT_TYPE'] ?? ($_SERVER['HTTP_CONTENT_TYPE'] ?? '')),
+  'CONTENT_LENGTH: ' . ($_SERVER['CONTENT_LENGTH'] ?? ''),
+  'HEADERS: ' . json_encode($headers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+  'REMOTE_ADDR: ' . ($_SERVER['REMOTE_ADDR'] ?? ''),
+  'HTTP_USER_AGENT: ' . ($_SERVER['HTTP_USER_AGENT'] ?? ''),
+  '',
+);
+@file_put_contents($callbackLogFile, implode("\n", $logLines) . "\n", FILE_APPEND | LOCK_EX);
+
 // Persistir estado si tenemos requestId
 $updated = false;
 $processed = false;
