@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/secure_links.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $pdo = db();
@@ -9,20 +10,45 @@ $tipoGlobal = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($_SESSION[
 $rol = isset($cu['rol']) ? $cu['rol'] : (isset($_SESSION['rol']) ? $_SESSION['rol'] : '');
 $canManage = !empty($cu) && in_array($tipoGlobal ?: $rol, array('super_admin','superadmin','admin_evento','admin'), true);
 
-$codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
-if ($codigo === '') {
-    http_response_code(400);
-    echo "Falta el código (parámetro c).";
-    exit;
+// Soportar URL segura (?t=TOKEN) y URL legacy (?c=codigo)
+$codigo = '';
+$entradaFromToken = null;
+if (!empty($_GET['t'])) {
+    $tok = trim((string)$_GET['t']);
+    $eid = tickex_secure_entry_id_from_token($pdo, $tok);
+    if ($eid > 0) {
+        $stTok = $pdo->prepare('SELECT * FROM entradas WHERE id = :id LIMIT 1');
+        $stTok->execute(array(':id' => $eid));
+        $entradaFromToken = $stTok->fetch(PDO::FETCH_ASSOC);
+        if ($entradaFromToken) {
+            $codigo = (string)$entradaFromToken['codigo'];
+        }
+    }
+    if (!$entradaFromToken) {
+        http_response_code(404);
+        echo 'Entrada no encontrada.';
+        exit;
+    }
+} else {
+    $codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
+    if ($codigo === '') {
+        http_response_code(400);
+        echo 'Falta el código (parámetro c).';
+        exit;
+    }
 }
 
-$stmt = $pdo->prepare("SELECT * FROM entradas WHERE codigo = :codigo LIMIT 1");
-$stmt->execute(array(':codigo' => $codigo));
-$entrada = $stmt->fetch(PDO::FETCH_ASSOC);
+if ($entradaFromToken) {
+    $entrada = $entradaFromToken;
+} else {
+    $stmt = $pdo->prepare('SELECT * FROM entradas WHERE codigo = :codigo LIMIT 1');
+    $stmt->execute(array(':codigo' => $codigo));
+    $entrada = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 
 if (!$entrada) {
     http_response_code(404);
-    echo "Entrada no encontrada.";
+    echo 'Entrada no encontrada.';
     exit;
 }
 

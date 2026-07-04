@@ -3,6 +3,8 @@ require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/totalcoin.php';
 require_once __DIR__.'/inc/db.php';
 require_once __DIR__.'/inc/mail.php';
+require_once __DIR__ . '/inc/tc_debug.php';
+require_once __DIR__ . '/inc/order_events.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 require_once __DIR__.'/inc/arca.php'; // Integración ARCA/AFIP
@@ -528,7 +530,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $stUser->execute([':email' => $email]);
       $userIdNotif = (int)$stUser->fetchColumn();
       if ($userIdNotif > 0) {
-        add_notification($userIdNotif, '¡Te llegó un Tickex! Ya podés ver tu entrada en Mis Tickex.', 'tickex', [ 'evento_id' => $eventId, 'ref' => $ref ]);
+        $refNotif = isset($_POST['ref']) ? trim((string)$_POST['ref']) : '';
+        if ($refNotif === '') $refNotif = 'str-' . $eventId;
+        add_notification($userIdNotif, '¡Te llegó un Tickex! Ya podés ver tu entrada en Mis Tickex.', 'tickex', [ 'evento_id' => $eventId, 'ref' => $refNotif ]);
       }
     }
     $tmpRefForId = isset($_POST['ref']) ? (string)$_POST['ref'] : (string)(isset($defaults['ref']) ? $defaults['ref'] : '');
@@ -776,9 +780,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
               }
               if ($requestId === '') {
-                $pos = strpos($paymentUrl, 'requestId=');
-                if ($pos !== false) {
-                  $requestId = substr($paymentUrl, $pos + 10);
+                if (preg_match('/[?&]requestId=([^&]+)/', $paymentUrl, $m)) {
+                  $requestId = urldecode($m[1]);
                 }
               }
             } catch (Exception $_e) {}
@@ -787,7 +790,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               try {
                 $pdoSave = db();
                 $ticketsJson = '';
-                try { $ticketsJson = json_encode($selectedTickets); } catch (Exception $_e) { $ticketsJson = ''; }
+                $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
+                if ($ticketsJson === false || $ticketsJson === null) { $ticketsJson = ''; }
                 $ip = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
                 $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
                 $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, updated_at)
@@ -849,9 +853,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':tj'  => $ticketsJson,
                 ':pu'  => $paymentUrl,
               ));
+              try {
+                $evPdo = db();
+                $stOrdId = $evPdo->prepare("SELECT id FROM tc_orders WHERE request_id = :rid LIMIT 1");
+                $stOrdId->execute(array(':rid' => $requestId));
+                $ordRow = $stOrdId->fetch(PDO::FETCH_ASSOC);
+                log_order_event($evPdo, $ordRow ? (int)$ordRow['id'] : null, $requestId, 'order_checkout_created', array(
+                  'evento_id' => (int)$eventId,
+                  'amount' => (float)$total,
+                  'buyer_email' => (string)$email,
+                ));
+              } catch (Exception $_evEx) {}
             } catch (Exception $e) {
               try { error_log('[TotalCoin] failed to persist order: ' . $e->getMessage()); } catch (Exception $_e) {}
             }
+              try {
+                // Structured instrumentation for Phase 0: record checkout persistence
+                $dbg = array(
+                  'request_id' => $requestId,
+                  'payment_url' => $paymentUrl,
+                  'tickets' => (isset($ticketsJson) ? $ticketsJson : null),
+                  'event_id' => (int)$eventId,
+                  'ref' => (string)$ref,
+                  'buyer_email' => (string)$email,
+                );
+                if (function_exists('tc_debug_log')) tc_debug_log('checkout_totalcoin', 'persisted_tc_order', $dbg);
+              } catch (Exception $_t) {}
           }
         }
 
@@ -867,9 +894,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (isset($qGo['requestId'])) $ridForGo = (string)$qGo['requestId'];
               }
               if ($ridForGo === '') {
-                $posGo = strpos($paymentUrl, 'requestId=');
-                if ($posGo !== false) {
-                  $ridForGo = substr($paymentUrl, $posGo + 10);
+                if (preg_match('/[?&]requestId=([^&]+)/', $paymentUrl, $mGo)) {
+                  $ridForGo = urldecode($mGo[1]);
                 }
               }
             } catch (Exception $_t) {

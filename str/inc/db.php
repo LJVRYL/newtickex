@@ -396,11 +396,47 @@ SQL;
                             ip TEXT,
                             user_agent TEXT,
                             created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                            updated_at TEXT
+                            updated_at TEXT,
+                            processed_at TEXT
                         )");
                         $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tc_orders_request_id ON tc_orders(request_id)");
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_tc_orders_revendedor ON tc_orders(revendedor_id)");
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_tc_orders_evento ON tc_orders(evento_id)");
+                        $colsTcOrders = $pdo->query("PRAGMA table_info(tc_orders)")->fetchAll(PDO::FETCH_ASSOC);
+                        $hasProcessedAt = false;
+                        foreach ($colsTcOrders as $c) {
+                            if (isset($c['name']) && $c['name'] === 'processed_at') {
+                                $hasProcessedAt = true;
+                                break;
+                            }
+                        }
+                        if (!$hasProcessedAt) {
+                            $pdo->exec("ALTER TABLE tc_orders ADD COLUMN processed_at TEXT");
+                        }
+
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS order_events (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            tc_order_id INTEGER,
+                            request_id TEXT,
+                            event_type TEXT NOT NULL,
+                            payload_json TEXT,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        )");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_order_events_tc_order_id ON order_events(tc_order_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_order_events_request_id ON order_events(request_id)");
+
+                        $colsEntradas = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
+                        $hasOrderRequestId = false;
+                        foreach ($colsEntradas as $c) {
+                            if (isset($c['name']) && $c['name'] === 'tc_order_request_id') {
+                                $hasOrderRequestId = true;
+                                break;
+                            }
+                        }
+                        if (!empty($colsEntradas) && !$hasOrderRequestId) {
+                            $pdo->exec("ALTER TABLE entradas ADD COLUMN tc_order_request_id TEXT");
+                            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_entradas_tc_order_request_id ON entradas(tc_order_request_id)");
+                        }
 
             // tipos_entrada: visibilidad y fecha de corte
             $colsTe = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);

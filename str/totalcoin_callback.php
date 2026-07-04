@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__ . '/inc/order_processing.php';
+require_once __DIR__ . '/inc/order_events.php';
 $title = 'TotalCoin Callback';
 $state = $_GET['state'] ?? 'unknown';
 $uuid  = $_GET['uuid'] ?? ($_GET['requestId'] ?? '');
@@ -51,97 +53,39 @@ if ($uuid !== '') {
     $st->execute(array(':st' => (string)$state, ':rid' => (string)$uuid));
     $updated = ($st->rowCount() > 0);
 
+    $stOrder = $pdo->prepare("SELECT id FROM tc_orders WHERE request_id = :rid LIMIT 1");
+    $stOrder->execute(array(':rid' => $uuid));
+    $tcOrder = $stOrder->fetch(PDO::FETCH_ASSOC);
+    $tcOrderId = $tcOrder ? (int)$tcOrder['id'] : null;
+
+    if ($state !== 'success') {
+      // Loguear todos los callbacks no-success para auditoría
+      try {
+        log_order_event($pdo, $tcOrderId, $uuid, 'callback_' . preg_replace('/[^a-z0-9_]/', '_', strtolower($state)), array(
+          'state' => $state,
+          'updated' => $updated,
+        ));
+      } catch (Exception $_e) {}
+    }
+
     // Si se actualizó a success y no está procesada, crear entradas
     if ($updated && $state === 'success') {
       $debugMsg .= "Estado actualizado. ";
-      $stOrd = $pdo->prepare("SELECT * FROM tc_orders WHERE request_id = :rid LIMIT 1");
-      $stOrd->execute(array(':rid' => (string)$uuid));
-      $order = $stOrd->fetch(PDO::FETCH_ASSOC);
-      
-      if (!$order) {
-        $debugMsg .= "Orden no encontrada. ";
-        file_put_contents($logFile, date('Y-m-d H:i:s') . " Orden no encontrada para UUID: $uuid\n", FILE_APPEND);
-      } else {
-        $debugMsg .= "Orden encontrada. ";
-        $processedAt = $order['processed_at'] ?? $order['processed_at'] ?? null;
-        $ticketsJson = $order['selected_tickets_json'] ?? null;
-        $debugMsg .= "ProcessedAt: " . ($processedAt === null ? 'NULL' : 'SET') . ". ";
-        $debugMsg .= "TicketsJson: " . (empty($ticketsJson) ? 'EMPTY' : 'HAS_DATA') . ". ";
-        
-        if (empty($processedAt) && !empty($ticketsJson)) {
-          $tickets = json_decode($ticketsJson, true);
-          $debugMsg .= "JSON válido: " . (is_array($tickets) ? 'YES' : 'NO') . ". ";
-          if (is_array($tickets)) {
-            $pdo->beginTransaction();
-            try {
-              $eventoId = (int)$order['evento_id'];
-              $buyerName = trim(($order['buyer_first'] ?? '') . ' ' . ($order['buyer_last'] ?? ''));
-              $buyerEmail = $order['buyer_email'] ?? '';
-              $fechaReg = date('Y-m-d H:i:s');
-
-              $entradAsCreadas = 0;
-              foreach ($tickets as $ticket) {
-                $tipoId = (int)($ticket['id'] ?? 0);
-                $tipoName = $ticket['name'] ?? 'General';
-                $qty = (int)($ticket['qty'] ?? 1);
-                $price = (int)($ticket['price'] ?? 0);
-
-                for ($i = 0; $i < $qty; $i++) {
-                  // Generar código único (fallback si random_bytes no existe)
-                  $codigo = '';
-                  if (function_exists('random_bytes')) {
-                    try {
-                      $codigo = bin2hex(random_bytes(5));
-                    } catch (Exception $_e) {
-                      $codigo = substr(sha1(uniqid('', true)), 0, 10);
-                    }
-                  } else {
-                    $codigo = substr(sha1(uniqid('', true)), 0, 10);
-                  }
-
-                  // Insertar entrada
-                  $stIns = $pdo->prepare("INSERT INTO entradas (evento_id, nombre, email, fecha_registro, codigo, checked_in, checked_in_at, tipo, monto_pagado) VALUES (:eid, :nom, :em, :fec, :cod, 0, NULL, :tipo, :monto)");
-                  $stIns->execute(array(
-                    ':eid' => $eventoId,
-                    ':nom' => $buyerName,
-                    ':em' => $buyerEmail,
-                    ':fec' => $fechaReg,
-                    ':cod' => $codigo,
-                    ':tipo' => $tipoName,
-                    ':monto' => $price
-                  ));
-                  $entradAsCreadas++;
-
-                  // Actualizar cantidad disponible
-                  $stUpd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible = cantidad_disponible - 1 WHERE id = :tid AND cantidad_disponible > 0");
-                  $stUpd->execute(array(':tid' => $tipoId));
-                }
-              }
-
-              // Marcar como procesada
-              $stProc = $pdo->prepare("UPDATE tc_orders SET processed_at = datetime('now') WHERE request_id = :rid");
-              $stProc->execute(array(':rid' => (string)$uuid));
-
-              $pdo->commit();
-              $processed = true;
-              $debugMsg .= "Entradas creadas: $entradAsCreadas. ";
-              file_put_contents($logFile, date('Y-m-d H:i:s') . " Procesamiento exitoso para UUID: $uuid - Entradas: $entradAsCreadas\n", FILE_APPEND);
-            } catch (Exception $e) {
-              if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-              }
-              $debugMsg .= "Error CREATE: " . $e->getMessage() . ". ";
-              file_put_contents($logFile, date('Y-m-d H:i:s') . " Error procesando orden TotalCoin $uuid: " . $e->getMessage() . "\n", FILE_APPEND);
-              error_log('Error procesando orden TotalCoin ' . $uuid . ': ' . $e->getMessage());
-            }
-          } else {
-            $debugMsg .= "JSON inválido. ";
-            file_put_contents($logFile, date('Y-m-d H:i:s') . " JSON inválido para UUID: $uuid - JSON: $ticketsJson\n", FILE_APPEND);
-          }
-        } else {
-          $debugMsg .= "Ya procesada o sin tickets. ";
-          file_put_contents($logFile, date('Y-m-d H:i:s') . " Ya procesada o sin tickets para UUID: $uuid\n", FILE_APPEND);
-        }
+      $result = process_tc_order_by_request_id($uuid);
+      $processed = !empty($result['processed']);
+      $debugMsg .= $result['debugMsg'];
+      try {
+        log_order_event($pdo, $tcOrderId, $uuid, 'callback_received', array(
+          'state' => $state,
+          'updated' => $updated,
+          'processed' => $processed,
+          'debugMsg' => $result['debugMsg'],
+        ));
+      } catch (Exception $_e) {
+        // No bloquear el callback por logging.
+      }
+      if ($processed) {
+        file_put_contents($logFile, date('Y-m-d H:i:s') . " Procesamiento exitoso para UUID: $uuid\n", FILE_APPEND);
       }
     }
   } catch (Exception $e) {

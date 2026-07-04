@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../inc/bootstrap.php';
+require_once __DIR__ . '/../inc/order_events.php';
 
 $eventoId = isset($argv[1]) ? (int)$argv[1] : 0;
 if ($eventoId <= 0) {
@@ -111,13 +112,44 @@ foreach ($rows as $r) {
   if (isset($haveEn['nombre'])) { $set[]='nombre=:nomu'; $u[':nomu']=$nombre; }
   if (isset($haveEn['email']))  { $set[]='email=:emu';   $u[':emu']=$email; }
   if (isset($haveEn['tipo']))   { $set[]='tipo=:tipu';   $u[':tipu']=$tipo; }
-  if ($colCheck !== null)       { $s
+  if ($colCheck !== null)       { $set[]=$colCheck.'=:chku'; $u[':chku']=$chk; }
 
   if (!empty($set)) {
     $sqlUp = "UPDATE entradas SET " . implode(',', $set) . " WHERE evento_id=:eid AND codigo=:cod";
     $stUp = $pdo->prepare($sqlUp);
     $stUp->execute($u);
     $upd += (int)$stUp->rowCount();
+  }
+
+  // Anotar en tc_orders para trazabilidad y para que el reconciliador no lo toque
+  $bridgeRequestId = 'bridge-' . $eventoId . '-' . $codigo;
+  try {
+    $stBrIns = $pdo->prepare(
+      "INSERT OR IGNORE INTO tc_orders
+        (request_id, state, evento_id, ref, concept, buyer_email, ip, created_at, updated_at, processed_at)
+        VALUES (:rid, 'bridge_synced', :eid, :ref, 'Bridge sync', :em, 'bridge', datetime('now'), datetime('now'), datetime('now'))"
+    );
+    $stBrIns->execute(array(
+      ':rid' => $bridgeRequestId,
+      ':eid' => $eventoId,
+      ':ref' => $codigo,
+      ':em'  => $email,
+    ));
+    // Anotar la entrada con el request_id del bridge si la columna existe
+    if (isset($haveEn['tc_order_request_id'])) {
+      $stBrAnn = $pdo->prepare("UPDATE entradas SET tc_order_request_id = :rid WHERE evento_id = :eid AND codigo = :cod AND (tc_order_request_id IS NULL OR tc_order_request_id = '')");
+      $stBrAnn->execute(array(':rid' => $bridgeRequestId, ':eid' => $eventoId, ':cod' => $codigo));
+    }
+    if ($stBrIns->rowCount() > 0) {
+      $stBrId = $pdo->query("SELECT id FROM tc_orders WHERE request_id = " . $pdo->quote($bridgeRequestId) . " LIMIT 1")->fetchColumn();
+      log_order_event($pdo, $stBrId ? (int)$stBrId : null, $bridgeRequestId, 'bridge_synced', array(
+        'evento_id' => $eventoId,
+        'ticket_ref' => $codigo,
+        'email' => $email,
+      ));
+    }
+  } catch (Exception $_brEx) {
+    // No bloquear el sync por logging
   }
 }
 

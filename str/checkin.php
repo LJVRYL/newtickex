@@ -16,6 +16,18 @@ function get_staff_event_ids($pdo, $staffId) {
 }
 
 $codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
+// Soporte para URL segura ?t=TOKEN (generada por el engine de pago)
+if ($codigo === '' && !empty($_GET['t'])) {
+  require_once __DIR__ . '/inc/secure_links.php';
+  $tok = trim((string)$_GET['t']);
+  $eid = tickex_secure_entry_id_from_token($pdo, $tok);
+  if ($eid > 0) {
+    $stTok = $pdo->prepare('SELECT codigo FROM entradas WHERE id = :id LIMIT 1');
+    $stTok->execute(array(':id' => $eid));
+    $codRow = $stTok->fetchColumn();
+    if ($codRow !== false) $codigo = (string)$codRow;
+  }
+}
 $eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 
 // Si está logueado, saco rol
