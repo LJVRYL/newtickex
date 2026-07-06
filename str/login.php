@@ -20,6 +20,21 @@ try {
   } catch (Exception $e) {
     // ignore
   }
+
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      reason TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      blocked_at TEXT NOT NULL DEFAULT (datetime('now')),
+      blocked_by_admin_id INTEGER,
+      unblocked_at TEXT,
+      unblocked_by_admin_id INTEGER
+    )");
+  } catch (Exception $e) {
+    // ignore
+  }
 } catch (Exception $e) {
     // Si falla la DB mostramos algo entendible
     header('Content-Type: text/plain; charset=utf-8');
@@ -56,6 +71,19 @@ function _safe_next_url($next)
   // aceptar archivos relativos simples
   if (preg_match('/^[a-zA-Z0-9_\-\/\.]+\.php(\?.*)?$/', $n)) return $n;
   return '';
+}
+
+function _tickex_login_is_blocked($pdo, $email)
+{
+  $email = trim((string)$email);
+  if ($email === '') return false;
+  try {
+    $st = $pdo->prepare("SELECT 1 FROM user_blocks WHERE active = 1 AND lower(email) = lower(:e) LIMIT 1");
+    $st->execute(array(':e' => $email));
+    return (bool)$st->fetchColumn();
+  } catch (Exception $e) {
+    return false;
+  }
 }
 
 $nextSafe = _safe_next_url($next);
@@ -111,6 +139,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Captcha anti-bot (opcional, solo si hay keys configuradas)
     if (empty($errores)) {
       tickex_turnstile_verify_post($errores);
+    }
+
+    if (empty($errores)) {
+        if (_tickex_login_is_blocked($pdo, $email)) {
+          $errores[] = 'Tu acceso esta suspendido. Contacta a soporte.';
+        }
     }
 
     if (empty($errores)) {

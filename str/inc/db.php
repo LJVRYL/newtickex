@@ -40,6 +40,24 @@ function db(){
             // no bloquear si falla
         }
 
+        // Bloqueos de acceso por email (suspension/ban de login)
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS user_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                reason TEXT,
+                active INTEGER NOT NULL DEFAULT 1,
+                blocked_at TEXT NOT NULL DEFAULT (datetime("now")),
+                blocked_by_admin_id INTEGER,
+                unblocked_at TEXT,
+                unblocked_by_admin_id INTEGER
+            )');
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_blocks_email_ci ON user_blocks(lower(email))");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_blocks_active ON user_blocks(active)");
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);

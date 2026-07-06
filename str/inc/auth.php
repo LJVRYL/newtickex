@@ -1,6 +1,50 @@
 <?php
 // inc/auth.php — utilidades mínimas de autenticación y sesión
 
+if (!function_exists('tickex_is_email_blocked')) {
+	function tickex_is_email_blocked($pdo, $email)
+	{
+		$email = trim((string)$email);
+		if ($email === '') return false;
+
+		try {
+			$st = $pdo->prepare("SELECT 1 FROM user_blocks WHERE active = 1 AND lower(email) = lower(:e) LIMIT 1");
+			$st->execute(array(':e' => $email));
+			return (bool)$st->fetchColumn();
+		} catch (Exception $e) {
+			return false;
+		}
+	}
+}
+
+if (!function_exists('tickex_force_logout_if_blocked')) {
+	function tickex_force_logout_if_blocked()
+	{
+		$email = '';
+		if (!empty($_SESSION['usuario_email'])) {
+			$email = (string)$_SESSION['usuario_email'];
+		} elseif (!empty($_SESSION['email'])) {
+			$email = (string)$_SESSION['email'];
+		}
+
+		if ($email === '') return;
+
+		try {
+			$pdo = db();
+			if (!tickex_is_email_blocked($pdo, $email)) return;
+		} catch (Exception $e) {
+			return;
+		}
+
+		$_SESSION = array();
+		if (session_id() !== '') {
+			@session_destroy();
+		}
+		header('Location: login.php?blocked=1');
+		exit;
+	}
+}
+
 // Redirige a login si no hay usuario (común o admin) en sesión
 if (!function_exists('require_login')) {
 	function require_login()
@@ -12,6 +56,8 @@ if (!function_exists('require_login')) {
 			header('Location: login.php');
 			exit;
 		}
+
+		tickex_force_logout_if_blocked();
 	}
 }
 

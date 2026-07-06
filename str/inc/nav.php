@@ -9,6 +9,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="superadmin_eventos.php">Ver todos los eventos</a>
     <a href="superadmin_revendedores.php">Revendedores</a>
     <a href="superadmin_usuarios.php">Usuarios</a>
+    <a href="superadmin_emails_db.php">Base Emails</a>
     <a href="superadmin_emails.php">Emails</a>
     <a href="superadmin_email_templates.php">Plantillas Emails</a>
     <a href="superadmin_economia_general.php">Economía</a>
