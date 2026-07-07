@@ -80,6 +80,38 @@ function db(){
             // no bloquear si falla
         }
 
+        // Comunicación Fase 1: plantillas reutilizables (solo administración)
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                created_by_admin_id INTEGER,
+                source_type TEXT NOT NULL DEFAULT "custom",
+                parent_template_id INTEGER,
+                is_system_locked INTEGER NOT NULL DEFAULT 0,
+                template_type TEXT NOT NULL DEFAULT "general",
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                description TEXT,
+                subject_template TEXT NOT NULL,
+                body_html_template TEXT,
+                body_text_template TEXT,
+                variables_schema_json TEXT,
+                sample_data_json TEXT,
+                status TEXT NOT NULL DEFAULT "active",
+                last_used_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )');
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_tpl_org_slug ON communication_templates(organization_id, slug)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_tpl_org_status ON communication_templates(organization_id, status)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_tpl_type ON communication_templates(template_type)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_tpl_source ON communication_templates(source_type)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_tpl_created_by ON communication_templates(created_by_admin_id)");
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);

@@ -133,8 +133,8 @@ include __DIR__ . '/inc/layout_top.php';
 
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <a class="btn" href="superadmin_emails_db.php">👥 Contactos</a>
-  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Audiencias · Proximamente</span>
-  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Plantillas · Proximamente</span>
+  <a class="btn secondary" href="comunicacion_audiencias.php">Audiencias</a>
+  <a class="btn secondary" href="comunicacion_plantillas.php">Plantillas</a>
   <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Campanas · Proximamente</span>
   <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Historial · Proximamente</span>
 </div>
