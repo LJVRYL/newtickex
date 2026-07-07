@@ -22,6 +22,10 @@ $adminId = 0;
 if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
 elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
 elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$contactScope = array(
+  'is_super' => $isSuper,
+  'admin_id' => $adminId,
+);
 
 $flashOk = '';
 $flashErr = '';
@@ -140,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'estimate_form') {
             $filters = communication_audiences_form_filters();
-            $count = communication_contacts_count($pdo, $filters);
+          $count = communication_contacts_count($pdo, $filters, $contactScope);
             $flashOk = 'Destinatarios estimados: ' . (int)$count;
         }
 
@@ -271,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $row = $st->fetch(PDO::FETCH_ASSOC);
                     if ($row) {
                         $filters = communication_contacts_filters_from_json(isset($row['filters_json']) ? $row['filters_json'] : '');
-                        $count = communication_contacts_count($pdo, $filters);
+                      $count = communication_contacts_count($pdo, $filters, $contactScope);
                         $flashOk = 'Destinatarios estimados para "' . e($row['name']) . '": ' . (int)$count;
                     } else {
                         $flashErr = 'No se encontro la audiencia para estimar.';

@@ -4,17 +4,23 @@ require_once __DIR__ . '/inc/communication_contacts.php';
 
 require_login();
 $cu = current_user();
-$rol = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($cu['rol']) ? (string)$cu['rol'] : '');
-if (!in_array($rol, array('super_admin', 'superadmin'), true)) {
+$tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
+$isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
+$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
-    echo "<div class='card'><h3>Acceso restringido</h3><p>Solo superadmin.</p></div>";
+  echo "<div class='card'><h3>Acceso restringido</h3><p>Solo para administradores.</p></div>";
     include __DIR__ . '/inc/layout_bottom.php';
     exit;
 }
 
 $pdo = db();
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
+$adminId = 0;
+if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
+elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
+elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $fRegistered = isset($_GET['f_registered']) ? trim((string)$_GET['f_registered']) : '';
 $fBlocked = isset($_GET['f_blocked']) ? trim((string)$_GET['f_blocked']) : '';
@@ -56,7 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-$emails = communication_contacts_resolve($pdo);
+$contactScope = array(
+  'is_super' => $isSuper,
+  'admin_id' => $adminId,
+);
+$emails = communication_contacts_resolve($pdo, $contactScope);
 
 $registeredCount = 0;
 $blockedCount = 0;
@@ -112,7 +122,13 @@ include __DIR__ . '/inc/layout_top.php';
     <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;">📣 Comunicacion</div>
     <h2 style="margin:0;">👥 Contactos</h2>
   </div>
-  <span class="muted">Vista unificada de personas conocidas por Tickex sin duplicar datos.</span>
+  <span class="muted">
+    <?php if ($isSuper): ?>
+      Vista global de personas conocidas por Tickex.
+    <?php else: ?>
+      Vista limitada a contactos que interactuaron con tus eventos y envios.
+    <?php endif; ?>
+  </span>
 </div>
 
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
