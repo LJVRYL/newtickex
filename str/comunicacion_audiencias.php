@@ -101,6 +101,28 @@ if (!function_exists('communication_audiences_form_filters')) {
     }
 }
 
+if (!function_exists('communication_audiences_ensure_schema')) {
+  function communication_audiences_ensure_schema($pdo)
+  {
+    $pdo->exec('CREATE TABLE IF NOT EXISTS communication_audiences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id INTEGER NOT NULL DEFAULT 1,
+      created_by_admin_id INTEGER,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      filters_json TEXT,
+      status TEXT NOT NULL DEFAULT "active",
+      last_used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime("now")),
+      updated_at TEXT NOT NULL DEFAULT (datetime("now"))
+    )');
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_aud_org_slug ON communication_audiences(organization_id, slug)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_aud_org_status ON communication_audiences(organization_id, status)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_aud_created_by ON communication_audiences(created_by_admin_id)');
+  }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
     if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
@@ -262,18 +284,40 @@ if ($q !== '') {
     $scopeParams[':q'] = '%' . $q . '%';
 }
 $listSql .= ' ORDER BY updated_at DESC, id DESC';
-$stList = $pdo->prepare($listSql);
-$stList->execute($scopeParams);
-$rows = $stList->fetchAll(PDO::FETCH_ASSOC);
+$rows = array();
+try {
+  $stList = $pdo->prepare($listSql);
+  $stList->execute($scopeParams);
+  $rows = $stList->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+  // Evita HTTP 500 si la migración aun no corrió en este entorno
+  try {
+    communication_audiences_ensure_schema($pdo);
+    $stList = $pdo->prepare($listSql);
+    $stList->execute($scopeParams);
+    $rows = $stList->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Exception $e2) {
+    $rows = array();
+    if ($flashErr === '') {
+      $flashErr = 'No se pudo cargar audiencias: ' . $e2->getMessage();
+    }
+  }
+}
 
 $editRow = null;
 if ($editId > 0) {
     $scopeSqlE = communication_audiences_scope_sql($isSuper);
     $scopeParamsE = communication_audiences_scope_params($organizationId, $adminId, $isSuper);
+  try {
     $stEdit = $pdo->prepare('SELECT * FROM communication_audiences WHERE id = :id AND ' . $scopeSqlE . ' LIMIT 1');
     $paramsEdit = array(':id' => $editId) + $scopeParamsE;
     $stEdit->execute($paramsEdit);
     $editRow = $stEdit->fetch(PDO::FETCH_ASSOC);
+  } catch (Exception $e) {
+    if ($flashErr === '') {
+      $flashErr = 'No se pudo cargar la audiencia seleccionada.';
+    }
+  }
 }
 
 $formName = $editRow ? (string)$editRow['name'] : '';

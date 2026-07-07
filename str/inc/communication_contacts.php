@@ -260,14 +260,19 @@ if (!function_exists('communication_contacts_apply_filters')) {
             $result[] = $r;
         }
 
-        usort($result, function ($a, $b) {
-            return strcmp(
-                strtolower((string)(isset($a['email']) ? $a['email'] : '')),
-                strtolower((string)(isset($b['email']) ? $b['email'] : ''))
-            );
-        });
+        usort($result, 'communication_contacts_compare_by_email');
 
         return $result;
+    }
+}
+
+if (!function_exists('communication_contacts_compare_by_email')) {
+    function communication_contacts_compare_by_email($a, $b)
+    {
+        return strcmp(
+            strtolower((string)(isset($a['email']) ? $a['email'] : '')),
+            strtolower((string)(isset($b['email']) ? $b['email'] : ''))
+        );
     }
 }
 
