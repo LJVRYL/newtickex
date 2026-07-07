@@ -96,7 +96,7 @@ include __DIR__ . '/inc/layout_top.php';
 
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <a class="btn" href="superadmin_usuarios.php">Usuarios</a>
-  <a class="btn secondary" href="superadmin_emails_db.php">Base de Emails</a>
+  <a class="btn secondary" href="superadmin_emails_db.php">👥 Contactos</a>
   <a class="btn secondary" href="superadmin_emails.php">Logs de Emails</a>
 </div>
 

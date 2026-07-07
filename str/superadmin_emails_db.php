@@ -13,11 +13,47 @@ if (!in_array($rol, array('super_admin', 'superadmin'), true)) {
 }
 
 $pdo = db();
+$csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $fRegistered = isset($_GET['f_registered']) ? trim((string)$_GET['f_registered']) : '';
 $fBlocked = isset($_GET['f_blocked']) ? trim((string)$_GET['f_blocked']) : '';
 $fSource = isset($_GET['f_source']) ? trim((string)$_GET['f_source']) : '';
 $export = isset($_GET['export']) ? trim((string)$_GET['export']) : '';
+$flashOk = '';
+$flashErr = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+    $flashErr = 'CSRF invalido. Recarga la pagina e intenta nuevamente.';
+  } else {
+    $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
+    $emailAction = isset($_POST['email']) ? trim((string)$_POST['email']) : '';
+    $adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+
+    if ($emailAction === '') {
+      $flashErr = 'No se encontro el contacto a actualizar.';
+    } else {
+      try {
+        if ($action === 'bloquear') {
+          $reason = isset($_POST['reason']) ? trim((string)$_POST['reason']) : '';
+          $stOff = $pdo->prepare('UPDATE user_blocks SET active = 0, unblocked_at = datetime(\'now\'), unblocked_by_admin_id = :aid WHERE active = 1 AND lower(email) = lower(:e)');
+          $stOff->execute(array(':aid' => $adminId, ':e' => $emailAction));
+
+          $stOn = $pdo->prepare('INSERT INTO user_blocks (email, reason, active, blocked_by_admin_id) VALUES (:e, :r, 1, :aid)');
+          $stOn->execute(array(':e' => $emailAction, ':r' => $reason, ':aid' => $adminId));
+          $flashOk = 'Contacto bloqueado: ' . e($emailAction);
+        } elseif ($action === 'desbloquear') {
+          $stOff = $pdo->prepare('UPDATE user_blocks SET active = 0, unblocked_at = datetime(\'now\'), unblocked_by_admin_id = :aid WHERE active = 1 AND lower(email) = lower(:e)');
+          $stOff->execute(array(':aid' => $adminId, ':e' => $emailAction));
+          $flashOk = 'Contacto desbloqueado: ' . e($emailAction);
+        }
+      } catch (Exception $e) {
+        $flashErr = 'No se pudo actualizar el contacto: ' . $e->getMessage();
+      }
+    }
+  }
+}
 
 $emails = array();
 
@@ -108,6 +144,17 @@ while ($r = $stBlocked->fetch(PDO::FETCH_ASSOC)) {
     }
 }
 
+$registeredCount = 0;
+$blockedCount = 0;
+foreach ($emails as $rowEmail) {
+  if (isset($rowEmail['registrado']) && $rowEmail['registrado'] === 'Si') {
+    $registeredCount++;
+  }
+  if (!empty($rowEmail['bloqueado'])) {
+    $blockedCount++;
+  }
+}
+
 $rows = array_values($emails);
 usort($rows, function ($a, $b) {
     return strcmp(strtolower((string)$a['email']), strtolower((string)$b['email']));
@@ -141,7 +188,7 @@ if ($fSource !== '') {
 
 if ($export === 'csv') {
   header('Content-Type: text/csv; charset=UTF-8');
-  header('Content-Disposition: attachment; filename="base_emails_tickex.csv"');
+  header('Content-Disposition: attachment; filename="contactos_tickex.csv"');
   $out = fopen('php://output', 'w');
   if ($out !== false) {
     fputs($out, "\xEF\xBB\xBF");
@@ -164,20 +211,51 @@ if ($export === 'csv') {
   exit;
 }
 
-$title = 'Base de Emails';
+$title = 'Comunicacion - Contactos';
 include __DIR__ . '/inc/layout_top.php';
 ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
   <a class="btn secondary" href="panel_admin.php">Volver</a>
-  <h2 style="margin:0;">Base completa de emails</h2>
-  <span class="muted">Registrados + no registrados (entradas y envios de Tickex).</span>
+  <div>
+    <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;">📣 Comunicacion</div>
+    <h2 style="margin:0;">👥 Contactos</h2>
+  </div>
+  <span class="muted">Vista unificada de personas conocidas por Tickex sin duplicar datos.</span>
 </div>
 
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-  <a class="btn secondary" href="superadmin_usuarios.php">Usuarios</a>
-  <a class="btn" href="superadmin_emails_db.php">Base de Emails</a>
-  <a class="btn secondary" href="superadmin_emails.php">Logs de Emails</a>
+  <a class="btn" href="superadmin_emails_db.php">👥 Contactos</a>
+  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Audiencias · Proximamente</span>
+  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Plantillas · Proximamente</span>
+  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Campanas · Proximamente</span>
+  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Historial · Proximamente</span>
+</div>
+
+<?php if ($flashOk !== ''): ?>
+  <div class="flash ok"><?php echo $flashOk; ?></div>
+<?php endif; ?>
+<?php if ($flashErr !== ''): ?>
+  <div class="flash err"><?php echo e($flashErr); ?></div>
+<?php endif; ?>
+
+<div class="card" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+  <div>
+    <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Contactos</div>
+    <div style="font-size:28px;font-weight:800;"><?php echo (int)count($emails); ?></div>
+  </div>
+  <div>
+    <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Registrados</div>
+    <div style="font-size:28px;font-weight:800;"><?php echo (int)$registeredCount; ?></div>
+  </div>
+  <div>
+    <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Bloqueados</div>
+    <div style="font-size:28px;font-weight:800;"><?php echo (int)$blockedCount; ?></div>
+  </div>
+  <div>
+    <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Fuentes</div>
+    <div style="font-size:15px;font-weight:700;">usuarios, registro_pendientes, entradas, email_logs, user_blocks</div>
+  </div>
 </div>
 
 <div class="card" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -206,7 +284,7 @@ include __DIR__ . '/inc/layout_top.php';
     <?php endif; ?>
     <button class="btn secondary" type="submit" name="export" value="csv">Exportar CSV</button>
   </form>
-  <span class="muted">Total: <?php echo (int)count($rows); ?> emails</span>
+  <span class="muted">Resultado actual: <?php echo (int)count($rows); ?> contactos</span>
 </div>
 
 <div class="card" style="overflow:auto;">
@@ -221,6 +299,7 @@ include __DIR__ . '/inc/layout_top.php';
         <th>Ultimo envio</th>
         <th>Ultima entrada</th>
         <th>Acceso</th>
+        <th>Accion</th>
       </tr>
     </thead>
     <tbody>
@@ -243,6 +322,22 @@ include __DIR__ . '/inc/layout_top.php';
               <span style="display:inline-block;padding:4px 8px;border-radius:999px;background:#5a1a1a;color:#fff;font-weight:700;font-size:12px;">PROHIBIDO</span>
             <?php else: ?>
               <span style="display:inline-block;padding:4px 8px;border-radius:999px;background:#184d2a;color:#fff;font-weight:700;font-size:12px;">ACTIVO</span>
+            <?php endif; ?>
+          </td>
+          <td>
+            <?php if ((int)$r['bloqueado'] === 1): ?>
+              <form method="post" action="superadmin_emails_db.php" style="display:inline;">
+                <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+                <input type="hidden" name="email" value="<?php echo e($r['email']); ?>">
+                <button type="submit" name="action" value="desbloquear" style="font-size:12px;padding:4px 8px;">Quitar bloqueo</button>
+              </form>
+            <?php else: ?>
+              <form method="post" action="superadmin_emails_db.php" style="display:flex;gap:4px;align-items:center;">
+                <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+                <input type="hidden" name="email" value="<?php echo e($r['email']); ?>">
+                <input type="text" name="reason" placeholder="Motivo (opcional)" style="font-size:12px;padding:4px 6px;max-width:170px;">
+                <button type="submit" name="action" value="bloquear" style="font-size:12px;padding:4px 8px;background:#8e2b2b;color:#fff;border:1px solid #8e2b2b;border-radius:6px;">PROHIBIDO</button>
+              </form>
             <?php endif; ?>
           </td>
         </tr>
