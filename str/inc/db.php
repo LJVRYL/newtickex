@@ -70,8 +70,8 @@ function db(){
                 filters_json TEXT,
                 status TEXT NOT NULL DEFAULT "active",
                 last_used_at TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime("now")),
-                updated_at TEXT NOT NULL DEFAULT (datetime("now"))
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )');
             $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_aud_org_slug ON communication_audiences(organization_id, slug)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_aud_org_status ON communication_audiences(organization_id, status)");

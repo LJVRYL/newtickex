@@ -114,12 +114,20 @@ if (!function_exists('communication_audiences_ensure_schema')) {
       filters_json TEXT,
       status TEXT NOT NULL DEFAULT "active",
       last_used_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime("now")),
-      updated_at TEXT NOT NULL DEFAULT (datetime("now"))
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_aud_org_slug ON communication_audiences(organization_id, slug)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_aud_org_status ON communication_audiences(organization_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_aud_created_by ON communication_audiences(created_by_admin_id)');
+  }
+}
+
+try {
+  communication_audiences_ensure_schema($pdo);
+} catch (Exception $e) {
+  if ($flashErr === '') {
+    $flashErr = 'No se pudo preparar audiencias: ' . $e->getMessage();
   }
 }
 
