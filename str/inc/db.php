@@ -112,6 +112,43 @@ function db(){
             // no bloquear si falla
         }
 
+        // Comunicación Fase 1: campañas (objeto de negocio independiente del envío)
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                created_by_admin_id INTEGER,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT "draft",
+                audience_id INTEGER,
+                template_id INTEGER,
+                subject_override TEXT,
+                notes_internal TEXT,
+                scheduled_for TEXT,
+                scheduled_timezone TEXT,
+                sending_started_at TEXT,
+                sent_at TEXT,
+                cancelled_at TEXT,
+                failed_at TEXT,
+                snapshot_subject TEXT,
+                snapshot_body_html TEXT,
+                snapshot_body_text TEXT,
+                snapshot_taken_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )');
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_campaign_org_slug ON communication_campaigns(organization_id, slug)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_campaign_org_status ON communication_campaigns(organization_id, status)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_campaign_audience ON communication_campaigns(audience_id)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_campaign_template ON communication_campaigns(template_id)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_campaign_created_by ON communication_campaigns(created_by_admin_id)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_campaign_scheduled_for ON communication_campaigns(scheduled_for)");
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);

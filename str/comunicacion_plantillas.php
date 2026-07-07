@@ -337,7 +337,7 @@ include __DIR__ . '/inc/layout_top.php';
   <a class="btn secondary" href="superadmin_emails_db.php">👥 Contactos</a>
   <a class="btn secondary" href="comunicacion_audiencias.php">Audiencias</a>
   <a class="btn" href="comunicacion_plantillas.php">Plantillas</a>
-  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Campanas · Proximamente</span>
+  <a class="btn secondary" href="comunicacion_campanas.php">Campanas</a>
   <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Historial · Proximamente</span>
 </div>
 
