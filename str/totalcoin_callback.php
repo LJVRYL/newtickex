@@ -3,8 +3,8 @@ require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__ . '/inc/order_processing.php';
 require_once __DIR__ . '/inc/order_events.php';
 $title = 'TotalCoin Callback';
-$state = $_GET['state'] ?? 'unknown';
-$uuid  = $_GET['uuid'] ?? ($_GET['requestId'] ?? '');
+$state = 'unknown';
+$uuid  = '';
 $updated = false;
 $processed = false;
 $debugMsg = '';
@@ -24,6 +24,52 @@ if (function_exists('getallheaders')) {
     }
   }
 }
+
+if (!function_exists('tc_cb_pick')) {
+  function tc_cb_pick($arr, $keys)
+  {
+    if (!is_array($arr)) return '';
+    foreach ($keys as $k) {
+      if (isset($arr[$k]) && trim((string)$arr[$k]) !== '') {
+        return trim((string)$arr[$k]);
+      }
+    }
+    return '';
+  }
+}
+
+if (!function_exists('tc_cb_parse_raw')) {
+  function tc_cb_parse_raw($raw)
+  {
+    $out = array();
+    $raw = trim((string)$raw);
+    if ($raw === '') return $out;
+
+    $json = json_decode($raw, true);
+    if (is_array($json)) {
+      return $json;
+    }
+
+    $tmp = array();
+    parse_str($raw, $tmp);
+    if (is_array($tmp) && !empty($tmp)) {
+      return $tmp;
+    }
+    return $out;
+  }
+}
+
+$rawParsed = tc_cb_parse_raw($rawBody);
+$uuid = tc_cb_pick($_GET, array('uuid', 'requestId', 'request_id', 'RequestId'));
+if ($uuid === '') $uuid = tc_cb_pick($_POST, array('uuid', 'requestId', 'request_id', 'RequestId'));
+if ($uuid === '') $uuid = tc_cb_pick($rawParsed, array('uuid', 'requestId', 'request_id', 'RequestId'));
+if ($uuid === '') $uuid = tc_cb_pick($headers, array('x-request-id', 'x-requestid', 'x-uuid'));
+
+$state = tc_cb_pick($_GET, array('state', 'status', 'paymentState', 'payment_state'));
+if ($state === '') $state = tc_cb_pick($_POST, array('state', 'status', 'paymentState', 'payment_state'));
+if ($state === '') $state = tc_cb_pick($rawParsed, array('state', 'status', 'paymentState', 'payment_state'));
+if ($state === '') $state = 'unknown';
+
 $logLines = array(
   str_repeat('-', 50),
   date('Y-m-d H:i:s'),
