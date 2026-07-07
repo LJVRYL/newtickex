@@ -85,7 +85,7 @@ while ($r = $stReg->fetch(PDO::FETCH_ASSOC)) {
     ));
 }
 
-$stEntradas = $pdo->query('SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,\'\')) AS nombre FROM entradas WHERE email IS NOT NULL AND email <> \"\" GROUP BY lower(email)');
+$stEntradas = $pdo->query("SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,'')) AS nombre FROM entradas WHERE email IS NOT NULL AND email <> '' GROUP BY lower(email)");
 while ($r = $stEntradas->fetch(PDO::FETCH_ASSOC)) {
     add_email_row($emails, $r['email'], 'entradas', array(
         'nombre' => $r['nombre'],
@@ -93,7 +93,7 @@ while ($r = $stEntradas->fetch(PDO::FETCH_ASSOC)) {
     ));
 }
 
-$stLogs = $pdo->query('SELECT to_email AS email, MAX(created_at) AS ultimo_envio FROM email_logs WHERE to_email IS NOT NULL AND to_email <> \"\" GROUP BY lower(to_email)');
+$stLogs = $pdo->query("SELECT to_email AS email, MAX(created_at) AS ultimo_envio FROM email_logs WHERE to_email IS NOT NULL AND to_email <> '' GROUP BY lower(to_email)");
 while ($r = $stLogs->fetch(PDO::FETCH_ASSOC)) {
     add_email_row($emails, $r['email'], 'email_logs', array(
         'ultimo_envio' => $r['ultimo_envio'],
