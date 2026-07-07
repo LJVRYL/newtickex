@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/communication_contacts.php';
 
 require_login();
 $cu = current_user();
@@ -55,94 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-$emails = array();
-
-function add_email_row(&$emails, $email, $source, $data)
-{
-    $email = trim((string)$email);
-    if ($email === '') return;
-    $key = strtolower($email);
-    if (!isset($emails[$key])) {
-        $emails[$key] = array(
-            'email' => $email,
-            'nombre' => '',
-            'rol' => '',
-            'registrado' => 'No',
-            'fuentes' => array(),
-            'ultimo_envio' => '',
-            'ultima_entrada' => '',
-            'bloqueado' => 0,
-        );
-    }
-
-    $emails[$key]['fuentes'][$source] = true;
-
-    if (!empty($data['nombre']) && $emails[$key]['nombre'] === '') {
-        $emails[$key]['nombre'] = (string)$data['nombre'];
-    }
-    if (!empty($data['rol']) && $emails[$key]['rol'] === '') {
-        $emails[$key]['rol'] = (string)$data['rol'];
-    }
-    if (!empty($data['registrado']) && $data['registrado'] === 'Si') {
-        $emails[$key]['registrado'] = 'Si';
-    }
-    if (!empty($data['ultimo_envio'])) {
-        $cur = (string)$emails[$key]['ultimo_envio'];
-        $new = (string)$data['ultimo_envio'];
-        if ($cur === '' || $new > $cur) {
-            $emails[$key]['ultimo_envio'] = $new;
-        }
-    }
-    if (!empty($data['ultima_entrada'])) {
-        $cur = (string)$emails[$key]['ultima_entrada'];
-        $new = (string)$data['ultima_entrada'];
-        if ($cur === '' || $new > $cur) {
-            $emails[$key]['ultima_entrada'] = $new;
-        }
-    }
-}
-
-$stUsers = $pdo->query('SELECT email, COALESCE(nombre,\'\') AS nombre, COALESCE(apellido,\'\') AS apellido, COALESCE(rol,\'\') AS rol FROM usuarios');
-while ($r = $stUsers->fetch(PDO::FETCH_ASSOC)) {
-    $nom = trim((string)$r['nombre'] . ' ' . (string)$r['apellido']);
-    add_email_row($emails, $r['email'], 'usuarios', array(
-        'nombre' => $nom,
-        'rol' => $r['rol'],
-        'registrado' => 'Si',
-    ));
-}
-
-$stReg = $pdo->query('SELECT email, COALESCE(nombre,\'\') AS nombre, COALESCE(apellido,\'\') AS apellido FROM registro_pendientes');
-while ($r = $stReg->fetch(PDO::FETCH_ASSOC)) {
-    $nom = trim((string)$r['nombre'] . ' ' . (string)$r['apellido']);
-    add_email_row($emails, $r['email'], 'registro_pendientes', array(
-        'nombre' => $nom,
-        'registrado' => 'Si',
-    ));
-}
-
-$stEntradas = $pdo->query("SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,'')) AS nombre FROM entradas WHERE email IS NOT NULL AND email <> '' GROUP BY lower(email)");
-while ($r = $stEntradas->fetch(PDO::FETCH_ASSOC)) {
-    add_email_row($emails, $r['email'], 'entradas', array(
-        'nombre' => $r['nombre'],
-        'ultima_entrada' => $r['ultima_entrada'],
-    ));
-}
-
-$stLogs = $pdo->query("SELECT to_email AS email, MAX(created_at) AS ultimo_envio FROM email_logs WHERE to_email IS NOT NULL AND to_email <> '' GROUP BY lower(to_email)");
-while ($r = $stLogs->fetch(PDO::FETCH_ASSOC)) {
-    add_email_row($emails, $r['email'], 'email_logs', array(
-        'ultimo_envio' => $r['ultimo_envio'],
-    ));
-}
-
-$stBlocked = $pdo->query('SELECT lower(email) AS email_key FROM user_blocks WHERE active = 1');
-while ($r = $stBlocked->fetch(PDO::FETCH_ASSOC)) {
-    $k = (string)$r['email_key'];
-    if (isset($emails[$k])) {
-        $emails[$k]['bloqueado'] = 1;
-    }
-}
+$emails = communication_contacts_resolve($pdo);
 
 $registeredCount = 0;
 $blockedCount = 0;
@@ -155,36 +69,13 @@ foreach ($emails as $rowEmail) {
   }
 }
 
-$rows = array_values($emails);
-usort($rows, function ($a, $b) {
-    return strcmp(strtolower((string)$a['email']), strtolower((string)$b['email']));
-});
-
-if ($q !== '') {
-    $needle = strtolower($q);
-    $rows = array_values(array_filter($rows, function ($r) use ($needle) {
-        $f = strtolower((string)$r['email'] . ' ' . (string)$r['nombre'] . ' ' . (string)$r['rol']);
-        return strpos($f, $needle) !== false;
-    }));
-}
-
-if ($fRegistered === 'si' || $fRegistered === 'no') {
-  $rows = array_values(array_filter($rows, function ($r) use ($fRegistered) {
-    return strtolower((string)$r['registrado']) === $fRegistered;
-  }));
-}
-
-if ($fBlocked === '1' || $fBlocked === '0') {
-  $rows = array_values(array_filter($rows, function ($r) use ($fBlocked) {
-    return (int)$r['bloqueado'] === (int)$fBlocked;
-  }));
-}
-
-if ($fSource !== '') {
-  $rows = array_values(array_filter($rows, function ($r) use ($fSource) {
-    return isset($r['fuentes'][$fSource]);
-  }));
-}
+$filters = communication_contacts_normalize_filters(array(
+    'q' => $q,
+    'f_registered' => $fRegistered,
+    'f_blocked' => $fBlocked,
+    'f_source' => $fSource,
+));
+$rows = communication_contacts_apply_filters(array_values($emails), $filters);
 
 if ($export === 'csv') {
   header('Content-Type: text/csv; charset=UTF-8');

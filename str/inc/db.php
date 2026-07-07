@@ -58,6 +58,28 @@ function db(){
             // no bloquear si falla
         }
 
+        // Comunicación Fase 1: audiencias reutilizables (definición de filtros, no miembros)
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_audiences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                created_by_admin_id INTEGER,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL,
+                description TEXT,
+                filters_json TEXT,
+                status TEXT NOT NULL DEFAULT "active",
+                last_used_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime("now")),
+                updated_at TEXT NOT NULL DEFAULT (datetime("now"))
+            )');
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_aud_org_slug ON communication_audiences(organization_id, slug)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_aud_org_status ON communication_audiences(organization_id, status)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_aud_created_by ON communication_audiences(created_by_admin_id)");
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);
