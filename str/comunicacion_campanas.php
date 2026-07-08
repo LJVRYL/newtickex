@@ -55,6 +55,7 @@ $form = array(
 $estimatedRecipients = null;
 $preview = null;
 $previewTemplateName = '';
+$queueSummary = null;
 
 try {
     communication_templates_ensure_schema($pdo);
@@ -88,12 +89,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
     } else {
         $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
 
-        if ($action === 'execute_now') {
+        if ($action === 'process_queue') {
+          $workerId = 'ui-queue-' . $adminId . '-' . gmdate('YmdHis');
+          $maxCommands = isset($_POST['max_commands']) ? (int)$_POST['max_commands'] : 20;
+          if ($maxCommands <= 0) $maxCommands = 20;
+          if ($maxCommands > 100) $maxCommands = 100;
+          $queueSummary = communication_execution_process_queue($pdo, $maxCommands, $workerId);
+          $flashOk = 'Cola procesada: ' . (int)$queueSummary['picked'] . ' comando(s), ' . (int)$queueSummary['done'] . ' completado(s), ' . (int)$queueSummary['failed'] . ' fallido(s), ' . (int)$queueSummary['cancelled'] . ' cancelado(s).';
+        }
+
+        if ($action === 'execute_now' || $action === 'send_now') {
           $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
           if ($id > 0) {
             $enqueue = communication_execution_enqueue_campaign($pdo, $organizationId, $id, $adminId, $isSuper, array());
             if (!empty($enqueue['ok'])) {
-              $flashOk = 'Campana encolada para ejecucion. Comando #' . (int)$enqueue['command_id'];
+              $flashOk = 'Campana encolada. El worker se lanzara desde la interfaz sin bloquear la pagina.';
               communication_ops_log($pdo, $organizationId, 'campaigns', 'campaign.execute_requested', 'info', 'Solicitud de ejecucion desde UI de campanas.', array(
                 'campaign_id' => $id,
                 'command_id' => (int)$enqueue['command_id'],
@@ -333,7 +343,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
 
 $scopeSql = communication_campaigns_scope_sql($isSuper);
 $scopeParams = communication_campaigns_scope_params($organizationId, $adminId, $isSuper);
-$listSql = 'SELECT c.*, a.name AS audience_name, t.name AS template_name, cr.id AS active_run_id, cr.status AS active_run_status, cr.processed_count AS active_processed_count, cr.resolved_recipients AS active_resolved_recipients FROM communication_campaigns c LEFT JOIN communication_audiences a ON a.id = c.audience_id LEFT JOIN communication_templates t ON t.id = c.template_id LEFT JOIN communication_campaign_runs cr ON cr.id = (SELECT r2.id FROM communication_campaign_runs r2 WHERE r2.campaign_id = c.id ORDER BY r2.id DESC LIMIT 1) WHERE ' . str_replace('organization_id', 'c.organization_id', $scopeSql);
+$scopeSqlList = str_replace(
+  array('organization_id', 'created_by_admin_id'),
+  array('c.organization_id', 'c.created_by_admin_id'),
+  $scopeSql
+);
+$listSql = 'SELECT c.*, a.name AS audience_name, t.name AS template_name, cr.id AS active_run_id, cr.status AS active_run_status, cr.processed_count AS active_processed_count, cr.resolved_recipients AS active_resolved_recipients FROM communication_campaigns c LEFT JOIN communication_audiences a ON a.id = c.audience_id LEFT JOIN communication_templates t ON t.id = c.template_id LEFT JOIN communication_campaign_runs cr ON cr.id = (SELECT r2.id FROM communication_campaign_runs r2 WHERE r2.campaign_id = c.id ORDER BY r2.id DESC LIMIT 1) WHERE ' . $scopeSqlList;
 if ($q !== '') {
     $listSql .= ' AND (c.name LIKE :q OR c.slug LIKE :q OR c.description LIKE :q OR c.notes_internal LIKE :q)';
     $scopeParams[':q'] = '%' . $q . '%';
@@ -453,10 +468,10 @@ include __DIR__ . '/inc/layout_top.php';
                 <a class="btn secondary" href="comunicacion_campanas.php?id=<?php echo (int)$r['id']; ?>">Editar</a>
                 <a class="btn secondary" href="comunicacion_historial.php?campaign_id=<?php echo (int)$r['id']; ?>">Historial</a>
                 <?php if (in_array((string)$r['status'], array('draft', 'failed', 'sent'), true)): ?>
-                <form method="post" action="comunicacion_campanas.php" style="display:inline;">
+                <form method="post" action="comunicacion_campanas.php" style="display:inline;" class="js-campaign-action-form">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button class="btn secondary" type="submit" name="action" value="execute_now">Ejecutar</button>
+                  <button class="btn js-send-now-btn" type="button" data-campaign-id="<?php echo (int)$r['id']; ?>" data-campaign-name="<?php echo e($r['name']); ?>">Enviar ahora</button>
                 </form>
                 <?php endif; ?>
                 <?php if ((string)$r['status'] === 'sending'): ?>
@@ -507,7 +522,7 @@ include __DIR__ . '/inc/layout_top.php';
 <div class="card" style="max-width:1200px;margin:16px auto;">
   <h3 style="margin-top:0;"><?php echo ((int)$form['id'] > 0) ? 'Editar campana' : 'Nueva campana'; ?></h3>
 
-  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;" class="js-campaign-action-form">
     <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="id" value="<?php echo (int)$form['id']; ?>">
 
@@ -570,11 +585,12 @@ include __DIR__ . '/inc/layout_top.php';
       <button class="btn secondary" type="submit" name="action" value="estimate_form">Estimar destinatarios</button>
       <button class="btn secondary" type="submit" name="action" value="preview_form">Previsualizar</button>
       <?php if ((int)$form['id'] > 0): ?>
-        <button class="btn secondary" type="submit" name="action" value="execute_now">Encolar ejecucion</button>
+        <button class="btn js-send-now-btn" type="button" data-campaign-id="<?php echo (int)$form['id']; ?>" data-campaign-name="<?php echo e($form['name']); ?>">Enviar ahora</button>
       <?php endif; ?>
       <?php if ((int)$form['id'] > 0): ?>
         <a class="btn secondary" href="comunicacion_campanas.php">Nueva campana</a>
       <?php endif; ?>
+      <button class="btn secondary" type="submit" name="action" value="process_queue">Procesar cola</button>
     </div>
   </form>
 
@@ -622,5 +638,173 @@ include __DIR__ . '/inc/layout_top.php';
     </div>
   </div>
 <?php endif; ?>
+
+<?php if ($queueSummary): ?>
+  <div class="card" style="max-width:1200px;margin:16px auto;">
+    <h3 style="margin-top:0;">Resultado de la cola</h3>
+    <div><strong>Worker:</strong> <?php echo e($queueSummary['worker_id']); ?></div>
+    <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
+      <span>Seleccionados: <?php echo (int)$queueSummary['picked']; ?></span>
+      <span>Completados: <?php echo (int)$queueSummary['done']; ?></span>
+      <span>Fallidos: <?php echo (int)$queueSummary['failed']; ?></span>
+      <span>Cancelados: <?php echo (int)$queueSummary['cancelled']; ?></span>
+    </div>
+  </div>
+<?php endif; ?>
+
+<div class="card" id="campaign-live-status" style="max-width:1200px;margin:16px auto;display:none;">
+  <h3 style="margin-top:0;">Ejecucion en curso</h3>
+  <div id="campaign-live-status-message" class="muted">Esperando respuesta del worker...</div>
+  <div style="margin-top:10px;height:10px;background:#edf2f7;border-radius:999px;overflow:hidden;">
+    <div id="campaign-live-status-bar" style="height:10px;width:0%;background:#2563eb;transition:width .25s ease;"></div>
+  </div>
+  <div id="campaign-live-status-meta" style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;"></div>
+</div>
+
+<script>
+(function() {
+  const dispatchUrl = <?php echo json_encode('ops/communication_campaign_dispatch.php'); ?>;
+  const workerUrl = <?php echo json_encode('ops/communication_engine_worker.php'); ?>;
+  const statusUrl = <?php echo json_encode('ops/communication_campaign_status.php'); ?>;
+  const csrfToken = <?php echo json_encode($csrf); ?>;
+  const statusCard = document.getElementById('campaign-live-status');
+  const statusMessage = document.getElementById('campaign-live-status-message');
+  const statusBar = document.getElementById('campaign-live-status-bar');
+  const statusMeta = document.getElementById('campaign-live-status-meta');
+
+  function showStatusCard() {
+    if (statusCard) statusCard.style.display = 'block';
+  }
+
+  function setStatus(message, pct, meta) {
+    showStatusCard();
+    if (statusMessage) statusMessage.textContent = message;
+    if (statusBar) statusBar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+    if (statusMeta) {
+      statusMeta.innerHTML = '';
+      (meta || []).forEach(function(item) {
+        const span = document.createElement('span');
+        span.textContent = item;
+        statusMeta.appendChild(span);
+      });
+    }
+  }
+
+  function renderRun(run, commandId) {
+    if (!run) {
+      setStatus('Esperando que el worker cree el run...', 5, ['Comando #' + commandId]);
+      return true;
+    }
+    const resolved = Number(run.resolved_recipients || 0);
+    const processed = Number(run.processed_count || 0);
+    const accepted = Number(run.sent_count || 0);
+    const failed = Number(run.failed_count || 0);
+    const pct = resolved > 0 ? Math.round((processed * 100) / resolved) : 0;
+    const meta = [
+      'Run #' + run.id,
+      'Estado: ' + run.status,
+      'Procesados: ' + processed + '/' + resolved,
+      'Enviados: ' + accepted,
+      'Fallidos: ' + failed
+    ];
+    setStatus('Ejecucion ' + run.status + '.', pct, meta);
+    return ['completed', 'done', 'failed', 'cancelled'].indexOf(String(run.status)) === -1;
+  }
+
+  async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    const text = await response.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (error) { data = { ok: false, raw: text }; }
+    if (!response.ok || (data && data.ok === false && data.error)) {
+      const err = new Error((data && data.error) ? data.error : ('HTTP ' + response.status));
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  async function pollStatus(campaignId, commandId) {
+    for (let attempts = 0; attempts < 180; attempts++) {
+      const data = await fetchJson(statusUrl + '?campaign_id=' + encodeURIComponent(campaignId) + '&command_id=' + encodeURIComponent(commandId), { credentials: 'same-origin' });
+      const run = data && data.latest_run ? data.latest_run : null;
+      const keepPolling = renderRun(run, commandId);
+      if (!keepPolling) {
+        setStatus('Ejecucion finalizada.', 100, [
+          'Comando #' + commandId,
+          run ? ('Run #' + run.id) : 'Sin run aun',
+          run ? ('Estado: ' + run.status) : 'Estado: queued'
+        ]);
+        return data;
+      }
+      await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+    }
+    setStatus('La ejecucion sigue en proceso. Puedes seguir trabajando mientras el worker termina.', 65, []);
+    return null;
+  }
+
+  async function dispatchCampaign(button) {
+    const campaignId = Number(button.getAttribute('data-campaign-id') || 0);
+    const campaignName = button.getAttribute('data-campaign-name') || '';
+    if (!campaignId) return;
+
+    button.disabled = true;
+    setStatus('Encolando campana ' + campaignName + '...', 10, ['Campana #' + campaignId]);
+
+    try {
+      const enqueueData = await fetchJson(dispatchUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: new URLSearchParams({ csrf: csrfToken, campaign_id: String(campaignId) }).toString()
+      });
+
+      setStatus('Campana encolada. Lanzando worker...', 20, [
+        'Campana #' + campaignId,
+        'Comando #' + enqueueData.command_id
+      ]);
+
+      fetch(workerUrl + '?max=100&worker=' + encodeURIComponent('ui-' + campaignId + '-' + Date.now()), { credentials: 'same-origin' })
+        .then(function(response) { return response.text(); })
+        .then(function() {
+          setStatus('Worker lanzado. Consultando progreso...', 25, [
+            'Campana #' + campaignId,
+            'Comando #' + enqueueData.command_id
+          ]);
+        })
+        .catch(function(workerError) {
+          setStatus('La campana quedo encolada, pero no se pudo lanzar el worker: ' + workerError.message, 20, [
+            'Campana #' + campaignId,
+            'Comando #' + enqueueData.command_id
+          ]);
+        });
+
+      await pollStatus(campaignId, enqueueData.command_id);
+      button.disabled = false;
+    } catch (error) {
+      setStatus('No se pudo iniciar el envio: ' + error.message, 0, ['Campana #' + campaignId]);
+      button.disabled = false;
+    }
+  }
+
+  document.addEventListener('click', function(event) {
+    const button = event.target && event.target.closest ? event.target.closest('.js-send-now-btn') : null;
+    if (!button) return;
+    event.preventDefault();
+    dispatchCampaign(button);
+  });
+
+  document.querySelectorAll('.js-campaign-action-form').forEach(function(form) {
+    const sendButton = form.querySelector('.js-send-now-btn');
+    if (!sendButton) return;
+    form.addEventListener('submit', function(event) {
+      if (event.submitter && event.submitter.classList && event.submitter.classList.contains('js-send-now-btn')) {
+        event.preventDefault();
+        dispatchCampaign(event.submitter);
+      }
+    });
+  });
+})();
+</script>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
