@@ -55,7 +55,6 @@ $form = array(
 $estimatedRecipients = null;
 $preview = null;
 $previewTemplateName = '';
-$queueSummary = null;
 
 try {
     communication_templates_ensure_schema($pdo);
@@ -88,15 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
         $flashErr = 'CSRF invalido. Recarga la pagina e intenta nuevamente.';
     } else {
         $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
-
-        if ($action === 'process_queue') {
-          $workerId = 'ui-queue-' . $adminId . '-' . gmdate('YmdHis');
-          $maxCommands = isset($_POST['max_commands']) ? (int)$_POST['max_commands'] : 20;
-          if ($maxCommands <= 0) $maxCommands = 20;
-          if ($maxCommands > 100) $maxCommands = 100;
-          $queueSummary = communication_execution_process_queue($pdo, $maxCommands, $workerId);
-          $flashOk = 'Cola procesada: ' . (int)$queueSummary['picked'] . ' comando(s), ' . (int)$queueSummary['done'] . ' completado(s), ' . (int)$queueSummary['failed'] . ' fallido(s), ' . (int)$queueSummary['cancelled'] . ' cancelado(s).';
-        }
 
         if ($action === 'execute_now' || $action === 'send_now') {
           $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
@@ -466,26 +456,13 @@ include __DIR__ . '/inc/layout_top.php';
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <a class="btn secondary" href="comunicacion_campanas.php?id=<?php echo (int)$r['id']; ?>">Editar</a>
-                <a class="btn secondary" href="comunicacion_historial.php?campaign_id=<?php echo (int)$r['id']; ?>">Historial</a>
                 <?php if (in_array((string)$r['status'], array('draft', 'failed', 'sent'), true)): ?>
                 <form method="post" action="comunicacion_campanas.php" style="display:inline;" class="js-campaign-action-form">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button class="btn js-send-now-btn" type="button" data-campaign-id="<?php echo (int)$r['id']; ?>" data-campaign-name="<?php echo e($r['name']); ?>">Enviar ahora</button>
+                  <button class="btn js-send-now-btn" type="button" data-campaign-id="<?php echo (int)$r['id']; ?>" data-campaign-name="<?php echo e($r['name']); ?>">Enviar campana</button>
                 </form>
                 <?php endif; ?>
-                <?php if ((string)$r['status'] === 'sending'): ?>
-                <form method="post" action="comunicacion_campanas.php" style="display:inline;">
-                  <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
-                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button class="btn secondary" type="submit" name="action" value="cancel_run">Cancelar</button>
-                </form>
-                <?php endif; ?>
-                <form method="post" action="comunicacion_campanas.php" style="display:inline;">
-                  <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
-                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
-                  <button class="btn secondary" type="submit" name="action" value="estimate_saved">Estimar</button>
-                </form>
                 <form method="post" action="comunicacion_campanas.php" style="display:inline;">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
@@ -585,12 +562,8 @@ include __DIR__ . '/inc/layout_top.php';
       <button class="btn secondary" type="submit" name="action" value="estimate_form">Estimar destinatarios</button>
       <button class="btn secondary" type="submit" name="action" value="preview_form">Previsualizar</button>
       <?php if ((int)$form['id'] > 0): ?>
-        <button class="btn js-send-now-btn" type="button" data-campaign-id="<?php echo (int)$form['id']; ?>" data-campaign-name="<?php echo e($form['name']); ?>">Enviar ahora</button>
-      <?php endif; ?>
-      <?php if ((int)$form['id'] > 0): ?>
         <a class="btn secondary" href="comunicacion_campanas.php">Nueva campana</a>
       <?php endif; ?>
-      <button class="btn secondary" type="submit" name="action" value="process_queue">Procesar cola</button>
     </div>
   </form>
 
@@ -635,19 +608,6 @@ include __DIR__ . '/inc/layout_top.php';
         <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;">Variables desconocidas</div>
         <div><?php echo e(!empty($preview['unknown_variables']) ? implode(', ', $preview['unknown_variables']) : '-'); ?></div>
       </div>
-    </div>
-  </div>
-<?php endif; ?>
-
-<?php if ($queueSummary): ?>
-  <div class="card" style="max-width:1200px;margin:16px auto;">
-    <h3 style="margin-top:0;">Resultado de la cola</h3>
-    <div><strong>Worker:</strong> <?php echo e($queueSummary['worker_id']); ?></div>
-    <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
-      <span>Seleccionados: <?php echo (int)$queueSummary['picked']; ?></span>
-      <span>Completados: <?php echo (int)$queueSummary['done']; ?></span>
-      <span>Fallidos: <?php echo (int)$queueSummary['failed']; ?></span>
-      <span>Cancelados: <?php echo (int)$queueSummary['cancelled']; ?></span>
     </div>
   </div>
 <?php endif; ?>
@@ -749,14 +709,32 @@ include __DIR__ . '/inc/layout_top.php';
     if (!campaignId) return;
 
     button.disabled = true;
-    setStatus('Encolando campana ' + campaignName + '...', 10, ['Campana #' + campaignId]);
+    setStatus('Estimando destinatarios para ' + campaignName + '...', 5, ['Campana #' + campaignId]);
 
     try {
+      const estimateData = await fetchJson(dispatchUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: new URLSearchParams({ csrf: csrfToken, campaign_id: String(campaignId), mode: 'estimate' }).toString()
+      });
+
+      const estimated = Number(estimateData.estimated_recipients || 0);
+      const confirmMessage = 'Vas a enviar la campana "' + campaignName + '" a aproximadamente ' + estimated + ' destinatario(s).\n\nConfirmas el envio?';
+      const accepted = window.confirm(confirmMessage);
+      if (!accepted) {
+        setStatus('Envio cancelado por el usuario.', 0, ['Campana #' + campaignId, 'Estimados: ' + estimated]);
+        button.disabled = false;
+        return;
+      }
+
+      setStatus('Encolando campana ' + campaignName + '...', 10, ['Campana #' + campaignId, 'Estimados: ' + estimated]);
+
       const enqueueData = await fetchJson(dispatchUrl, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-        body: new URLSearchParams({ csrf: csrfToken, campaign_id: String(campaignId) }).toString()
+        body: new URLSearchParams({ csrf: csrfToken, campaign_id: String(campaignId), mode: 'enqueue' }).toString()
       });
 
       setStatus('Campana encolada. Lanzando worker...', 20, [
