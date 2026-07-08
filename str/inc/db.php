@@ -275,6 +275,30 @@ function db(){
             // no bloquear si falla
         }
 
+        // Comunicación Fase 3: logging operativo unificado
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_module_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                campaign_id INTEGER,
+                run_id INTEGER,
+                command_id INTEGER,
+                component TEXT NOT NULL,
+                level TEXT NOT NULL DEFAULT "info",
+                event_name TEXT NOT NULL,
+                message TEXT,
+                context_json TEXT,
+                event_key TEXT
+            )');
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_mod_logs_created ON communication_module_logs(created_at)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_mod_logs_component ON communication_module_logs(component, level)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_mod_logs_campaign ON communication_module_logs(campaign_id, run_id)");
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_comm_mod_logs_event_key ON communication_module_logs(event_key)");
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);

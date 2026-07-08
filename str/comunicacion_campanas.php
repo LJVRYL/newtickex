@@ -5,6 +5,7 @@ require_once __DIR__ . '/inc/communication_templates.php';
 require_once __DIR__ . '/inc/communication_template_renderer.php';
 require_once __DIR__ . '/inc/communication_campaigns.php';
 require_once __DIR__ . '/inc/communication_execution_engine.php';
+require_once __DIR__ . '/inc/communication_ops.php';
 
 require_login();
 $cu = current_user();
@@ -60,6 +61,7 @@ try {
     communication_campaigns_ensure_schema($pdo);
   communication_execution_ensure_schema($pdo);
   communication_transport_ensure_schema($pdo);
+  communication_ops_ensure_schema($pdo);
 } catch (Exception $e) {
     if ($flashErr === '') {
         $flashErr = 'No se pudo preparar campanas: ' . $e->getMessage();
@@ -92,6 +94,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
             $enqueue = communication_execution_enqueue_campaign($pdo, $organizationId, $id, $adminId, $isSuper, array());
             if (!empty($enqueue['ok'])) {
               $flashOk = 'Campana encolada para ejecucion. Comando #' . (int)$enqueue['command_id'];
+              communication_ops_log($pdo, $organizationId, 'campaigns', 'campaign.execute_requested', 'info', 'Solicitud de ejecucion desde UI de campanas.', array(
+                'campaign_id' => $id,
+                'command_id' => (int)$enqueue['command_id'],
+              ), 'campaign.execute_requested|' . (int)$id . '|' . (int)$enqueue['command_id']);
             } else {
               $flashErr = isset($enqueue['error']) ? (string)$enqueue['error'] : 'No se pudo encolar la campana.';
             }
@@ -108,6 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
               $stCancel->execute(array(':st' => 'cancelled', ':id' => $id, ':sending' => 'sending') + $scopeParams);
               if ($stCancel->rowCount() > 0) {
                 $flashOk = 'Campana marcada como cancelada.';
+                communication_ops_log($pdo, $organizationId, 'campaigns', 'campaign.cancel_requested', 'warning', 'Campana cancelada desde UI de campanas.', array(
+                  'campaign_id' => $id,
+                  'requested_by_admin_id' => $adminId,
+                ), 'campaign.cancel_requested|' . (int)$id . '|' . gmdate('YmdHis'));
               } else {
                 $flashErr = 'No se pudo cancelar (verifica que este en sending).';
               }
@@ -380,7 +390,9 @@ include __DIR__ . '/inc/layout_top.php';
   <a class="btn secondary" href="comunicacion_audiencias.php">Audiencias</a>
   <a class="btn secondary" href="comunicacion_plantillas.php">Plantillas</a>
   <a class="btn" href="comunicacion_campanas.php">Campanas</a>
-  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Historial · Proximamente</span>
+  <a class="btn secondary" href="comunicacion_estado_motor.php">Estado Motor</a>
+  <a class="btn secondary" href="comunicacion_historial.php">Historial</a>
+  <a class="btn secondary" href="comunicacion_healthcheck.php">Health Check</a>
 </div>
 
 <?php if ($flashOk !== ''): ?>
@@ -439,6 +451,7 @@ include __DIR__ . '/inc/layout_top.php';
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <a class="btn secondary" href="comunicacion_campanas.php?id=<?php echo (int)$r['id']; ?>">Editar</a>
+                <a class="btn secondary" href="comunicacion_historial.php?campaign_id=<?php echo (int)$r['id']; ?>">Historial</a>
                 <?php if (in_array((string)$r['status'], array('draft', 'failed', 'sent'), true)): ?>
                 <form method="post" action="comunicacion_campanas.php" style="display:inline;">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">

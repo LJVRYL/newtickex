@@ -151,6 +151,22 @@ if (!function_exists('communication_transport_log_result')) {
         } catch (Exception $e) {
             // ignore transport log failures
         }
+
+        // Log unificado (solo errores para evitar duplicidad de volumen).
+        try {
+            $status = isset($result['status']) ? (string)$result['status'] : '';
+            if (in_array($status, array('rejected', 'transient_error', 'permanent_error'), true) && function_exists('communication_ops_log')) {
+                communication_ops_log($pdo, (int)$organizationId, 'transport', 'transport.send.result', 'warning', 'Resultado de transporte no exitoso.', array(
+                    'campaign_id' => isset($context['campaign_id']) ? (int)$context['campaign_id'] : null,
+                    'run_id' => isset($context['campaign_run_id']) ? (int)$context['campaign_run_id'] : null,
+                    'provider_name' => isset($result['provider_name']) ? (string)$result['provider_name'] : '',
+                    'status' => $status,
+                    'response_code' => isset($result['response_code']) ? (string)$result['response_code'] : '',
+                ), 'transport.send.result|' . (string)$status . '|' . (string)(isset($context['campaign_run_id']) ? $context['campaign_run_id'] : 0) . '|' . (string)(isset($context['recipient_fingerprint']) ? $context['recipient_fingerprint'] : ''));
+            }
+        } catch (Exception $e) {
+            // ignore unified log failures
+        }
     }
 }
 
@@ -200,6 +216,60 @@ if (!function_exists('communication_transport_send')) {
 
         communication_transport_log_result($pdo, $organizationId, $message, $context, $out);
         return $out;
+    }
+}
+
+if (!function_exists('communication_transport_simulate_send')) {
+    function communication_transport_simulate_send($pdo, $organizationId, $message, $context)
+    {
+        communication_transport_ensure_schema($pdo);
+
+        $message = is_array($message) ? $message : array();
+        $context = is_array($context) ? $context : array();
+        $channel = isset($context['channel']) ? (string)$context['channel'] : 'email';
+        $resolved = communication_transport_resolve_provider($pdo, $organizationId, $channel);
+        $providerName = isset($resolved['provider_name']) ? (string)$resolved['provider_name'] : 'legacy_mail_php';
+
+        $to = isset($message['to_email']) ? strtolower(trim((string)$message['to_email'])) : '';
+        $status = 'accepted';
+        $code = 'SIM_OK';
+        $msg = 'Simulacion aceptada (sin envio real).';
+
+        if ($to === '') {
+            $status = 'permanent_error';
+            $code = 'SIM_NO_RECIPIENT';
+            $msg = 'Simulacion invalida: destinatario vacio.';
+        } elseif (strpos($to, 'fail') !== false || strpos($to, 'error') !== false) {
+            $status = 'transient_error';
+            $code = 'SIM_TRANSIENT';
+            $msg = 'Simulacion de fallo transitorio por patron de email.';
+        } elseif (strpos($to, 'reject') !== false || strpos($to, 'bounce') !== false) {
+            $status = 'rejected';
+            $code = 'SIM_REJECTED';
+            $msg = 'Simulacion de rechazo por patron de email.';
+        }
+
+        $result = communication_transport_normalize_result($providerName, array(
+            'status' => $status,
+            'provider_name' => $providerName,
+            'provider_message_id' => 'sim-' . substr(sha1($to . '|' . microtime(true)), 0, 18),
+            'response_code' => $code,
+            'response_message' => $msg,
+            'retry_recommended' => ($status === 'transient_error'),
+            'classification_reason' => 'simulation',
+        ), 1);
+
+        if (function_exists('communication_ops_log')) {
+            communication_ops_log($pdo, (int)$organizationId, 'transport', 'transport.simulated_send', 'info', 'Simulacion de transporte ejecutada.', array(
+                'campaign_id' => isset($context['campaign_id']) ? (int)$context['campaign_id'] : null,
+                'run_id' => isset($context['campaign_run_id']) ? (int)$context['campaign_run_id'] : null,
+                'provider_name' => $providerName,
+                'status' => $status,
+                'to_email_hash' => sha1($to),
+            ), 'transport.simulated_send|' . sha1($to . '|' . gmdate('YmdHis')));
+        }
+
+        return $result;
     }
 }
 

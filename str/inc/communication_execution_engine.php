@@ -174,6 +174,15 @@ if (!function_exists('communication_execution_enqueue_campaign')) {
                 ':aid' => $adminId,
             ));
             $commandId = (int)$pdo->lastInsertId();
+
+            if (function_exists('communication_ops_log')) {
+                communication_ops_log($pdo, $organizationId, 'engine', 'command.enqueued', 'info', 'Campana encolada para ejecucion.', array(
+                    'campaign_id' => $campaignId,
+                    'command_id' => $commandId,
+                    'requested_by_admin_id' => $adminId,
+                ), 'command.enqueued|' . (int)$commandId);
+            }
+
             return array('ok' => true, 'command_id' => $commandId, 'request_key' => $requestKey);
         } catch (Exception $e) {
             return array('ok' => false, 'error' => 'No se pudo encolar la ejecucion: ' . $e->getMessage());
@@ -201,6 +210,15 @@ if (!function_exists('communication_execution_update_command')) {
             ':er' => $errorText,
             ':id' => (int)$commandId,
         ));
+
+        if (function_exists('communication_ops_log')) {
+            $level = ((string)$status === 'failed') ? 'error' : (((string)$status === 'cancelled') ? 'warning' : 'info');
+            communication_ops_log($pdo, 1, 'engine', 'command.status_updated', $level, 'Comando actualizado: ' . (string)$status, array(
+                'command_id' => (int)$commandId,
+                'status' => (string)$status,
+                'error_text' => (string)$errorText,
+            ), 'command.status_updated|' . (int)$commandId . '|' . (string)$status . '|' . gmdate('YmdHis'));
+        }
     }
 }
 
@@ -369,6 +387,15 @@ if (!function_exists('communication_execution_finalize_run_and_campaign')) {
         $stRun->execute(array(':st' => 'completed', ':id' => (int)$runId));
         $stCamp->execute(array(':st' => $campaignStatus, ':id' => (int)$campaignId));
 
+        if (function_exists('communication_ops_log')) {
+            communication_ops_log($pdo, 1, 'engine', 'run.finalized', ($campaignStatus === 'failed' ? 'warning' : 'info'), 'Run finalizado.', array(
+                'campaign_id' => (int)$campaignId,
+                'run_id' => (int)$runId,
+                'campaign_status' => (string)$campaignStatus,
+                'counts' => $counts,
+            ), 'run.finalized|' . (int)$runId . '|' . (string)$campaignStatus);
+        }
+
         return array('campaign_status' => $campaignStatus, 'counts' => $counts);
     }
 }
@@ -485,6 +512,14 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
             throw new Exception('Campana no accesible para ejecucion.');
         }
 
+        if (function_exists('communication_ops_log')) {
+            communication_ops_log($pdo, $organizationId, 'engine', 'command.processing_started', 'info', 'Inicio de procesamiento de comando.', array(
+                'campaign_id' => $campaignId,
+                'command_id' => $commandId,
+                'worker_id' => (string)$workerId,
+            ), 'command.processing_started|' . (int)$commandId);
+        }
+
         if (in_array((string)$campaign['status'], array('archived', 'cancelled'), true)) {
             return array('ok' => false, 'cancelled' => true, 'message' => 'Campana no ejecutable en estado actual.');
         }
@@ -501,6 +536,14 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
             $runId = (int)$activeRun['id'];
         } else {
             $runId = communication_execution_insert_run($pdo, $organizationId, $campaignId, $commandId, isset($audience['filters_json']) ? $audience['filters_json'] : null);
+
+            if (function_exists('communication_ops_log')) {
+                communication_ops_log($pdo, $organizationId, 'engine', 'run.created', 'info', 'Run creado para ejecucion de campana.', array(
+                    'campaign_id' => $campaignId,
+                    'run_id' => $runId,
+                    'command_id' => $commandId,
+                ), 'run.created|' . (int)$runId);
+            }
         }
 
         communication_execution_mark_campaign_sending($pdo, $campaignId);
@@ -527,6 +570,14 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
             $allContacts = communication_contacts_resolve($pdo, $scope);
             $targetRows = communication_contacts_apply_filters(array_values($allContacts), $filters);
             communication_execution_materialize_recipients($pdo, $runId, $campaignId, $targetRows);
+
+            if (function_exists('communication_ops_log')) {
+                communication_ops_log($pdo, $organizationId, 'engine', 'run.snapshot_materialized', 'info', 'Snapshot y destinatarios materializados.', array(
+                    'campaign_id' => $campaignId,
+                    'run_id' => $runId,
+                    'resolved_recipients' => count($targetRows),
+                ), 'run.snapshot_materialized|' . (int)$runId);
+            }
         }
 
         // refrescar run luego de potencial snapshot/materialización
@@ -634,6 +685,16 @@ if (!function_exists('communication_execution_process_queue')) {
                 if (isset($res['status']) && $res['status'] === 'failed') $out['failed']++;
                 if (isset($res['status']) && $res['status'] === 'cancelled') $out['cancelled']++;
             }
+        }
+
+        if (function_exists('communication_ops_log')) {
+            communication_ops_log($pdo, 1, 'worker', 'worker.queue_batch_processed', 'info', 'Lote de cola procesado.', array(
+                'worker_id' => $workerId,
+                'picked' => (int)$out['picked'],
+                'done' => (int)$out['done'],
+                'failed' => (int)$out['failed'],
+                'cancelled' => (int)$out['cancelled'],
+            ), 'worker.queue_batch_processed|' . (string)$workerId . '|' . gmdate('YmdHis'));
         }
 
         return $out;

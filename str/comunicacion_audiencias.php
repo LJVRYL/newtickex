@@ -356,7 +356,9 @@ include __DIR__ . '/inc/layout_top.php';
   <a class="btn" href="comunicacion_audiencias.php">Audiencias</a>
   <a class="btn secondary" href="comunicacion_plantillas.php">Plantillas</a>
   <a class="btn secondary" href="comunicacion_campanas.php">Campanas</a>
-  <span class="btn secondary" style="opacity:.6;cursor:not-allowed;">Historial · Proximamente</span>
+  <a class="btn secondary" href="comunicacion_estado_motor.php">Estado Motor</a>
+  <a class="btn secondary" href="comunicacion_historial.php">Historial</a>
+  <a class="btn secondary" href="comunicacion_healthcheck.php">Health Check</a>
 </div>
 
 <?php if ($flashOk !== ''): ?>
