@@ -149,6 +149,132 @@ function db(){
             // no bloquear si falla
         }
 
+        // Comunicación Fase 2: configuración y logs de transporte
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_transport_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 0,
+                channel TEXT NOT NULL DEFAULT "email",
+                provider_name TEXT NOT NULL DEFAULT "legacy_mail_php",
+                enabled INTEGER NOT NULL DEFAULT 1,
+                config_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(organization_id, channel)
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_transport_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                organization_id INTEGER,
+                campaign_id INTEGER,
+                campaign_run_id INTEGER,
+                recipient_fingerprint TEXT,
+                provider_name TEXT,
+                status TEXT,
+                response_code TEXT,
+                response_message TEXT,
+                provider_message_id TEXT,
+                latency_ms INTEGER,
+                classification_reason TEXT
+            )');
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_transport_cfg_org_channel ON communication_transport_configs(organization_id, channel)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_transport_logs_run ON communication_transport_logs(campaign_run_id)");
+
+            $stCfg = $pdo->prepare('INSERT OR IGNORE INTO communication_transport_configs (organization_id, channel, provider_name, enabled, config_json, created_at, updated_at) VALUES (0, :ch, :pn, 1, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)');
+            $stCfg->execute(array(':ch' => 'email', ':pn' => 'legacy_mail_php'));
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
+        // Comunicación Fase 2: motor de ejecución (cola + runs + intentos)
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_execution_commands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                campaign_id INTEGER NOT NULL,
+                command_type TEXT NOT NULL DEFAULT "execute_campaign",
+                request_key TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT "queued",
+                payload_json TEXT,
+                scheduled_for TEXT,
+                locked_by TEXT,
+                lock_expires_at TEXT,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                result_json TEXT,
+                error_text TEXT,
+                created_by_admin_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(request_key)
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_campaign_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                campaign_id INTEGER NOT NULL,
+                command_id INTEGER,
+                status TEXT NOT NULL DEFAULT "requested",
+                started_at TEXT,
+                finished_at TEXT,
+                snapshot_subject TEXT,
+                snapshot_body_html TEXT,
+                snapshot_body_text TEXT,
+                snapshot_taken_at TEXT,
+                audience_filters_json TEXT,
+                resolved_recipients INTEGER NOT NULL DEFAULT 0,
+                processed_count INTEGER NOT NULL DEFAULT 0,
+                accepted_count INTEGER NOT NULL DEFAULT 0,
+                rejected_count INTEGER NOT NULL DEFAULT 0,
+                transient_error_count INTEGER NOT NULL DEFAULT 0,
+                permanent_error_count INTEGER NOT NULL DEFAULT 0,
+                skipped_duplicate_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_campaign_run_recipients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                campaign_id INTEGER NOT NULL,
+                recipient_email TEXT,
+                recipient_name TEXT,
+                recipient_fingerprint TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT "queued",
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                last_response_code TEXT,
+                last_response_message TEXT,
+                provider_name TEXT,
+                provider_message_id TEXT,
+                locked_until TEXT,
+                last_attempt_at TEXT,
+                processed_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(run_id, recipient_fingerprint)
+            )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_campaign_delivery_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                recipient_fingerprint TEXT NOT NULL,
+                attempt_no INTEGER NOT NULL,
+                provider_name TEXT,
+                transport_status TEXT,
+                response_code TEXT,
+                response_message TEXT,
+                provider_message_id TEXT,
+                latency_ms INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )');
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_exec_cmd_status ON communication_execution_commands(status, scheduled_for)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_exec_cmd_campaign ON communication_execution_commands(campaign_id)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_runs_campaign ON communication_campaign_runs(campaign_id, status)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_run_status ON communication_campaign_run_recipients(run_id, status)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_campaign_fp ON communication_campaign_run_recipients(campaign_id, recipient_fingerprint, status)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_attempts_run ON communication_campaign_delivery_attempts(run_id, recipient_fingerprint)");
+        } catch (Exception $e) {
+            // no bloquear si falla
+        }
+
         // Ensure latest columns exist (idempotent)
         try {
             $cols = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);

@@ -4,6 +4,7 @@ require_once __DIR__ . '/inc/communication_contacts.php';
 require_once __DIR__ . '/inc/communication_templates.php';
 require_once __DIR__ . '/inc/communication_template_renderer.php';
 require_once __DIR__ . '/inc/communication_campaigns.php';
+require_once __DIR__ . '/inc/communication_execution_engine.php';
 
 require_login();
 $cu = current_user();
@@ -57,6 +58,8 @@ $previewTemplateName = '';
 try {
     communication_templates_ensure_schema($pdo);
     communication_campaigns_ensure_schema($pdo);
+  communication_execution_ensure_schema($pdo);
+  communication_transport_ensure_schema($pdo);
 } catch (Exception $e) {
     if ($flashErr === '') {
         $flashErr = 'No se pudo preparar campanas: ' . $e->getMessage();
@@ -82,6 +85,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
         $flashErr = 'CSRF invalido. Recarga la pagina e intenta nuevamente.';
     } else {
         $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
+
+        if ($action === 'execute_now') {
+          $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+          if ($id > 0) {
+            $enqueue = communication_execution_enqueue_campaign($pdo, $organizationId, $id, $adminId, $isSuper, array());
+            if (!empty($enqueue['ok'])) {
+              $flashOk = 'Campana encolada para ejecucion. Comando #' . (int)$enqueue['command_id'];
+            } else {
+              $flashErr = isset($enqueue['error']) ? (string)$enqueue['error'] : 'No se pudo encolar la campana.';
+            }
+          }
+        }
+
+        if ($action === 'cancel_run') {
+          $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+          if ($id > 0) {
+            try {
+              $scopeSql = communication_campaigns_scope_sql($isSuper);
+              $scopeParams = communication_campaigns_scope_params($organizationId, $adminId, $isSuper);
+              $stCancel = $pdo->prepare('UPDATE communication_campaigns SET status = :st, cancelled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND ' . $scopeSql . ' AND status = :sending');
+              $stCancel->execute(array(':st' => 'cancelled', ':id' => $id, ':sending' => 'sending') + $scopeParams);
+              if ($stCancel->rowCount() > 0) {
+                $flashOk = 'Campana marcada como cancelada.';
+              } else {
+                $flashErr = 'No se pudo cancelar (verifica que este en sending).';
+              }
+            } catch (Exception $e) {
+              $flashErr = 'No se pudo cancelar la campana: ' . $e->getMessage();
+            }
+          }
+        }
 
         if ($action === 'save' || $action === 'estimate_form' || $action === 'preview_form') {
             $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
@@ -289,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
 
 $scopeSql = communication_campaigns_scope_sql($isSuper);
 $scopeParams = communication_campaigns_scope_params($organizationId, $adminId, $isSuper);
-$listSql = 'SELECT c.*, a.name AS audience_name, t.name AS template_name FROM communication_campaigns c LEFT JOIN communication_audiences a ON a.id = c.audience_id LEFT JOIN communication_templates t ON t.id = c.template_id WHERE ' . str_replace('organization_id', 'c.organization_id', $scopeSql);
+$listSql = 'SELECT c.*, a.name AS audience_name, t.name AS template_name, cr.id AS active_run_id, cr.status AS active_run_status, cr.processed_count AS active_processed_count, cr.resolved_recipients AS active_resolved_recipients FROM communication_campaigns c LEFT JOIN communication_audiences a ON a.id = c.audience_id LEFT JOIN communication_templates t ON t.id = c.template_id LEFT JOIN communication_campaign_runs cr ON cr.id = (SELECT r2.id FROM communication_campaign_runs r2 WHERE r2.campaign_id = c.id ORDER BY r2.id DESC LIMIT 1) WHERE ' . str_replace('organization_id', 'c.organization_id', $scopeSql);
 if ($q !== '') {
     $listSql .= ' AND (c.name LIKE :q OR c.slug LIKE :q OR c.description LIKE :q OR c.notes_internal LIKE :q)';
     $scopeParams[':q'] = '%' . $q . '%';
@@ -405,6 +439,20 @@ include __DIR__ . '/inc/layout_top.php';
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <a class="btn secondary" href="comunicacion_campanas.php?id=<?php echo (int)$r['id']; ?>">Editar</a>
+                <?php if (in_array((string)$r['status'], array('draft', 'failed', 'sent'), true)): ?>
+                <form method="post" action="comunicacion_campanas.php" style="display:inline;">
+                  <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button class="btn secondary" type="submit" name="action" value="execute_now">Ejecutar</button>
+                </form>
+                <?php endif; ?>
+                <?php if ((string)$r['status'] === 'sending'): ?>
+                <form method="post" action="comunicacion_campanas.php" style="display:inline;">
+                  <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+                  <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                  <button class="btn secondary" type="submit" name="action" value="cancel_run">Cancelar</button>
+                </form>
+                <?php endif; ?>
                 <form method="post" action="comunicacion_campanas.php" style="display:inline;">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
@@ -430,6 +478,11 @@ include __DIR__ . '/inc/layout_top.php';
                   <?php endif; ?>
                 </form>
               </div>
+              <?php if (!empty($r['active_run_id'])): ?>
+                <div class="muted" style="font-size:12px;margin-top:4px;">
+                  Run #<?php echo (int)$r['active_run_id']; ?> · <?php echo e($r['active_run_status']); ?> · <?php echo (int)$r['active_processed_count']; ?>/<?php echo (int)$r['active_resolved_recipients']; ?>
+                </div>
+              <?php endif; ?>
             </td>
           </tr>
         <?php endforeach; ?>
@@ -503,6 +556,9 @@ include __DIR__ . '/inc/layout_top.php';
       <button class="btn" type="submit" name="action" value="save">Guardar campana</button>
       <button class="btn secondary" type="submit" name="action" value="estimate_form">Estimar destinatarios</button>
       <button class="btn secondary" type="submit" name="action" value="preview_form">Previsualizar</button>
+      <?php if ((int)$form['id'] > 0): ?>
+        <button class="btn secondary" type="submit" name="action" value="execute_now">Encolar ejecucion</button>
+      <?php endif; ?>
       <?php if ((int)$form['id'] > 0): ?>
         <a class="btn secondary" href="comunicacion_campanas.php">Nueva campana</a>
       <?php endif; ?>
