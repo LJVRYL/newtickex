@@ -112,6 +112,7 @@ include __DIR__ . '/inc/layout_top.php';
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <a class="btn secondary" href="superadmin_emails_db.php">👥 Contactos</a>
   <a class="btn secondary" href="comunicacion_audiencias.php">Audiencias</a>
+  <a class="btn secondary" href="comunicacion_newsletter.php">Newsletter</a>
   <a class="btn secondary" href="comunicacion_plantillas.php">Plantillas</a>
   <a class="btn secondary" href="comunicacion_campanas.php">Campanas</a>
   <a class="btn" href="comunicacion_estado_motor.php">Estado Motor</a>
