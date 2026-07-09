@@ -9,6 +9,7 @@ $updated = false;
 $processed = false;
 $debugMsg = '';
 $logFile = __DIR__ . '/totalcoin_callback.log';
+$traceId = date('YmdHis') . '-' . substr(sha1(uniqid('', true)), 0, 8);
 
 $callbackLogFile = __DIR__ . '/../uploads/totalcoin_callback_request.log';
 $rawBody = file_get_contents('php://input');
@@ -59,6 +60,19 @@ if (!function_exists('tc_cb_parse_raw')) {
   }
 }
 
+if (!function_exists('tc_cb_trace')) {
+  function tc_cb_trace($filePath, $traceId, $step, $data)
+  {
+    $row = array(
+      'at' => date('Y-m-d H:i:s'),
+      'trace_id' => (string)$traceId,
+      'step' => (string)$step,
+      'data' => is_array($data) ? $data : array('value' => $data),
+    );
+    @file_put_contents($filePath, json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+  }
+}
+
 $rawParsed = tc_cb_parse_raw($rawBody);
 $uuid = tc_cb_pick($_GET, array('uuid', 'requestId', 'request_id', 'RequestId'));
 if ($uuid === '') $uuid = tc_cb_pick($_POST, array('uuid', 'requestId', 'request_id', 'RequestId'));
@@ -72,6 +86,7 @@ if ($state === '') $state = 'unknown';
 
 $logLines = array(
   str_repeat('-', 50),
+  'TRACE_ID: ' . $traceId,
   date('Y-m-d H:i:s'),
   'REQUEST_METHOD: ' . ($_SERVER['REQUEST_METHOD'] ?? ''),
   'REQUEST_URI: ' . ($_SERVER['REQUEST_URI'] ?? ''),
@@ -87,6 +102,17 @@ $logLines = array(
   '',
 );
 @file_put_contents($callbackLogFile, implode("\n", $logLines) . "\n", FILE_APPEND | LOCK_EX);
+tc_cb_trace($callbackLogFile, $traceId, '01_callback_invoked', array(
+  'request_method' => isset($_SERVER['REQUEST_METHOD']) ? (string)$_SERVER['REQUEST_METHOD'] : '',
+  'request_uri' => isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '',
+));
+tc_cb_trace($callbackLogFile, $traceId, '02_params_received', array(
+  'uuid' => $uuid,
+  'state' => $state,
+  'get' => $_GET,
+  'post' => $_POST,
+  'raw_parsed' => $rawParsed,
+));
 
 // Persistir estado si tenemos requestId
 $updated = false;
@@ -95,14 +121,26 @@ $debugMsg = '';
 if ($uuid !== '') {
   try {
     $pdo = db();
-    $st = $pdo->prepare("UPDATE tc_orders SET state = :st, updated_at = datetime('now') WHERE request_id = :rid");
-    $st->execute(array(':st' => (string)$state, ':rid' => (string)$uuid));
-    $updated = ($st->rowCount() > 0);
-
-    $stOrder = $pdo->prepare("SELECT id FROM tc_orders WHERE request_id = :rid LIMIT 1");
+    $stOrder = $pdo->prepare("SELECT id, state, processed_at FROM tc_orders WHERE request_id = :rid LIMIT 1");
     $stOrder->execute(array(':rid' => $uuid));
     $tcOrder = $stOrder->fetch(PDO::FETCH_ASSOC);
     $tcOrderId = $tcOrder ? (int)$tcOrder['id'] : null;
+    tc_cb_trace($callbackLogFile, $traceId, '03_order_lookup', array(
+      'found' => $tcOrder ? true : false,
+      'tc_order_id' => $tcOrderId,
+      'previous_state' => $tcOrder ? (string)$tcOrder['state'] : null,
+      'previous_processed_at' => $tcOrder ? (string)$tcOrder['processed_at'] : null,
+    ));
+
+    $st = $pdo->prepare("UPDATE tc_orders SET state = :st, updated_at = datetime('now') WHERE request_id = :rid");
+    $st->execute(array(':st' => (string)$state, ':rid' => (string)$uuid));
+    $updated = ($st->rowCount() > 0);
+    tc_cb_trace($callbackLogFile, $traceId, '04_state_update', array(
+      'requested_state' => $state,
+      'updated' => $updated,
+      'affected_rows' => $st->rowCount(),
+      'tc_order_id' => $tcOrderId,
+    ));
 
     if ($state !== 'success') {
       // Loguear todos los callbacks no-success para auditoría
@@ -114,12 +152,24 @@ if ($uuid !== '') {
       } catch (Exception $_e) {}
     }
 
-    // Si se actualizó a success y no está procesada, crear entradas
-    if ($updated && $state === 'success') {
+    // Para callback success, intentar procesamiento siempre que la orden exista.
+    // Esto evita perder procesamiento cuando rowCount()=0 por idempotencia.
+    if ($tcOrderId !== null && $state === 'success') {
       $debugMsg .= "Estado actualizado. ";
+      tc_cb_trace($callbackLogFile, $traceId, '05_process_call', array(
+        'called' => true,
+        'reason' => 'state_success_and_order_exists',
+        'tc_order_id' => $tcOrderId,
+        'updated' => $updated,
+      ));
       $result = process_tc_order_by_request_id($uuid);
       $processed = !empty($result['processed']);
       $debugMsg .= $result['debugMsg'];
+      tc_cb_trace($callbackLogFile, $traceId, '06_process_result', array(
+        'processed' => $processed,
+        'debugMsg' => isset($result['debugMsg']) ? (string)$result['debugMsg'] : '',
+        'order_id' => isset($result['order_id']) ? (int)$result['order_id'] : null,
+      ));
       try {
         log_order_event($pdo, $tcOrderId, $uuid, 'callback_received', array(
           'state' => $state,
@@ -133,12 +183,27 @@ if ($uuid !== '') {
       if ($processed) {
         file_put_contents($logFile, date('Y-m-d H:i:s') . " Procesamiento exitoso para UUID: $uuid\n", FILE_APPEND);
       }
+    } else {
+      tc_cb_trace($callbackLogFile, $traceId, '05_process_call', array(
+        'called' => false,
+        'reason' => ($state !== 'success') ? 'state_not_success' : 'order_not_found',
+        'state' => $state,
+        'tc_order_id' => $tcOrderId,
+      ));
     }
   } catch (Exception $e) {
     $updated = false;
     $debugMsg .= "Error UPDATE: " . $e->getMessage() . ". ";
+    tc_cb_trace($callbackLogFile, $traceId, 'callback_exception', array(
+      'message' => $e->getMessage(),
+    ));
     file_put_contents($logFile, date('Y-m-d H:i:s') . " Error UPDATE para UUID: $uuid - " . $e->getMessage() . "\n", FILE_APPEND);
   }
+} else {
+  tc_cb_trace($callbackLogFile, $traceId, '03_order_lookup', array(
+    'found' => false,
+    'reason' => 'missing_request_id',
+  ));
 }
 
 include __DIR__.'/inc/layout_top.php';
