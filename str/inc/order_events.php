@@ -28,14 +28,40 @@ if (!function_exists('log_order_event')) {
             $payloadJson = '';
         }
 
-        $st = $pdo->prepare("INSERT INTO order_events (tc_order_id, request_id, event_type, payload_json, created_at) VALUES (:oid, :rid, :type, :payload, datetime('now'))");
-        $st->execute(array(
+        $params = array(
             ':oid' => $tcOrderId !== null ? $tcOrderId : null,
             ':rid' => $requestId !== null ? (string)$requestId : null,
             ':type' => (string)$eventType,
             ':payload' => $payloadJson,
-        ));
+        );
 
-        return (int)$pdo->lastInsertId();
+        $attempts = 0;
+        while ($attempts < 4) {
+            $attempts++;
+            try {
+                $st = $pdo->prepare("INSERT INTO order_events (tc_order_id, request_id, event_type, payload_json, created_at) VALUES (:oid, :rid, :type, :payload, datetime('now'))");
+                $st->execute($params);
+                return (int)$pdo->lastInsertId();
+            } catch (PDOException $e) {
+                $msg = strtolower((string)$e->getMessage());
+                $isLocked = (strpos($msg, 'database is locked') !== false) || (strpos($msg, 'database table is locked') !== false) || (strpos($msg, 'sqlstate[hy000]: general error: 5') !== false);
+                if ($isLocked && $attempts < 4) {
+                    usleep(50000 * $attempts);
+                    continue;
+                }
+
+                if (function_exists('error_log')) {
+                    error_log('log_order_event failed: ' . $e->getMessage() . ' | event_type=' . (string)$eventType . ' | request_id=' . (string)$requestId);
+                }
+                return 0;
+            } catch (Exception $e) {
+                if (function_exists('error_log')) {
+                    error_log('log_order_event failed: ' . $e->getMessage() . ' | event_type=' . (string)$eventType . ' | request_id=' . (string)$requestId);
+                }
+                return 0;
+            }
+        }
+
+        return 0;
     }
 }

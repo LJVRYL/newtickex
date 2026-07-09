@@ -146,6 +146,7 @@ if (!function_exists('process_tc_order_row')) {
             );
         }
 
+        $deferredOrderEvents = array();
         $pdo->beginTransaction();
         $insertedEntries = array();
         try {
@@ -203,10 +204,15 @@ if (!function_exists('process_tc_order_row')) {
                         } catch (Exception $_stockEx) {
                             // No revertir — el ticket es más importante que el contador
                             $debugMsg .= 'Stock warn tipo #' . $tipoId . ': ' . $_stockEx->getMessage() . '. ';
-                            log_order_event($pdo, isset($order['id']) ? (int)$order['id'] : null, $requestId, 'stock_decrement_failed', array(
-                                'tipo_id'   => $tipoId,
-                                'exception' => $_stockEx->getMessage(),
-                            ));
+                            $deferredOrderEvents[] = array(
+                                'tc_order_id' => isset($order['id']) ? (int)$order['id'] : null,
+                                'request_id' => $requestId,
+                                'event_type' => 'stock_decrement_failed',
+                                'payload' => array(
+                                    'tipo_id'   => $tipoId,
+                                    'exception' => $_stockEx->getMessage(),
+                                ),
+                            );
                         }
                     }
                 }
@@ -225,6 +231,19 @@ if (!function_exists('process_tc_order_row')) {
             $insertedEntries = array();
             $debugMsg .= 'Error CREATE: ' . $e->getMessage() . '. ';
             log_order_event($pdo, (int)$order['id'], $requestId, 'order_processing_failed', array('exception' => $e->getMessage()));
+        }
+
+        // Escribir eventos diferidos fuera del tramo transaccional principal.
+        if (!empty($deferredOrderEvents)) {
+            foreach ($deferredOrderEvents as $evt) {
+                log_order_event(
+                    $pdo,
+                    isset($evt['tc_order_id']) ? $evt['tc_order_id'] : null,
+                    isset($evt['request_id']) ? $evt['request_id'] : null,
+                    isset($evt['event_type']) ? $evt['event_type'] : 'order_event',
+                    isset($evt['payload']) ? $evt['payload'] : array()
+                );
+            }
         }
 
         // Generar token y enviar mail por cada entrada creada (fuera de la transacción)

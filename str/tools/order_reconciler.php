@@ -6,6 +6,23 @@ require_once __DIR__ . '/../inc/bootstrap.php';
 require_once __DIR__ . '/../inc/order_processing.php';
 
 $pdo = db();
+
+try {
+    $colsTcOrders = $pdo->query("PRAGMA table_info(tc_orders)")->fetchAll(PDO::FETCH_ASSOC);
+    $hasProcessedAt = false;
+    foreach ($colsTcOrders as $c) {
+        if (isset($c['name']) && $c['name'] === 'processed_at') {
+            $hasProcessedAt = true;
+            break;
+        }
+    }
+    if (!$hasProcessedAt) {
+        $pdo->exec("ALTER TABLE tc_orders ADD COLUMN processed_at TEXT");
+    }
+} catch (Exception $e) {
+    fwrite(STDERR, "Schema warning (tc_orders.processed_at): " . $e->getMessage() . "\n");
+}
+
 $eventoId = isset($argv[1]) ? (int)$argv[1] : 0;
 $where = "state = 'success' AND processed_at IS NULL";
 $params = array();
