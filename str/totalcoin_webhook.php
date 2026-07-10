@@ -3,7 +3,7 @@
 // Valida API key y registra payload; aquí deberías marcar la orden pagada.
 require_once __DIR__.'/inc/bootstrap.php';
 
-$apiKeyHeader = $_SERVER['HTTP_API_KEY'] ?? '';
+$apiKeyHeader = isset($_SERVER['HTTP_API_KEY']) ? $_SERVER['HTTP_API_KEY'] : '';
 $expected = getenv('TOTALCOIN_WEBHOOK_KEY') ?: 'sZ5&$xQj4!pBn#9tYr8^vGu1W@mC2*kD';
 
 if ($apiKeyHeader !== $expected) {
@@ -18,8 +18,8 @@ if (!is_array($data)) {
     $data = $_POST; // fallback si viene form-encoded
 }
 
-$concepto = $data['Concepto'] ?? ($data['concepto'] ?? '');
-$estado   = strtoupper(trim((string)($data['Estado'] ?? $data['estado'] ?? '')));
+$concepto = isset($data['Concepto']) ? $data['Concepto'] : (isset($data['concepto']) ? $data['concepto'] : '');
+$estado   = strtoupper(trim((string)(isset($data['Estado']) ? $data['Estado'] : (isset($data['estado']) ? $data['estado'] : ''))));
 
 // Log simple en disco para depurar
 $logLine = json_encode(array('ts'=>date('c'),'concepto'=>$concepto,'estado'=>$estado,'raw'=>$data), JSON_UNESCAPED_UNICODE);

@@ -182,8 +182,8 @@ if (!function_exists('tc_authenticate')) {
         }
         $data = json_decode($body, true);
         // Aceptar mayúsculas y minúsculas: Token/token, Expires_in/expires_in
-        $tok = $data['Token'] ?? $data['token'] ?? null;
-        $exp = $data['Expires_in'] ?? $data['expires_in'] ?? null;
+        $tok = isset($data['Token']) ? $data['Token'] : (isset($data['token']) ? $data['token'] : null);
+        $exp = isset($data['Expires_in']) ? $data['Expires_in'] : (isset($data['expires_in']) ? $data['expires_in'] : null);
         if (!$data || empty($tok) || empty($exp)) {
             throw new RuntimeException('TotalCoin login parse error: ' . $body);
         }
@@ -258,7 +258,7 @@ if (!function_exists('tc_checkout')) {
                 $cfg['use_prod'] = false;
                 $cfg['checkout_url'] = 'https://apicobranzastest.totalcoin.com/api/v2/checkout';
                 $cfg['payment_page'] = 'https://test.totalcoin.com/workspace/checkout/receptor?requestId=';
-                $cfg['merchant'] = $cfg['merchant_test'] ?? '9D5E791A-4AF8-40CE-974A-7B1F38E580ED';
+                $cfg['merchant'] = isset($cfg['merchant_test']) ? $cfg['merchant_test'] : '9D5E791A-4AF8-40CE-974A-7B1F38E580ED';
                 $token = tc_authenticate($cfg, $state);
                 $fields['ME'] = $cfg['merchant'];
                 list($status, $body) = tc_http_post_form($cfg['checkout_url'], $fields, $token);

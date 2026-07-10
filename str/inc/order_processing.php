@@ -5,6 +5,45 @@ require_once __DIR__ . '/order_events.php';
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
 
+if (!function_exists('tickex_order_processing_ensure_schema')) {
+    function tickex_order_processing_ensure_schema($pdo)
+    {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS order_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tc_order_id INTEGER,
+                request_id TEXT,
+                event_type TEXT NOT NULL,
+                payload_json TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_order_events_tc_order_id ON order_events(tc_order_id)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_order_events_request_id ON order_events(request_id)");
+        } catch (Exception $e) {
+            // no bloquear
+        }
+
+        try {
+            $colsEntradas = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
+            $hasOrderRequestId = false;
+            foreach ($colsEntradas as $c) {
+                if (isset($c['name']) && $c['name'] === 'tc_order_request_id') {
+                    $hasOrderRequestId = true;
+                    break;
+                }
+            }
+            if (!empty($colsEntradas) && !$hasOrderRequestId) {
+                $pdo->exec("ALTER TABLE entradas ADD COLUMN tc_order_request_id TEXT");
+            }
+            if (!empty($colsEntradas)) {
+                $pdo->exec("CREATE INDEX IF NOT EXISTS idx_entradas_tc_order_request_id ON entradas(tc_order_request_id)");
+            }
+        } catch (Exception $e) {
+            // no bloquear
+        }
+    }
+}
+
 if (!function_exists('tickex_order_base_url')) {
     function tickex_order_base_url()
     {
@@ -33,6 +72,7 @@ if (!function_exists('process_tc_order_by_request_id')) {
         }
 
         $pdo = db();
+        tickex_order_processing_ensure_schema($pdo);
         $stOrd = $pdo->prepare("SELECT * FROM tc_orders WHERE request_id = :rid LIMIT 1");
         $stOrd->execute(array(':rid' => $requestId));
         $order = $stOrd->fetch(PDO::FETCH_ASSOC);
