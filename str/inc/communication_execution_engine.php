@@ -200,25 +200,82 @@ if (!function_exists('communication_execution_claim_command')) {
     }
 }
 
+if (!function_exists('communication_execution_requeue_stale_processing_commands')) {
+    function communication_execution_requeue_stale_processing_commands($pdo)
+    {
+        // Si un worker muere a mitad de ejecución, el comando puede quedar en processing.
+        // Reencolar al vencer el lock permite retomar el run sin intervención manual.
+        $st = $pdo->prepare("UPDATE communication_execution_commands
+            SET status = :queued,
+                locked_by = NULL,
+                lock_expires_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE status = :processing
+              AND (
+                    (lock_expires_at IS NOT NULL AND lock_expires_at <= CURRENT_TIMESTAMP)
+                 OR (lock_expires_at IS NULL AND updated_at <= datetime('now','-10 minutes'))
+              )");
+        $st->execute(array(
+            ':queued' => 'queued',
+            ':processing' => 'processing',
+        ));
+        return (int)$st->rowCount();
+    }
+}
+
 if (!function_exists('communication_execution_update_command')) {
     function communication_execution_update_command($pdo, $commandId, $status, $resultJson, $errorText)
     {
-        $st = $pdo->prepare('UPDATE communication_execution_commands SET status = :st, result_json = :rj, error_text = :er, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
-        $st->execute(array(
+        $params = array(
             ':st' => (string)$status,
             ':rj' => $resultJson,
             ':er' => $errorText,
             ':id' => (int)$commandId,
-        ));
+        );
+
+        $updated = false;
+        $attempts = 0;
+        while ($attempts < 3 && !$updated) {
+            $attempts++;
+            try {
+                $st = $pdo->prepare('UPDATE communication_execution_commands SET status = :st, result_json = :rj, error_text = :er, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+                $st->execute($params);
+                $updated = true;
+            } catch (PDOException $e) {
+                $msg = strtolower((string)$e->getMessage());
+                $isLocked = (strpos($msg, 'database is locked') !== false) || (strpos($msg, 'database table is locked') !== false) || (strpos($msg, 'sqlstate[hy000]: general error: 5') !== false);
+                if ($isLocked && $attempts < 3) {
+                    usleep(50000);
+                    continue;
+                }
+                if (function_exists('error_log')) {
+                    error_log('communication_execution_update_command failed: ' . $e->getMessage() . ' | command_id=' . (int)$commandId . ' | status=' . (string)$status);
+                }
+                break;
+            }
+        }
+
+        if (!$updated) {
+            if (function_exists('error_log')) {
+                error_log('communication_execution_update_command lock timeout: command_id=' . (int)$commandId . ' | status=' . (string)$status);
+            }
+            return false;
+        }
 
         if (function_exists('communication_ops_log')) {
-            $level = ((string)$status === 'failed') ? 'error' : (((string)$status === 'cancelled') ? 'warning' : 'info');
-            communication_ops_log($pdo, 1, 'engine', 'command.status_updated', $level, 'Comando actualizado: ' . (string)$status, array(
-                'command_id' => (int)$commandId,
-                'status' => (string)$status,
-                'error_text' => (string)$errorText,
-            ), 'command.status_updated|' . (int)$commandId . '|' . (string)$status . '|' . gmdate('YmdHis'));
+            try {
+                $level = ((string)$status === 'failed') ? 'error' : (((string)$status === 'cancelled') ? 'warning' : 'info');
+                communication_ops_log($pdo, 1, 'engine', 'command.status_updated', $level, 'Comando actualizado: ' . (string)$status, array(
+                    'command_id' => (int)$commandId,
+                    'status' => (string)$status,
+                    'error_text' => (string)$errorText,
+                ), 'command.status_updated|' . (int)$commandId . '|' . (string)$status . '|' . gmdate('YmdHis'));
+            } catch (Exception $e) {
+                // El logging operativo no debe frenar el worker.
+            }
         }
+
+        return true;
     }
 }
 
@@ -344,8 +401,7 @@ if (!function_exists('communication_execution_refresh_run_counters')) {
 if (!function_exists('communication_execution_insert_attempt')) {
     function communication_execution_insert_attempt($pdo, $runId, $fingerprint, $attemptNo, $transport)
     {
-        $st = $pdo->prepare('INSERT INTO communication_campaign_delivery_attempts (run_id, recipient_fingerprint, attempt_no, provider_name, transport_status, response_code, response_message, provider_message_id, latency_ms, created_at) VALUES (:rid, :fp, :an, :pn, :ts, :rc, :rm, :pmid, :lat, CURRENT_TIMESTAMP)');
-        $st->execute(array(
+        $params = array(
             ':rid' => (int)$runId,
             ':fp' => (string)$fingerprint,
             ':an' => (int)$attemptNo,
@@ -355,7 +411,30 @@ if (!function_exists('communication_execution_insert_attempt')) {
             ':rm' => isset($transport['response_message']) ? (string)$transport['response_message'] : null,
             ':pmid' => isset($transport['provider_message_id']) ? (string)$transport['provider_message_id'] : null,
             ':lat' => isset($transport['latency_ms']) ? (int)$transport['latency_ms'] : 0,
-        ));
+        );
+
+        $attempts = 0;
+        while ($attempts < 4) {
+            $attempts++;
+            try {
+                $st = $pdo->prepare('INSERT INTO communication_campaign_delivery_attempts (run_id, recipient_fingerprint, attempt_no, provider_name, transport_status, response_code, response_message, provider_message_id, latency_ms, created_at) VALUES (:rid, :fp, :an, :pn, :ts, :rc, :rm, :pmid, :lat, CURRENT_TIMESTAMP)');
+                $st->execute($params);
+                return true;
+            } catch (PDOException $e) {
+                $msg = strtolower((string)$e->getMessage());
+                $isLocked = (strpos($msg, 'database is locked') !== false) || (strpos($msg, 'database table is locked') !== false) || (strpos($msg, 'sqlstate[hy000]: general error: 5') !== false);
+                if ($isLocked && $attempts < 4) {
+                    usleep(50000 * $attempts);
+                    continue;
+                }
+                if (function_exists('error_log')) {
+                    error_log('communication_execution_insert_attempt failed: ' . $e->getMessage() . ' | run_id=' . (int)$runId . ' | fp=' . (string)$fingerprint);
+                }
+                return false;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -471,8 +550,7 @@ if (!function_exists('communication_execution_process_run_recipients')) {
             );
             $finalStatus = isset($statusMap[$transport['status']]) ? $statusMap[$transport['status']] : 'transient_error';
 
-            $stUp = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, last_response_code = :rc, last_response_message = :rm, provider_name = :pn, provider_message_id = :pmid, processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
-            $stUp->execute(array(
+            $paramsUp = array(
                 ':st' => $finalStatus,
                 ':er' => ($finalStatus === 'accepted') ? null : (isset($transport['response_message']) ? $transport['response_message'] : null),
                 ':rc' => isset($transport['response_code']) ? $transport['response_code'] : null,
@@ -480,7 +558,25 @@ if (!function_exists('communication_execution_process_run_recipients')) {
                 ':pn' => isset($transport['provider_name']) ? $transport['provider_name'] : null,
                 ':pmid' => isset($transport['provider_message_id']) ? $transport['provider_message_id'] : null,
                 ':id' => $recipientId,
-            ));
+            );
+            $updatedRecipient = false;
+            $upAttempts = 0;
+            while ($upAttempts < 4 && !$updatedRecipient) {
+                $upAttempts++;
+                try {
+                    $stUp = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, last_response_code = :rc, last_response_message = :rm, provider_name = :pn, provider_message_id = :pmid, processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+                    $stUp->execute($paramsUp);
+                    $updatedRecipient = true;
+                } catch (PDOException $e) {
+                    $msg = strtolower((string)$e->getMessage());
+                    $isLocked = (strpos($msg, 'database is locked') !== false) || (strpos($msg, 'database table is locked') !== false) || (strpos($msg, 'sqlstate[hy000]: general error: 5') !== false);
+                    if ($isLocked && $upAttempts < 4) {
+                        usleep(50000 * $upAttempts);
+                        continue;
+                    }
+                    throw $e;
+                }
+            }
         }
     }
 }
@@ -654,6 +750,8 @@ if (!function_exists('communication_execution_process_queue')) {
         communication_execution_ensure_schema($pdo);
         communication_transport_ensure_schema($pdo);
 
+        $recovered = communication_execution_requeue_stale_processing_commands($pdo);
+
         $maxCommands = (int)$maxCommands;
         if ($maxCommands <= 0) $maxCommands = 5;
 
@@ -670,6 +768,7 @@ if (!function_exists('communication_execution_process_queue')) {
 
         $out = array(
             'worker_id' => $workerId,
+            'recovered' => $recovered,
             'picked' => count($ids),
             'done' => 0,
             'failed' => 0,
@@ -690,6 +789,7 @@ if (!function_exists('communication_execution_process_queue')) {
         if (function_exists('communication_ops_log')) {
             communication_ops_log($pdo, 1, 'worker', 'worker.queue_batch_processed', 'info', 'Lote de cola procesado.', array(
                 'worker_id' => $workerId,
+                'recovered' => (int)$out['recovered'],
                 'picked' => (int)$out['picked'],
                 'done' => (int)$out['done'],
                 'failed' => (int)$out['failed'],

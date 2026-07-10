@@ -178,6 +178,18 @@ function tickex_send_mail_template($to, $context, $vars, $opts = array(), $fallb
 
 function tickex_mail_open_log_db()
 {
+    if (function_exists('db')) {
+        try {
+            $pdoMain = db();
+            if ($pdoMain instanceof PDO) {
+                tickex_mail_ensure_schema($pdoMain);
+                return $pdoMain;
+            }
+        } catch (Exception $e) {
+            // fallback a conexión dedicada
+        }
+    }
+
     $dbFile = tickex_mail_db_file();
     if (!file_exists($dbFile)) {
         return null;

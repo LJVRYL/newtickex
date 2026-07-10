@@ -133,23 +133,38 @@ if (!function_exists('communication_transport_normalize_result')) {
 if (!function_exists('communication_transport_log_result')) {
     function communication_transport_log_result($pdo, $organizationId, $message, $context, $result)
     {
-        try {
-            $st = $pdo->prepare('INSERT INTO communication_transport_logs (organization_id, campaign_id, campaign_run_id, recipient_fingerprint, provider_name, status, response_code, response_message, provider_message_id, latency_ms, classification_reason) VALUES (:org, :cid, :rid, :rf, :pn, :st, :rc, :rm, :pmid, :lat, :cr)');
-            $st->execute(array(
-                ':org' => (int)$organizationId,
-                ':cid' => isset($context['campaign_id']) ? (int)$context['campaign_id'] : null,
-                ':rid' => isset($context['campaign_run_id']) ? (int)$context['campaign_run_id'] : null,
-                ':rf' => isset($context['recipient_fingerprint']) ? (string)$context['recipient_fingerprint'] : null,
-                ':pn' => isset($result['provider_name']) ? (string)$result['provider_name'] : null,
-                ':st' => isset($result['status']) ? (string)$result['status'] : null,
-                ':rc' => isset($result['response_code']) ? (string)$result['response_code'] : null,
-                ':rm' => isset($result['response_message']) ? (string)$result['response_message'] : null,
-                ':pmid' => isset($result['provider_message_id']) ? (string)$result['provider_message_id'] : null,
-                ':lat' => isset($result['latency_ms']) ? (int)$result['latency_ms'] : 0,
-                ':cr' => isset($result['classification_reason']) ? (string)$result['classification_reason'] : null,
-            ));
-        } catch (Exception $e) {
-            // ignore transport log failures
+        $params = array(
+            ':org' => (int)$organizationId,
+            ':cid' => isset($context['campaign_id']) ? (int)$context['campaign_id'] : null,
+            ':rid' => isset($context['campaign_run_id']) ? (int)$context['campaign_run_id'] : null,
+            ':rf' => isset($context['recipient_fingerprint']) ? (string)$context['recipient_fingerprint'] : null,
+            ':pn' => isset($result['provider_name']) ? (string)$result['provider_name'] : null,
+            ':st' => isset($result['status']) ? (string)$result['status'] : null,
+            ':rc' => isset($result['response_code']) ? (string)$result['response_code'] : null,
+            ':rm' => isset($result['response_message']) ? (string)$result['response_message'] : null,
+            ':pmid' => isset($result['provider_message_id']) ? (string)$result['provider_message_id'] : null,
+            ':lat' => isset($result['latency_ms']) ? (int)$result['latency_ms'] : 0,
+            ':cr' => isset($result['classification_reason']) ? (string)$result['classification_reason'] : null,
+        );
+
+        $attempts = 0;
+        while ($attempts < 4) {
+            $attempts++;
+            try {
+                $st = $pdo->prepare('INSERT INTO communication_transport_logs (organization_id, campaign_id, campaign_run_id, recipient_fingerprint, provider_name, status, response_code, response_message, provider_message_id, latency_ms, classification_reason) VALUES (:org, :cid, :rid, :rf, :pn, :st, :rc, :rm, :pmid, :lat, :cr)');
+                $st->execute($params);
+                break;
+            } catch (PDOException $e) {
+                $msg = strtolower((string)$e->getMessage());
+                $isLocked = (strpos($msg, 'database is locked') !== false) || (strpos($msg, 'database table is locked') !== false) || (strpos($msg, 'sqlstate[hy000]: general error: 5') !== false);
+                if ($isLocked && $attempts < 4) {
+                    usleep(50000 * $attempts);
+                    continue;
+                }
+                break;
+            } catch (Exception $e) {
+                break;
+            }
         }
 
         // Log unificado (solo errores para evitar duplicidad de volumen).
