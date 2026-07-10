@@ -19,6 +19,12 @@ if (!function_exists('communication_contacts_add_row')) {
                 'bloqueado' => 0,
                 'tickets_count' => 0,
                 'event_ids' => array(),
+                'imported_batches' => array(),
+                'imported_files' => array(),
+                'imported_at' => '',
+                'source' => '',
+                'import_batch' => '',
+                'import_file' => '',
             );
         }
 
@@ -60,6 +66,85 @@ if (!function_exists('communication_contacts_add_row')) {
                     $contacts[$key]['event_ids'][$eid] = true;
                 }
             }
+        }
+
+        if (!empty($data['imported_batches']) && is_array($data['imported_batches'])) {
+            foreach ($data['imported_batches'] as $batch) {
+                $batch = trim((string)$batch);
+                if ($batch !== '') {
+                    $contacts[$key]['imported_batches'][$batch] = true;
+                }
+            }
+        }
+
+        if (!empty($data['imported_files']) && is_array($data['imported_files'])) {
+            foreach ($data['imported_files'] as $file) {
+                $file = trim((string)$file);
+                if ($file !== '') {
+                    $contacts[$key]['imported_files'][$file] = true;
+                }
+            }
+        }
+
+        if (!empty($data['imported_at'])) {
+            $cur = (string)$contacts[$key]['imported_at'];
+            $new = (string)$data['imported_at'];
+            if ($cur === '' || $new > $cur) {
+                $contacts[$key]['imported_at'] = $new;
+            }
+        }
+    }
+}
+
+if (!function_exists('communication_contacts_imports_ensure_schema')) {
+    function communication_contacts_imports_ensure_schema($pdo)
+    {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS communication_contacts_imports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                created_by_admin_id INTEGER,
+                source TEXT,
+                import_batch TEXT,
+                import_file TEXT,
+                imported_at TEXT,
+                batch_label TEXT,
+                email TEXT NOT NULL,
+                nombre TEXT,
+                rol TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_email ON communication_contacts_imports(lower(email))");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_batch ON communication_contacts_imports(batch_label)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_admin ON communication_contacts_imports(created_by_admin_id)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_created_at ON communication_contacts_imports(created_at)");
+
+            $hasSource = communication_contacts_table_has_column($pdo, 'communication_contacts_imports', 'source');
+            if (!$hasSource) {
+                $pdo->exec("ALTER TABLE communication_contacts_imports ADD COLUMN source TEXT");
+            }
+            $hasImportBatch = communication_contacts_table_has_column($pdo, 'communication_contacts_imports', 'import_batch');
+            if (!$hasImportBatch) {
+                $pdo->exec("ALTER TABLE communication_contacts_imports ADD COLUMN import_batch TEXT");
+            }
+            $hasImportFile = communication_contacts_table_has_column($pdo, 'communication_contacts_imports', 'import_file');
+            if (!$hasImportFile) {
+                $pdo->exec("ALTER TABLE communication_contacts_imports ADD COLUMN import_file TEXT");
+            }
+            $hasImportedAt = communication_contacts_table_has_column($pdo, 'communication_contacts_imports', 'imported_at');
+            if (!$hasImportedAt) {
+                $pdo->exec("ALTER TABLE communication_contacts_imports ADD COLUMN imported_at TEXT");
+            }
+
+            try {
+                $pdo->exec("UPDATE communication_contacts_imports SET source = 'import_csv' WHERE source IS NULL OR source = ''");
+                $pdo->exec("UPDATE communication_contacts_imports SET import_batch = batch_label WHERE (import_batch IS NULL OR import_batch = '') AND batch_label IS NOT NULL");
+                $pdo->exec("UPDATE communication_contacts_imports SET imported_at = created_at WHERE imported_at IS NULL OR imported_at = ''");
+            } catch (Exception $e) {
+                // ignore
+            }
+        } catch (Exception $e) {
+            // ignore
         }
     }
 }
@@ -180,6 +265,8 @@ if (!function_exists('communication_contacts_resolve')) {
         $adminId = isset($scope['admin_id']) ? (int)$scope['admin_id'] : 0;
         $contacts = array();
 
+        communication_contacts_imports_ensure_schema($pdo);
+
         if ($isSuper || $adminId <= 0) {
             $stUsers = $pdo->query("SELECT email, COALESCE(nombre,'') AS nombre, COALESCE(apellido,'') AS apellido, COALESCE(rol,'') AS rol FROM usuarios");
             while ($r = $stUsers->fetch(PDO::FETCH_ASSOC)) {
@@ -223,6 +310,37 @@ if (!function_exists('communication_contacts_resolve')) {
                 communication_contacts_add_row($contacts, $r['email'], 'email_logs', array(
                     'ultimo_envio' => isset($r['ultimo_envio']) ? $r['ultimo_envio'] : '',
                 ));
+            }
+
+            try {
+                $stImported = $pdo->query("SELECT email, MAX(COALESCE(nombre,'')) AS nombre, MAX(COALESCE(rol,'')) AS rol, GROUP_CONCAT(DISTINCT COALESCE(import_batch,'')) AS batches, GROUP_CONCAT(DISTINCT COALESCE(import_file,'')) AS files, MAX(COALESCE(imported_at,'')) AS imported_at FROM communication_contacts_imports WHERE email IS NOT NULL AND email <> '' GROUP BY lower(email)");
+                while ($r = $stImported->fetch(PDO::FETCH_ASSOC)) {
+                    $batches = array();
+                    if (!empty($r['batches'])) {
+                        $chunks = explode(',', (string)$r['batches']);
+                        foreach ($chunks as $ch) {
+                            $b = trim((string)$ch);
+                            if ($b !== '') $batches[] = $b;
+                        }
+                    }
+                    $files = array();
+                    if (!empty($r['files'])) {
+                        $chunks = explode(',', (string)$r['files']);
+                        foreach ($chunks as $ch) {
+                            $f = trim((string)$ch);
+                            if ($f !== '') $files[] = $f;
+                        }
+                    }
+                    communication_contacts_add_row($contacts, $r['email'], 'import_csv', array(
+                        'nombre' => isset($r['nombre']) ? $r['nombre'] : '',
+                        'rol' => isset($r['rol']) ? $r['rol'] : '',
+                        'imported_batches' => $batches,
+                        'imported_files' => $files,
+                        'imported_at' => isset($r['imported_at']) ? $r['imported_at'] : '',
+                    ));
+                }
+            } catch (Exception $e) {
+                // ignore
             }
 
             $stBlocked = $pdo->query("SELECT lower(email) AS email_key FROM user_blocks WHERE active = 1");
@@ -282,6 +400,41 @@ if (!function_exists('communication_contacts_resolve')) {
                 // ignore
             }
 
+            try {
+                $stImported = $pdo->prepare("SELECT email, MAX(COALESCE(nombre,'')) AS nombre, MAX(COALESCE(rol,'')) AS rol, GROUP_CONCAT(DISTINCT COALESCE(import_batch,'')) AS batches, GROUP_CONCAT(DISTINCT COALESCE(import_file,'')) AS files, MAX(COALESCE(imported_at,'')) AS imported_at
+                                             FROM communication_contacts_imports
+                                             WHERE created_by_admin_id = :aid AND email IS NOT NULL AND email <> ''
+                                             GROUP BY lower(email)");
+                $stImported->execute(array(':aid' => $adminId));
+                while ($r = $stImported->fetch(PDO::FETCH_ASSOC)) {
+                    $batches = array();
+                    if (!empty($r['batches'])) {
+                        $chunks = explode(',', (string)$r['batches']);
+                        foreach ($chunks as $ch) {
+                            $b = trim((string)$ch);
+                            if ($b !== '') $batches[] = $b;
+                        }
+                    }
+                    $files = array();
+                    if (!empty($r['files'])) {
+                        $chunks = explode(',', (string)$r['files']);
+                        foreach ($chunks as $ch) {
+                            $f = trim((string)$ch);
+                            if ($f !== '') $files[] = $f;
+                        }
+                    }
+                    communication_contacts_add_row($contacts, $r['email'], 'import_csv', array(
+                        'nombre' => isset($r['nombre']) ? $r['nombre'] : '',
+                        'rol' => isset($r['rol']) ? $r['rol'] : '',
+                        'imported_batches' => $batches,
+                        'imported_files' => $files,
+                        'imported_at' => isset($r['imported_at']) ? $r['imported_at'] : '',
+                    ));
+                }
+            } catch (Exception $e) {
+                // ignore
+            }
+
             // 3) Contactos bloqueados por este admin (visibles para poder gestionarlos)
             try {
                 $stBlocked = $pdo->prepare("SELECT lower(email) AS email_key, email FROM user_blocks WHERE active = 1 AND blocked_by_admin_id = :aid");
@@ -333,6 +486,43 @@ if (!function_exists('communication_contacts_resolve')) {
                 }
             }
             $contacts[$k]['event_ids'] = array_keys($normalizedEvents);
+
+            $normalizedBatches = array();
+            $rawBatches = isset($row['imported_batches']) ? $row['imported_batches'] : array();
+            if (is_array($rawBatches) && !empty($rawBatches)) {
+                foreach ($rawBatches as $batch => $v) {
+                    if (is_int($batch) && !is_bool($v)) {
+                        $label = trim((string)$v);
+                    } else {
+                        $label = trim((string)$batch);
+                    }
+                    if ($label !== '') {
+                        $normalizedBatches[$label] = true;
+                    }
+                }
+            }
+            $contacts[$k]['imported_batches'] = array_keys($normalizedBatches);
+
+            $normalizedFiles = array();
+            $rawFiles = isset($row['imported_files']) ? $row['imported_files'] : array();
+            if (is_array($rawFiles) && !empty($rawFiles)) {
+                foreach ($rawFiles as $file => $v) {
+                    if (is_int($file) && !is_bool($v)) {
+                        $label = trim((string)$v);
+                    } else {
+                        $label = trim((string)$file);
+                    }
+                    if ($label !== '') {
+                        $normalizedFiles[$label] = true;
+                    }
+                }
+            }
+            $contacts[$k]['imported_files'] = array_keys($normalizedFiles);
+
+            $sources = isset($row['fuentes']) && is_array($row['fuentes']) ? array_keys($row['fuentes']) : array();
+            $contacts[$k]['source'] = implode(', ', $sources);
+            $contacts[$k]['import_batch'] = !empty($contacts[$k]['imported_batches']) ? (string)$contacts[$k]['imported_batches'][0] : '';
+            $contacts[$k]['import_file'] = !empty($contacts[$k]['imported_files']) ? (string)$contacts[$k]['imported_files'][0] : '';
         }
 
         return $contacts;
@@ -372,9 +562,39 @@ if (!function_exists('communication_contacts_normalize_filters')) {
         } elseif (isset($raw['f_source'])) {
             $source = trim((string)$raw['f_source']);
         }
-        $allowedSources = array('usuarios', 'registro_pendientes', 'entradas', 'email_logs');
+        $allowedSources = array('usuarios', 'registro_pendientes', 'entradas', 'email_logs', 'import_csv');
         if (in_array($source, $allowedSources, true)) {
             $out['source'] = $source;
+        }
+
+        $importBatch = '';
+        if (isset($raw['import_batch'])) {
+            $importBatch = trim((string)$raw['import_batch']);
+        } elseif (isset($raw['f_import_batch'])) {
+            $importBatch = trim((string)$raw['f_import_batch']);
+        }
+        if ($importBatch !== '') {
+            $out['import_batch'] = $importBatch;
+        }
+
+        $importFile = '';
+        if (isset($raw['import_file'])) {
+            $importFile = trim((string)$raw['import_file']);
+        } elseif (isset($raw['f_import_file'])) {
+            $importFile = trim((string)$raw['f_import_file']);
+        }
+        if ($importFile !== '') {
+            $out['import_file'] = $importFile;
+        }
+
+        $importedFrom = isset($raw['imported_from']) ? trim((string)$raw['imported_from']) : '';
+        if ($importedFrom !== '') {
+            $out['imported_from'] = $importedFrom;
+        }
+
+        $importedTo = isset($raw['imported_to']) ? trim((string)$raw['imported_to']) : '';
+        if ($importedTo !== '') {
+            $out['imported_to'] = $importedTo;
         }
 
         $role = isset($raw['role']) ? trim((string)$raw['role']) : '';
@@ -429,6 +649,44 @@ if (!function_exists('communication_contacts_apply_filters')) {
             if (isset($filters['source'])) {
                 $src = (string)$filters['source'];
                 if (empty($r['fuentes']) || !is_array($r['fuentes']) || !isset($r['fuentes'][$src])) continue;
+            }
+
+            if (isset($filters['import_batch'])) {
+                $batch = trim((string)$filters['import_batch']);
+                $batches = isset($r['imported_batches']) && is_array($r['imported_batches']) ? $r['imported_batches'] : array();
+                $has = false;
+                foreach ($batches as $b) {
+                    if ((string)$b === $batch) {
+                        $has = true;
+                        break;
+                    }
+                }
+                if (!$has) continue;
+            }
+
+            if (isset($filters['import_file'])) {
+                $fileNeedle = trim((string)$filters['import_file']);
+                $files = isset($r['imported_files']) && is_array($r['imported_files']) ? $r['imported_files'] : array();
+                $hasFile = false;
+                foreach ($files as $f) {
+                    if ((string)$f === $fileNeedle) {
+                        $hasFile = true;
+                        break;
+                    }
+                }
+                if (!$hasFile) continue;
+            }
+
+            if (isset($filters['imported_from'])) {
+                $from = trim((string)$filters['imported_from']);
+                $importedAt = isset($r['imported_at']) ? trim((string)$r['imported_at']) : '';
+                if ($importedAt === '' || substr($importedAt, 0, 10) < $from) continue;
+            }
+
+            if (isset($filters['imported_to'])) {
+                $to = trim((string)$filters['imported_to']);
+                $importedAt = isset($r['imported_at']) ? trim((string)$r['imported_at']) : '';
+                if ($importedAt === '' || substr($importedAt, 0, 10) > $to) continue;
             }
 
             if (isset($filters['role'])) {
