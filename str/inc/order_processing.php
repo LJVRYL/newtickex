@@ -64,8 +64,8 @@ if (!function_exists('process_tc_order_row')) {
         $processed = false;
 
         $requestId = isset($order['request_id']) ? (string)$order['request_id'] : '';
-        $processedAt = $order['processed_at'] ?? null;
-        $ticketsJson = $order['selected_tickets_json'] ?? null;
+        $processedAt = isset($order['processed_at']) ? $order['processed_at'] : null;
+        $ticketsJson = isset($order['selected_tickets_json']) ? $order['selected_tickets_json'] : null;
         $debugMsg .= 'ProcessedAt: ' . ($processedAt === null ? 'NULL' : 'SET') . '. ';
         $debugMsg .= 'TicketsJson: ' . (empty($ticketsJson) ? 'EMPTY' : 'HAS_DATA') . '. ';
 
@@ -105,7 +105,7 @@ if (!function_exists('process_tc_order_row')) {
 
         $expectedQty = 0;
         foreach ($tickets as $ticket) {
-            $expectedQty += max(0, (int)($ticket['qty'] ?? 0));
+            $expectedQty += max(0, (int)(isset($ticket['qty']) ? $ticket['qty'] : 0));
         }
         if ($expectedQty <= 0) {
             $debugMsg .= 'Cantidad de tickets inválida. ';
@@ -150,16 +150,16 @@ if (!function_exists('process_tc_order_row')) {
         $pdo->beginTransaction();
         $insertedEntries = array();
         try {
-            $buyerName = trim(($order['buyer_first'] ?? '') . ' ' . ($order['buyer_last'] ?? ''));
-            $buyerEmail = $order['buyer_email'] ?? '';
+            $buyerName = trim((isset($order['buyer_first']) ? $order['buyer_first'] : '') . ' ' . (isset($order['buyer_last']) ? $order['buyer_last'] : ''));
+            $buyerEmail = isset($order['buyer_email']) ? $order['buyer_email'] : '';
             $fechaReg = date('Y-m-d H:i:s');
 
             $entradasCreadas = 0;
             foreach ($tickets as $ticket) {
-                $tipoId = (int)($ticket['id'] ?? 0);
-                $tipoName = $ticket['name'] ?? 'General';
-                $qty = max(0, (int)($ticket['qty'] ?? 1));
-                $price = (int)($ticket['price'] ?? 0);
+                $tipoId = (int)(isset($ticket['id']) ? $ticket['id'] : 0);
+                $tipoName = isset($ticket['name']) ? $ticket['name'] : 'General';
+                $qty = max(0, (int)(isset($ticket['qty']) ? $ticket['qty'] : 1));
+                $price = (int)(isset($ticket['price']) ? $ticket['price'] : 0);
 
                 for ($i = 0; $i < $qty; $i++) {
                     $codigo = '';
