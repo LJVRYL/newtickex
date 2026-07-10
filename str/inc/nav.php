@@ -5,6 +5,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
 <nav class="nav">
   <?php if ($isSuper): ?>
     <a href="panel_admin.php">Panel Superadmin</a>
+    <a href="ingresos_totalcoin.php">Ingresos TotalCoin</a>
     <a href="superadmin_totalcoi.php">Totalcoin</a>
     <a href="superadmin_eventos.php">Ver todos los eventos</a>
     <a href="superadmin_revendedores.php">Revendedores</a>
@@ -25,6 +26,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="roles_staff.php">Roles Staff</a>
   <?php elseif (in_array($tg, array('admin_evento'), true)): ?>
     <a href="panel_admin.php">Panel Admin</a>
+    <a href="ingresos_totalcoin.php">Ingresos TotalCoin</a>
     <a href="crear_evento.php">Crear Evento</a>
     <div style="padding:8px 12px 2px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">📣 Comunicacion</div>
     <a href="superadmin_emails_db.php">👥 Contactos</a>
