@@ -24,7 +24,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="superadmin_economia_general.php">Economía</a>
     <a href="facturacion_admin.php">Facturación</a>
     <a href="roles_staff.php">Roles Staff</a>
-    <a href="access_links.php">Links de acceso</a>
+    <a href="access_links.php">Checkout free</a>
   <?php elseif (in_array($tg, array('admin_evento'), true)): ?>
     <a href="panel_admin.php">Panel Admin</a>
     <a href="ingresos_totalcoin.php">Ingresos TotalCoin</a>
@@ -49,7 +49,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="produccion.php">Producción</a>
     <a href="secundarios.php">Staff</a>
     <a href="roles_staff.php">Roles Staff</a>
-    <a href="access_links.php">Links de acceso</a>
+    <a href="access_links.php">Checkout free</a>
     <a href="mi_sitio.php">Mi Sitio</a>
     <a href="mi_perfil.php">Mi Perfil</a>
   <?php endif; ?>

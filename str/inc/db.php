@@ -791,6 +791,22 @@ SQL;
                             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_entradas_access_link_id ON entradas(access_link_id)");
                         }
 
+                        // Checkout free simple por evento
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS event_free_checkout_configs (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            evento_id INTEGER NOT NULL UNIQUE,
+                            enabled INTEGER NOT NULL DEFAULT 0,
+                            ticket_type_id INTEGER NOT NULL,
+                            max_uses INTEGER,
+                            captcha_required INTEGER NOT NULL DEFAULT 1,
+                            unique_email INTEGER NOT NULL DEFAULT 1,
+                            created_by_admin_id INTEGER,
+                            updated_by_admin_id INTEGER,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            updated_at TEXT
+                        )");
+                        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_free_checkout_evento ON event_free_checkout_configs(evento_id)");
+
                         // Backfill de columnas en tablas access_links existentes
                         try {
                             $colsAl = $pdo->query("PRAGMA table_info(access_links)")->fetchAll(PDO::FETCH_ASSOC);
@@ -842,6 +858,24 @@ SQL;
                                 if (isset($c['name']) && $c['name'] === 'trace_id') { $hasTrace = true; break; }
                             }
                             if (!$hasTrace) $pdo->exec("ALTER TABLE access_link_attempts ADD COLUMN trace_id TEXT");
+                        } catch (Exception $e) {
+                            // ignore
+                        }
+                        try {
+                            $colsFq = $pdo->query("PRAGMA table_info(event_free_checkout_configs)")->fetchAll(PDO::FETCH_ASSOC);
+                            $hasFq = array();
+                            foreach ($colsFq as $c) {
+                                if (isset($c['name'])) $hasFq[$c['name']] = true;
+                            }
+                            if (!isset($hasFq['enabled'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN enabled INTEGER NOT NULL DEFAULT 0");
+                            if (!isset($hasFq['ticket_type_id'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN ticket_type_id INTEGER");
+                            if (!isset($hasFq['max_uses'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN max_uses INTEGER");
+                            if (!isset($hasFq['captcha_required'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN captcha_required INTEGER NOT NULL DEFAULT 1");
+                            if (!isset($hasFq['unique_email'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN unique_email INTEGER NOT NULL DEFAULT 1");
+                            if (!isset($hasFq['created_by_admin_id'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN created_by_admin_id INTEGER");
+                            if (!isset($hasFq['updated_by_admin_id'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN updated_by_admin_id INTEGER");
+                            if (!isset($hasFq['created_at'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN created_at TEXT");
+                            if (!isset($hasFq['updated_at'])) $pdo->exec("ALTER TABLE event_free_checkout_configs ADD COLUMN updated_at TEXT");
                         } catch (Exception $e) {
                             // ignore
                         }
