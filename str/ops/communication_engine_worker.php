@@ -10,12 +10,20 @@ if (isset($_GET['max'])) {
 }
 if ($max <= 0) $max = 5;
 
+$batchSize = 200;
+if (isset($_GET['batch_size'])) {
+    $batchSize = (int)$_GET['batch_size'];
+} elseif (isset($_GET['batch'])) {
+    $batchSize = (int)$_GET['batch'];
+}
+if ($batchSize <= 0) $batchSize = 200;
+
 $workerId = isset($_GET['worker']) ? trim((string)$_GET['worker']) : '';
 if ($workerId === '') {
     $workerId = 'web-worker-' . getmypid();
 }
 
-$result = communication_execution_process_queue($pdo, $max, $workerId);
+$result = communication_execution_process_queue($pdo, $max, $workerId, $batchSize);
 
 if (function_exists('communication_ops_log')) {
     communication_ops_log($pdo, 1, 'worker', 'worker.http_invocation', 'info', 'Invocacion HTTP de worker completada.', array(

@@ -582,7 +582,7 @@ if (!function_exists('communication_execution_process_run_recipients')) {
 }
 
 if (!function_exists('communication_execution_process_command_execute_campaign')) {
-    function communication_execution_process_command_execute_campaign($pdo, $command, $workerId)
+    function communication_execution_process_command_execute_campaign($pdo, $command, $workerId, $batchSize = 200)
     {
         $commandId = (int)$command['id'];
         $organizationId = isset($command['organization_id']) ? (int)$command['organization_id'] : 1;
@@ -680,7 +680,10 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
         $stRun->execute(array(':id' => $runId));
         $run = $stRun->fetch(PDO::FETCH_ASSOC);
 
-        communication_execution_process_run_recipients($pdo, $organizationId, $campaign, $run, $scope, 200);
+        $batchSize = (int)$batchSize;
+        if ($batchSize <= 0) $batchSize = 200;
+
+        communication_execution_process_run_recipients($pdo, $organizationId, $campaign, $run, $scope, $batchSize);
         $final = communication_execution_finalize_run_and_campaign($pdo, $runId, $campaignId);
 
         return array(
@@ -693,7 +696,7 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
 }
 
 if (!function_exists('communication_execution_process_single_command')) {
-    function communication_execution_process_single_command($pdo, $commandId, $workerId)
+    function communication_execution_process_single_command($pdo, $commandId, $workerId, $batchSize = 200)
     {
         $workerId = (string)$workerId;
 
@@ -715,7 +718,7 @@ if (!function_exists('communication_execution_process_single_command')) {
                 return array('processed' => true, 'status' => 'failed', 'error' => 'command-type-not-supported');
             }
 
-            $result = communication_execution_process_command_execute_campaign($pdo, $command, $workerId);
+            $result = communication_execution_process_command_execute_campaign($pdo, $command, $workerId, $batchSize);
             if (!empty($result['cancelled'])) {
                 communication_execution_update_command($pdo, $commandId, 'cancelled', json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), isset($result['message']) ? $result['message'] : null);
                 return array('processed' => true, 'status' => 'cancelled', 'result' => $result);
@@ -745,7 +748,7 @@ if (!function_exists('communication_execution_process_single_command')) {
 }
 
 if (!function_exists('communication_execution_process_queue')) {
-    function communication_execution_process_queue($pdo, $maxCommands, $workerId)
+    function communication_execution_process_queue($pdo, $maxCommands, $workerId, $batchSize = 200)
     {
         communication_execution_ensure_schema($pdo);
         communication_transport_ensure_schema($pdo);
@@ -777,7 +780,7 @@ if (!function_exists('communication_execution_process_queue')) {
         );
 
         foreach ($ids as $id) {
-            $res = communication_execution_process_single_command($pdo, (int)$id, $workerId);
+            $res = communication_execution_process_single_command($pdo, (int)$id, $workerId, $batchSize);
             $out['details'][] = array('command_id' => (int)$id, 'result' => $res);
             if (!empty($res['processed'])) {
                 if (isset($res['status']) && $res['status'] === 'done') $out['done']++;
