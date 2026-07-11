@@ -19,6 +19,7 @@ $pdo = db();
 $title = 'Links de acceso';
 $adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0);
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
+$eventoFilterId = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 
 $flashOk = '';
 $flashErr = '';
@@ -113,7 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':updated_by' => $adminId,
                 ));
                 $newId = (int)$pdo->lastInsertId();
-                header('Location: access_links.php?id=' . $newId . '&ok=duplicado');
+                $loc = 'access_links.php?id=' . $newId . '&ok=duplicado';
+                if ($eventoFilterId > 0) $loc .= '&evento_id=' . $eventoFilterId;
+                header('Location: ' . $loc);
                 exit;
             }
         } elseif ($action === 'set_status') {
@@ -235,7 +238,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':uid' => $adminId,
                         ':id' => $id,
                     ));
-                    header('Location: access_links.php?id=' . $id . '&ok=guardado');
+                    $loc = 'access_links.php?id=' . $id . '&ok=guardado';
+                    if ($eventoFilterId > 0) $loc .= '&evento_id=' . $eventoFilterId;
+                    header('Location: ' . $loc);
                     exit;
                 } else {
                     $stIns = $pdo->prepare('INSERT INTO access_links
@@ -270,7 +275,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':uid' => $adminId,
                     ));
                     $newId = (int)$pdo->lastInsertId();
-                    header('Location: access_links.php?id=' . $newId . '&ok=creado');
+                    $loc = 'access_links.php?id=' . $newId . '&ok=creado';
+                    if ($eventoFilterId > 0) $loc .= '&evento_id=' . $eventoFilterId;
+                    header('Location: ' . $loc);
                     exit;
                 }
             }
@@ -302,6 +309,15 @@ if (!$isSuper && !empty($eventIds)) {
     $where = 'WHERE 1=0';
 }
 
+  if ($eventoFilterId > 0) {
+    if ($where === '') {
+      $where = 'WHERE l.evento_id = :evento_filter_id';
+    } else {
+      $where .= ' AND l.evento_id = :evento_filter_id';
+    }
+    $paramsList[':evento_filter_id'] = $eventoFilterId;
+  }
+
 $sqlList = 'SELECT l.*, e.nombre AS evento_nombre, e.slug AS evento_slug, t.nombre AS ticket_type_nombre,
     (SELECT COUNT(*) FROM access_link_issues i WHERE i.access_link_id = l.id) AS used_count
     FROM access_links l
@@ -330,7 +346,7 @@ $f = array(
     'id' => $isEdit ? (int)$current['id'] : 0,
     'label' => $isEdit ? (string)$current['label'] : '',
     'code' => $isEdit ? (string)$current['code'] : '',
-    'evento_id' => $isEdit ? (int)$current['evento_id'] : 0,
+    'evento_id' => $isEdit ? (int)$current['evento_id'] : ($eventoFilterId > 0 ? $eventoFilterId : 0),
     'access_type' => $isEdit ? (string)$current['access_type'] : 'free',
     'status' => $isEdit ? (string)$current['status'] : 'draft',
     'starts_at' => $isEdit && !empty($current['starts_at']) ? (string)$current['starts_at'] : '',
@@ -359,6 +375,9 @@ include __DIR__ . '/inc/layout_top.php';
   <a class="btn secondary" href="panel_admin.php">Volver</a>
   <h2 style="margin:0;">Links de acceso</h2>
   <span class="muted">Motor reusable de emisión por configuración.</span>
+  <?php if ($eventoFilterId > 0): ?>
+    <a class="btn secondary" href="access_links.php">Quitar filtro de evento</a>
+  <?php endif; ?>
 </div>
 
 <?php if ($flashOk !== ''): ?><div class="flash ok"><?php echo e($flashOk); ?></div><?php endif; ?>
