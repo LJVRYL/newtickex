@@ -5,6 +5,7 @@ require_once __DIR__.'/inc/db.php';
 require_once __DIR__.'/inc/mail.php';
 require_once __DIR__ . '/inc/tc_debug.php';
 require_once __DIR__ . '/inc/order_events.php';
+require_once __DIR__ . '/inc/free_checkout.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 require_once __DIR__.'/inc/arca.php'; // Integración ARCA/AFIP
@@ -282,6 +283,16 @@ if ($eventId > 0) {
     } catch (Exception $e) {}
 
     if ($hasTipos) {
+      $freeCheckoutTypeId = 0;
+      try {
+        tickex_free_checkout_ensure_schema($pdoLocal);
+        $stFreeCfg = $pdoLocal->prepare('SELECT ticket_type_id FROM event_free_checkout_configs WHERE evento_id = :eid LIMIT 1');
+        $stFreeCfg->execute(array(':eid' => $eventId));
+        $freeCheckoutTypeId = (int)$stFreeCfg->fetchColumn();
+      } catch (Exception $e) {
+        $freeCheckoutTypeId = 0;
+      }
+
       $colActivo = isset($colsTe['activo']) ? 'activo' : null;
       $colPublic = null; $colVentaHasta = null;
       foreach (array('publico','visible_publico','venta_publico') as $c) {
@@ -302,6 +313,17 @@ if ($eventId > 0) {
       $stTp->execute(array(':id' => $eventId));
       $today = date('Y-m-d');
       while ($r = $stTp->fetch(PDO::FETCH_ASSOC)) {
+        if ($freeCheckoutTypeId > 0 && isset($r['id']) && (int)$r['id'] === $freeCheckoutTypeId) {
+          continue; // reservar esta entrada para el checkout free
+        }
+        $ticketPrice = isset($r['precio']) ? (float)$r['precio'] : 0;
+        $ticketTipo = isset($r['tipo']) ? strtoupper(trim((string)$r['tipo'])) : '';
+        if ($ticketPrice <= 0) {
+          continue; // nunca mostrar entradas gratis en el checkout pago
+        }
+        if ($ticketTipo === 'FREE' || $ticketTipo === 'GRATIS' || $ticketTipo === 'CORTESIA' || $ticketTipo === 'CORTESÍA') {
+          continue; // blindaje extra por tipo lógico
+        }
         if ($colVentaHasta && !empty($r['venta_hasta'])) {
           $limit = substr($r['venta_hasta'],0,10);
           if ($limit !== '' && $today > $limit) {
@@ -314,7 +336,7 @@ if ($eventId > 0) {
         $ticketTypes[] = array(
           'Id'    => $r['id'],
           'Name'  => isset($r['nombre']) ? $r['nombre'] : 'Entrada',
-          'Price' => isset($r['precio']) ? (float)$r['precio'] : 0,
+          'Price' => $ticketPrice,
           'Available' => isset($r['cantidad_disponible']) ? (int)$r['cantidad_disponible'] : (isset($r['cantidad_total']) ? (int)$r['cantidad_total'] : null),
         );
 
