@@ -42,8 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $max = isset($_POST['max_commands']) ? (int)$_POST['max_commands'] : 5;
             if ($max <= 0) $max = 5;
             if ($max > 100) $max = 100;
+          $batchSize = isset($_POST['batch_size']) ? (int)$_POST['batch_size'] : 200;
+          if ($batchSize <= 0) $batchSize = 200;
             $workerId = 'manual-ui-' . $adminId . '-' . gmdate('YmdHis');
-            $res = communication_execution_process_queue($pdo, $max, $workerId);
+          $res = communication_execution_process_queue($pdo, $max, $workerId, $batchSize);
             $flashOk = 'Worker ejecutado: picked=' . (int)$res['picked'] . ', done=' . (int)$res['done'] . ', failed=' . (int)$res['failed'] . ', cancelled=' . (int)$res['cancelled'];
         }
 
@@ -143,6 +145,10 @@ include __DIR__ . '/inc/layout_top.php';
     <div>
       <label>Max comandos</label>
       <input type="number" name="max_commands" value="5" min="1" max="100" style="width:120px;">
+    </div>
+    <div>
+      <label>Batch size</label>
+      <input type="number" name="batch_size" value="200" min="1" style="width:120px;">
     </div>
     <button class="btn" type="submit" name="action" value="run_worker_now">Ejecutar worker ahora</button>
   </form>
