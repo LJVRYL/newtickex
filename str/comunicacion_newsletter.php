@@ -49,6 +49,16 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+  <h3 style="margin:0;">Variante invitaciones</h3>
+  <p class="muted" style="margin:0;">Duplicado del newsletter con CTA final a checkout gratuito.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn" href="templates/newsletters/save-the-rave_invitaciones_preview_local.html" target="_blank" rel="noopener">Abrir preview invitaciones</a>
+    <a class="btn secondary" href="templates/newsletters/save-the-rave_invitaciones_body_fragment.html" target="_blank" rel="noopener">Abrir fragmento HTML</a>
+    <a class="btn secondary" href="templates/newsletters/save-the-rave_invitaciones_content_example.json" target="_blank" rel="noopener">Abrir datos JSON</a>
+  </div>
+</div>
+
+<div class="card" style="display:flex;flex-direction:column;gap:12px;">
   <h3 style="margin:0;">Diseno del futuro editor (sin programar aun)</h3>
   <ul style="margin:0; padding-left:20px; line-height:1.65;">
     <li>Datos basicos: titulo, edicion, fecha, lugar, artistas.</li>
