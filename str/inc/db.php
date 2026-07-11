@@ -697,6 +697,155 @@ SQL;
                             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_entradas_tc_order_request_id ON entradas(tc_order_request_id)");
                         }
 
+                        // Access Links: emisión reutilizable por link configurable
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS access_links (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            uuid TEXT NOT NULL,
+                            code TEXT NOT NULL,
+                            label TEXT NOT NULL,
+                            evento_id INTEGER NOT NULL,
+                            access_type TEXT NOT NULL DEFAULT 'free',
+                            status TEXT NOT NULL DEFAULT 'draft',
+                            starts_at TEXT,
+                            expires_at TEXT,
+                            max_uses INTEGER,
+                            captcha_required INTEGER NOT NULL DEFAULT 1,
+                            unique_email INTEGER NOT NULL DEFAULT 1,
+                            unique_dni INTEGER NOT NULL DEFAULT 1,
+                            ip_limit_window_seconds INTEGER,
+                            ip_limit_max_uses INTEGER,
+                            rate_limit_window_seconds INTEGER,
+                            rate_limit_max_requests INTEGER,
+                            ticket_type_id INTEGER NOT NULL,
+                            notes TEXT,
+                            created_by_admin_id INTEGER,
+                            updated_by_admin_id INTEGER,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            updated_at TEXT
+                        )");
+                        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_access_links_uuid ON access_links(uuid)");
+                        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_access_links_code ON access_links(code)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_links_evento ON access_links(evento_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_links_status ON access_links(status)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_links_expires ON access_links(expires_at)");
+
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS access_link_issues (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            access_link_id INTEGER NOT NULL,
+                            evento_id INTEGER NOT NULL,
+                            entrada_id INTEGER NOT NULL,
+                            email_normalized TEXT,
+                            dni_normalized TEXT,
+                            ip_address TEXT,
+                            user_agent TEXT,
+                            issued_by TEXT,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        )");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_issues_link ON access_link_issues(access_link_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_issues_evento ON access_link_issues(evento_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_issues_email ON access_link_issues(email_normalized)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_issues_dni ON access_link_issues(dni_normalized)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_issues_ip ON access_link_issues(ip_address)");
+
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS access_link_attempts (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            trace_id TEXT,
+                            access_link_id INTEGER,
+                            evento_id INTEGER,
+                            ip_address TEXT,
+                            email_normalized TEXT,
+                            dni_normalized TEXT,
+                            captcha_ok INTEGER NOT NULL DEFAULT 0,
+                            result TEXT NOT NULL,
+                            detail TEXT,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        )");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_attempts_trace ON access_link_attempts(trace_id)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_attempts_link_time ON access_link_attempts(access_link_id, created_at)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_attempts_ip_time ON access_link_attempts(ip_address, created_at)");
+                        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_access_link_attempts_result ON access_link_attempts(result)");
+
+                        // Backfill columnas nuevas de entradas para trazabilidad de emisión por access link
+                        $hasPaymentMethod = false;
+                        $hasBuyerDni = false;
+                        $hasBuyerPhone = false;
+                        $hasAccessLinkId = false;
+                        foreach ($colsEntradas as $c) {
+                            if (!isset($c['name'])) continue;
+                            if ($c['name'] === 'payment_method') $hasPaymentMethod = true;
+                            if ($c['name'] === 'buyer_dni') $hasBuyerDni = true;
+                            if ($c['name'] === 'buyer_phone') $hasBuyerPhone = true;
+                            if ($c['name'] === 'access_link_id') $hasAccessLinkId = true;
+                        }
+                        if (!empty($colsEntradas) && !$hasPaymentMethod) {
+                            $pdo->exec("ALTER TABLE entradas ADD COLUMN payment_method TEXT");
+                        }
+                        if (!empty($colsEntradas) && !$hasBuyerDni) {
+                            $pdo->exec("ALTER TABLE entradas ADD COLUMN buyer_dni TEXT");
+                        }
+                        if (!empty($colsEntradas) && !$hasBuyerPhone) {
+                            $pdo->exec("ALTER TABLE entradas ADD COLUMN buyer_phone TEXT");
+                        }
+                        if (!empty($colsEntradas) && !$hasAccessLinkId) {
+                            $pdo->exec("ALTER TABLE entradas ADD COLUMN access_link_id INTEGER");
+                            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_entradas_access_link_id ON entradas(access_link_id)");
+                        }
+
+                        // Backfill de columnas en tablas access_links existentes
+                        try {
+                            $colsAl = $pdo->query("PRAGMA table_info(access_links)")->fetchAll(PDO::FETCH_ASSOC);
+                            $has = array();
+                            foreach ($colsAl as $c) {
+                                if (isset($c['name'])) $has[$c['name']] = true;
+                            }
+                            if (!isset($has['uuid'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN uuid TEXT");
+                            if (!isset($has['code'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN code TEXT");
+                            if (!isset($has['label'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN label TEXT");
+                            if (!isset($has['evento_id'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN evento_id INTEGER");
+                            if (!isset($has['access_type'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN access_type TEXT NOT NULL DEFAULT 'free'");
+                            if (!isset($has['status'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'");
+                            if (!isset($has['starts_at'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN starts_at TEXT");
+                            if (!isset($has['expires_at'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN expires_at TEXT");
+                            if (!isset($has['max_uses'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN max_uses INTEGER");
+                            if (!isset($has['captcha_required'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN captcha_required INTEGER NOT NULL DEFAULT 1");
+                            if (!isset($has['unique_email'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN unique_email INTEGER NOT NULL DEFAULT 1");
+                            if (!isset($has['unique_dni'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN unique_dni INTEGER NOT NULL DEFAULT 1");
+                            if (!isset($has['ip_limit_window_seconds'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN ip_limit_window_seconds INTEGER");
+                            if (!isset($has['ip_limit_max_uses'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN ip_limit_max_uses INTEGER");
+                            if (!isset($has['rate_limit_window_seconds'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN rate_limit_window_seconds INTEGER");
+                            if (!isset($has['rate_limit_max_requests'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN rate_limit_max_requests INTEGER");
+                            if (!isset($has['ticket_type_id'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN ticket_type_id INTEGER");
+                            if (!isset($has['notes'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN notes TEXT");
+                            if (!isset($has['created_by_admin_id'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN created_by_admin_id INTEGER");
+                            if (!isset($has['updated_by_admin_id'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN updated_by_admin_id INTEGER");
+                            if (!isset($has['created_at'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN created_at TEXT");
+                            if (!isset($has['updated_at'])) $pdo->exec("ALTER TABLE access_links ADD COLUMN updated_at TEXT");
+                        } catch (Exception $e) {
+                            // ignore
+                        }
+
+                        // Backfill de columnas nuevas en issues/attempts
+                        try {
+                            $colsAi = $pdo->query("PRAGMA table_info(access_link_issues)")->fetchAll(PDO::FETCH_ASSOC);
+                            $hasIssuedBy = false;
+                            foreach ($colsAi as $c) {
+                                if (isset($c['name']) && $c['name'] === 'issued_by') { $hasIssuedBy = true; break; }
+                            }
+                            if (!$hasIssuedBy) $pdo->exec("ALTER TABLE access_link_issues ADD COLUMN issued_by TEXT");
+                        } catch (Exception $e) {
+                            // ignore
+                        }
+                        try {
+                            $colsAa = $pdo->query("PRAGMA table_info(access_link_attempts)")->fetchAll(PDO::FETCH_ASSOC);
+                            $hasTrace = false;
+                            foreach ($colsAa as $c) {
+                                if (isset($c['name']) && $c['name'] === 'trace_id') { $hasTrace = true; break; }
+                            }
+                            if (!$hasTrace) $pdo->exec("ALTER TABLE access_link_attempts ADD COLUMN trace_id TEXT");
+                        } catch (Exception $e) {
+                            // ignore
+                        }
+
             // tipos_entrada: visibilidad y fecha de corte
             $colsTe = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
             $hasVisTe = false; $hasVentaHastaTe = false;
