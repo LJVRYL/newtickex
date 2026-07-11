@@ -48,18 +48,42 @@ foreach ($eventos as $ev) $eventIds[(int)$ev['id']] = true;
 
 $tipos = array();
 if (!empty($eventIds)) {
-    $ids = array_keys($eventIds);
-    $ph = array();
-    $params = array();
-    foreach ($ids as $i => $eid) {
+  try {
+    $hasTiposTable = false;
+    $stTbl = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='tipos_entrada' LIMIT 1");
+    if ($stTbl && $stTbl->fetch(PDO::FETCH_ASSOC)) $hasTiposTable = true;
+
+    if ($hasTiposTable) {
+      $colsTe = $pdo->query('PRAGMA table_info(tipos_entrada)')->fetchAll(PDO::FETCH_ASSOC);
+      $teColMap = array();
+      foreach ($colsTe as $c) {
+        if (isset($c['name'])) $teColMap[$c['name']] = true;
+      }
+
+      $stockExpr = '0 AS cantidad_disponible';
+      if (isset($teColMap['cantidad_disponible'])) {
+        $stockExpr = 'COALESCE(t.cantidad_disponible,0) AS cantidad_disponible';
+      } elseif (isset($teColMap['cantidad_total'])) {
+        $stockExpr = 'COALESCE(t.cantidad_total,0) AS cantidad_disponible';
+      }
+
+      $ids = array_keys($eventIds);
+      $ph = array();
+      $params = array();
+      foreach ($ids as $i => $eid) {
         $k = ':e' . $i;
         $ph[] = $k;
         $params[$k] = (int)$eid;
+      }
+
+      $sqlTipos = 'SELECT t.id, t.evento_id, t.nombre, ' . $stockExpr . ', e.nombre AS evento_nombre FROM tipos_entrada t LEFT JOIN eventos e ON e.id = t.evento_id WHERE t.evento_id IN (' . implode(',', $ph) . ') ORDER BY e.nombre ASC, t.nombre ASC';
+      $stTp = $pdo->prepare($sqlTipos);
+      $stTp->execute($params);
+      $tipos = $stTp->fetchAll(PDO::FETCH_ASSOC);
     }
-    $sqlTipos = 'SELECT t.id, t.evento_id, t.nombre, t.cantidad_disponible, e.nombre AS evento_nombre FROM tipos_entrada t LEFT JOIN eventos e ON e.id = t.evento_id WHERE t.evento_id IN (' . implode(',', $ph) . ') ORDER BY e.nombre ASC, t.nombre ASC';
-    $stTp = $pdo->prepare($sqlTipos);
-    $stTp->execute($params);
-    $tipos = $stTp->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Exception $e) {
+    $tipos = array();
+  }
 }
 
 $editId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -325,9 +349,14 @@ $sqlList = 'SELECT l.*, e.nombre AS evento_nombre, e.slug AS evento_slug, t.nomb
     LEFT JOIN tipos_entrada t ON t.id = l.ticket_type_id
     ' . $where . '
     ORDER BY l.id DESC';
-$stList = $pdo->prepare($sqlList);
-$stList->execute($paramsList);
-$rows = $stList->fetchAll(PDO::FETCH_ASSOC);
+$rows = array();
+try {
+  $stList = $pdo->prepare($sqlList);
+  $stList->execute($paramsList);
+  $rows = $stList->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+  $flashErr = 'No se pudo cargar Links de acceso. Verificá que la migración de base esté aplicada.';
+}
 
 $attempts = array();
 $issues = array();
