@@ -56,6 +56,7 @@ $defaults = array(
   'email'       => isset($_GET['email']) ? (string)$_GET['email'] : '',
 );
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
+$freeCheckoutTypeId = 0;
 
 // Si venimos de un redirect interno (POST-Redirect-GET), cargar el payment_url desde DB
 // y dejar que el browser navegue a TotalCoin con JS.
@@ -144,6 +145,38 @@ if (!function_exists('_tickex_validate_revendedor_for_event')) {
     } catch (Exception $e) {
       return array(0, '');
     }
+  }
+}
+
+if (!function_exists('_tickex_checkout_is_hidden_free_ticket')) {
+  function _tickex_checkout_is_hidden_free_ticket($ticketRow, $freeCheckoutTypeId)
+  {
+    $ticketId = isset($ticketRow['Id']) ? $ticketRow['Id'] : (isset($ticketRow['id']) ? $ticketRow['id'] : null);
+    if ($freeCheckoutTypeId > 0 && $ticketId !== null && ctype_digit((string)$ticketId) && (int)$ticketId === (int)$freeCheckoutTypeId) {
+      return true;
+    }
+
+    $ticketPrice = isset($ticketRow['Price']) ? (float)$ticketRow['Price'] : (isset($ticketRow['price']) ? (float)$ticketRow['price'] : 0);
+    if ($ticketPrice <= 0) {
+      return true;
+    }
+
+    $ticketTipo = '';
+    if (isset($ticketRow['tipo'])) {
+      $ticketTipo = (string)$ticketRow['tipo'];
+    } elseif (isset($ticketRow['Name'])) {
+      $ticketTipo = (string)$ticketRow['Name'];
+    } elseif (isset($ticketRow['name'])) {
+      $ticketTipo = (string)$ticketRow['name'];
+    }
+
+    $ticketTipo = strtoupper(trim($ticketTipo));
+    $ticketTipo = str_replace(array('Á','É','Í','Ó','Ú'), array('A','E','I','O','U'), $ticketTipo);
+    if ($ticketTipo === 'FREE' || $ticketTipo === 'GRATIS' || $ticketTipo === 'CORTESIA') {
+      return true;
+    }
+
+    return false;
   }
 }
 
@@ -283,7 +316,6 @@ if ($eventId > 0) {
     } catch (Exception $e) {}
 
     if ($hasTipos) {
-      $freeCheckoutTypeId = 0;
       try {
         tickex_free_checkout_ensure_schema($pdoLocal);
         $stFreeCfg = $pdoLocal->prepare('SELECT ticket_type_id FROM event_free_checkout_configs WHERE evento_id = :eid LIMIT 1');
@@ -356,7 +388,11 @@ if ($eventId > 0) {
       $stTp = $pdoLocal->prepare("SELECT COALESCE(tipo,'General') AS tipo, MAX(COALESCE(monto_pagado,0)) AS precio FROM entradas WHERE evento_id = :id GROUP BY tipo ORDER BY tipo ASC");
       $stTp->execute(array(':id' => $eventId));
       while ($r = $stTp->fetch(PDO::FETCH_ASSOC)) {
-        $ticketTypes[] = array('Id' => $r['tipo'], 'Name' => $r['tipo'], 'Price' => (float)$r['precio']);
+        $fallbackTicket = array('Id' => $r['tipo'], 'Name' => $r['tipo'], 'Price' => (float)$r['precio']);
+        if (_tickex_checkout_is_hidden_free_ticket($fallbackTicket, $freeCheckoutTypeId)) {
+          continue;
+        }
+        $ticketTypes[] = $fallbackTicket;
       }
     }
   } catch (Exception $e) {
@@ -469,6 +505,9 @@ if (!function_exists('tickex_send_registro_step1_from_checkout')) {
 // Opciones de entradas: si no hay, usar fallback
 $entryOptions = array();
 foreach ($ticketTypes as $tt) {
+  if (_tickex_checkout_is_hidden_free_ticket($tt, $freeCheckoutTypeId)) {
+    continue;
+  }
   $price = isset($tt['Price']) ? (float)$tt['Price'] : 0;
   $entryOptions[] = array(
     'id'    => $tt['Id'],

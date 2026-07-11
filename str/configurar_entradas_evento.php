@@ -96,7 +96,9 @@ if (is_array($colsTE)) {
     if ($n === 'categoria') $hasCategoria = true;
     if ($n === 'tipo_venta') $hasTipoVenta = true;
     if ($n === 'hora_limite') $hasHoraLimite = true;
-    if ($n === 'visible' || $n === 'activo') $visCol = (string)$c['name'];
+    if ($visCol === '' && ($n === 'visible_publico' || $n === 'publico' || $n === 'venta_publico' || $n === 'visible')) {
+      $visCol = (string)$c['name'];
+    }
   }
 }
 
@@ -208,6 +210,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
           $cols[] = 'hora_limite';
           $vals[] = ':hl';
           $params[':hl'] = $hora;
+        }
+        if ($visCol !== '') {
+          $cols[] = $visCol;
+          $vals[] = ':visible_publico';
+          $params[':visible_publico'] = !empty($tpl['visible_publico']) ? 1 : 0;
         }
 
         // descripcion si existe la columna
