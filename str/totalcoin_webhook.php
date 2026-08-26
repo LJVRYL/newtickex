@@ -28,6 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $expectedKey = getenv('TOTALCOIN_WEBHOOK_KEY');
 if (!is_string($expectedKey) || trim($expectedKey) === '') {
+    $secretFile = dirname(__DIR__) . '/.secrets/totalcoin_webhook_key';
+    if (is_readable($secretFile)) {
+        $expectedKey = trim((string)file_get_contents($secretFile));
+    }
+}
+if (!is_string($expectedKey) || trim($expectedKey) === '') {
     tc_webhook_json_response(503, array('ok' => false, 'error' => 'webhook_not_configured'));
 }
 
