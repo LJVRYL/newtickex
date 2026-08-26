@@ -325,7 +325,10 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
 
     $ok = false;
     $errText = null;
-    if ($extra !== '') {
+    $fakeTransport = getenv('TICKEX_MAIL_TRANSPORT');
+    if (is_string($fakeTransport) && strtolower(trim($fakeTransport)) === 'fake') {
+        $ok = true;
+    } elseif ($extra !== '') {
         $ok = @mail($to, $subject, $body, $headers, $extra);
     } else {
         $ok = @mail($to, $subject, $body, $headers);

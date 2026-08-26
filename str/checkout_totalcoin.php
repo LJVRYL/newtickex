@@ -8,7 +8,6 @@ require_once __DIR__ . '/inc/order_events.php';
 require_once __DIR__ . '/inc/free_checkout.php';
 
 require_once __DIR__.'/inc/turnstile.php';
-require_once __DIR__.'/inc/arca.php'; // Integración ARCA/AFIP
 
 $title = 'Checkout TotalCoin (Tickex)';
 $errors = array();
@@ -876,29 +875,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ));
 
                 // si ya existía, actualizar los campos de atribución
-                // --- INICIO: Integración de facturación automática ARCA para compras pagas ---
-                $facturaDatos = [
-                  'dni' => $dni,
-                  'nombre' => $first,
-                  'apellido' => $last,
-                  'email' => $email,
-                  'evento_id' => $eventId,
-                  'concepto' => $concept,
-                  'monto' => $total,
-                  'entradas' => $selectedTickets,
-                ];
-                $facturaResp = arca_emitir_factura($facturaDatos);
-                if (!empty($facturaResp['success'])) {
-                  // Si hay PDF, enviarlo por email al comprador
-                  if (!empty($facturaResp['pdf']) && !empty($email)) {
-                    // TODO: Usar función de envío de email con adjunto (PDF de factura)
-                    // Ejemplo: tickex_send_factura_pdf($email, $facturaResp['pdf'], $facturaResp);
-                  }
-                } else {
-                  // Loguear error de facturación (no bloquear entrega de ticket)
-                  error_log('Error al emitir factura ARCA: ' . ($facturaResp['error'] ?? 'desconocido'));
-                }
-                // --- FIN: Integración de facturación automática ARCA ---
               $stUp = $pdoSave->prepare("UPDATE tc_orders SET evento_id=:eid, ref=:ref, concept=:c, amount=:am, buyer_dni=:dni, buyer_last=:bl, buyer_first=:bf, buyer_email=:be, revendedor_id=:rev, selected_tickets_json=:tj, payment_url=:pu, updated_at=datetime('now') WHERE request_id=:rid");
               $stUp->execute(array(
                 ':rid' => $requestId,
@@ -1024,30 +1000,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Orden 100% gratuita: se marca como éxito sin pasar por TotalCoin
         $freeSuccess = true;
 
-        // --- INICIO: Integración de facturación automática ARCA ---
-        // Datos mínimos para facturación (ajustar según estructura real)
-        $facturaDatos = [
-          'dni' => $dni,
-          'nombre' => $first,
-          'apellido' => $last,
-          'email' => $email,
-          'evento_id' => $eventId,
-          'concepto' => $concept,
-          'monto' => $total,
-          'entradas' => $selectedTickets,
-        ];
-        $facturaResp = arca_emitir_factura($facturaDatos);
-        if (!empty($facturaResp['success'])) {
-          // Si hay PDF, enviarlo por email al comprador
-          if (!empty($facturaResp['pdf']) && !empty($email)) {
-            // TODO: Usar función de envío de email con adjunto (PDF de factura)
-            // Ejemplo: tickex_send_factura_pdf($email, $facturaResp['pdf'], $facturaResp);
-          }
-        } else {
-          // Loguear error de facturación (no bloquear entrega de ticket)
-          error_log('Error al emitir factura ARCA: ' . ($facturaResp['error'] ?? 'desconocido'));
-        }
-        // --- FIN: Integración de facturación automática ARCA ---
       }
     }
   }

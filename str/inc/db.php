@@ -4,7 +4,10 @@ function db(){
     static $pdo = null;
     if ($pdo) return $pdo;
 
-    $dbFile = __DIR__ . '/../save_the_rave.sqlite';
+    $configuredDbFile = getenv('TICKEX_DB_FILE');
+    $dbFile = (is_string($configuredDbFile) && trim($configuredDbFile) !== '')
+        ? trim($configuredDbFile)
+        : __DIR__ . '/../save_the_rave.sqlite';
     if (!file_exists($dbFile)) {
         die("Base no encontrada: ".$dbFile);
     }

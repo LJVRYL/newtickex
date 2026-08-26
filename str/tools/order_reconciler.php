@@ -1,6 +1,6 @@
 <?php
-// Reconciliador de órdenes pendientess de TotalCoin.
-// Este script solo procesa órdenes que ya están en state='success' y no tienen processed_at.
+// Reconciliador de órdenes pendientes de TotalCoin.
+// Solo procesa órdenes confirmadas por webhook con emisión o email pendientes.
 
 require_once __DIR__ . '/../inc/bootstrap.php';
 require_once __DIR__ . '/../inc/order_processing.php';
@@ -24,7 +24,7 @@ try {
 }
 
 $eventoId = isset($argv[1]) ? (int)$argv[1] : 0;
-$where = "state = 'success' AND processed_at IS NULL";
+$where = "payment_status = 'confirmed' AND (processed_at IS NULL OR email_status = 'pending')";
 $params = array();
 if ($eventoId > 0) {
     $where .= ' AND evento_id = :eid';
