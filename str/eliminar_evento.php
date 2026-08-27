@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_trash.php';
 $title = "Evento eliminado – TICKEX";
 
 require_login();
@@ -41,40 +42,15 @@ try {
     exit;
 }
 
-// Detectar si eventos tiene columna borrado_en
-$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-$hasBorradoEn = false;
-foreach ($colsEv as $c) {
-    if (isset($c['name']) && $c['name'] === 'borrado_en') {
-        $hasBorradoEn = true;
-        break;
-    }
-}
-
 $mensaje = '';
 $ok = false;
 
 try {
-    if ($hasBorradoEn) {
-        // Soft delete: marcamos como borrado
-        $stmt = $pdo->prepare("UPDATE eventos SET borrado_en = datetime('now') WHERE id = :id");
-        $stmt->execute(array(':id' => $id));
-        if ($stmt->rowCount() > 0) {
-            $ok = true;
-            $mensaje = "El evento fue enviado a la papelera correctamente.";
-        } else {
-            $mensaje = "No se encontró el evento indicado.";
-        }
+    $ok = tickex_event_soft_delete($pdo, $id);
+    if ($ok) {
+        $mensaje = "El evento fue enviado a la papelera correctamente. Sus entradas, pagos y registros se conservaron.";
     } else {
-        // Hard delete si no existe la columna
-        $stmt = $pdo->prepare("DELETE FROM eventos WHERE id = :id");
-        $stmt->execute(array(':id' => $id));
-        if ($stmt->rowCount() > 0) {
-            $ok = true;
-            $mensaje = "El evento fue eliminado correctamente.";
-        } else {
-            $mensaje = "No se encontró el evento indicado.";
-        }
+        $mensaje = "No se encontró el evento indicado.";
     }
 } catch (Exception $e) {
     $mensaje = "Error al eliminar el evento: " . $e->getMessage();

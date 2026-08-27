@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_trash.php';
 $title = "Restaurar evento – TICKEX";
 
 require_login();
@@ -41,34 +42,18 @@ try {
     exit;
 }
 
-// Detectar si existe columna borrado_en
-$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-$hasBorradoEn = false;
-foreach ($colsEv as $c) {
-    if (isset($c['name']) && $c['name'] === 'borrado_en') {
-        $hasBorradoEn = true;
-        break;
-    }
-}
-
 $ok = false;
 $mensaje = '';
 
-if (!$hasBorradoEn) {
-    $mensaje = "La papelera no está configurada en esta base de datos.";
-} else {
-    try {
-        $stmt = $pdo->prepare("UPDATE eventos SET borrado_en = NULL WHERE id = :id");
-        $stmt->execute(array(':id' => $id));
-        if ($stmt->rowCount() > 0) {
-            $ok = true;
-            $mensaje = "El evento fue restaurado correctamente.";
-        } else {
-            $mensaje = "No se encontró el evento indicado.";
-        }
-    } catch (Exception $e) {
-        $mensaje = "Error al restaurar el evento: " . $e->getMessage();
+try {
+    $ok = tickex_event_restore($pdo, $id);
+    if ($ok) {
+        $mensaje = "El evento fue restaurado correctamente.";
+    } else {
+        $mensaje = "No se encontró el evento indicado en la papelera.";
     }
+} catch (Exception $e) {
+    $mensaje = "Error al restaurar el evento: " . $e->getMessage();
 }
 
 include __DIR__.'/inc/layout_top.php';

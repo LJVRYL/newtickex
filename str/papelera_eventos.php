@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_trash.php';
 $title = "Papelera de eventos – TICKEX";
 
 require_login();
@@ -21,30 +22,7 @@ try {
     exit;
 }
 
-// Detectar si existe columna borrado_en
-$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-$hasBorradoEn = false;
-foreach ($colsEv as $c) {
-    if (isset($c['name']) && $c['name'] === 'borrado_en') {
-        $hasBorradoEn = true;
-        break;
-    }
-}
-
-if (!$hasBorradoEn) {
-    include __DIR__.'/inc/layout_top.php';
-    ?>
-    <div class="card">
-      <h2>Papelera de eventos</h2>
-      <p style="margin-top:8px;">
-        La papelera de eventos todavía no está configurada en esta base de datos.
-      </p>
-      <a class="btn" href="panel_admin.php">⬅ Volver al panel</a>
-    </div>
-    <?php
-    include __DIR__.'/inc/layout_bottom.php';
-    exit;
-}
+tickex_event_trash_ensure_schema($pdo);
 
 // Traer eventos borrados en los últimos 30 días
 $stmt = $pdo->prepare("

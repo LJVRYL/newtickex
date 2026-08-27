@@ -277,7 +277,9 @@ if ($eventId > 0) {
       $creatorCol = null;
     }
 
-    $stEv = $pdoLocal->prepare('SELECT * FROM eventos WHERE id = :id LIMIT 1');
+    $eventWhere = 'id = :id';
+    if (isset($evColMap['borrado_en'])) $eventWhere .= ' AND borrado_en IS NULL';
+    $stEv = $pdoLocal->prepare('SELECT * FROM eventos WHERE ' . $eventWhere . ' LIMIT 1');
     $stEv->execute(array(':id' => $eventId));
     $evRow = $stEv->fetch(PDO::FETCH_ASSOC);
     if ($evRow) {
@@ -302,6 +304,9 @@ if ($eventId > 0) {
       if (!$flyerUrl && !empty($evRow['flyer'])) {
         $flyerUrl = $evRow['flyer']; // URL remota (fallback)
       }
+    } else {
+      $errors[] = 'El evento no está disponible.';
+      $eventId = 0;
     }
 
     // Tipos desde tipos_entrada (solo públicos/activos si la columna existe)
