@@ -15,7 +15,10 @@ function test_ok($condition, $message)
 }
 
 putenv('TICKEX_MAIL_TRANSPORT=fake');
+putenv('TOTALCOIN_CALLBACK_KEY=local-test-callback-key');
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/totalcoin_callback_auth.php';
+require_once __DIR__ . '/../inc/totalcoin_confirmation.php';
 $pdo = db();
 $pdo->exec("CREATE TABLE IF NOT EXISTS tc_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT UNIQUE, state TEXT, evento_id INTEGER, ref TEXT, amount REAL, buyer_first TEXT, buyer_last TEXT, buyer_email TEXT, selected_tickets_json TEXT, processed_at TEXT, payment_status TEXT NOT NULL DEFAULT 'pending', payment_confirmed_at TEXT, processing_status TEXT NOT NULL DEFAULT 'pending', processing_started_at TEXT, email_status TEXT NOT NULL DEFAULT 'pending', email_attempts INTEGER NOT NULL DEFAULT 0, email_sent_at TEXT, email_last_error TEXT)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS entradas (id INTEGER PRIMARY KEY AUTOINCREMENT, evento_id INTEGER, nombre TEXT, email TEXT, fecha_registro TEXT, codigo TEXT, checked_in INTEGER, checked_in_at TEXT, tipo TEXT, monto_pagado REAL, tc_order_request_id TEXT, issuance_key TEXT UNIQUE)");
@@ -45,5 +48,29 @@ $orderAgain = $st->fetch(PDO::FETCH_ASSOC);
 $resultAgain = process_tc_order_row($pdo, $orderAgain);
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'reprocessing does not duplicate entries');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE mail_ok = 1")->fetchColumn() === 2, 'reprocessing does not duplicate successful emails');
+
+$callbacks = tickex_totalcoin_build_callbacks('https://local.test', 'signed-ref');
+parse_str(parse_url($callbacks['success'], PHP_URL_QUERY), $signedQuery);
+test_ok(isset($signedQuery['ref']) && $signedQuery['ref'] === 'signed-ref', 'callback carries the local reference');
+test_ok(tickex_totalcoin_callback_is_valid($signedQuery['ref'], $signedQuery['state'], $signedQuery['token']), 'signed callback validates');
+test_ok(!tickex_totalcoin_callback_is_valid($signedQuery['ref'], 'failed', $signedQuery['token']), 'signature cannot be reused for another state');
+
+$pdo->prepare("INSERT INTO tc_orders (request_id, state, evento_id, ref, amount, buyer_first, buyer_last, buyer_email, selected_tickets_json, payment_status) VALUES ('status-rid', 'created', 1, 'status-ref', 200, 'Status', 'Buyer', 'status@example.invalid', :tickets, 'pending')")->execute(array(':tickets' => $selected));
+$statusOrder = $pdo->query("SELECT * FROM tc_orders WHERE request_id = 'status-rid'")->fetch(PDO::FETCH_ASSOC);
+$fakeApproved = function ($reference) {
+    return array('found' => true, 'http_status' => 200, 'data' => array('Concepto' => $reference, 'Monto' => 200, 'Estado' => 'APROBADO'));
+};
+$confirmation = tickex_totalcoin_confirm_from_status($pdo, $statusOrder, $fakeApproved);
+test_ok(!empty($confirmation['confirmed']), 'official approved status confirms matching order');
+test_ok($pdo->query("SELECT payment_status FROM tc_orders WHERE request_id = 'status-rid'")->fetchColumn() === 'confirmed', 'confirmed status is persisted');
+
+$pdo->prepare("INSERT INTO tc_orders (request_id, state, evento_id, ref, amount, buyer_first, buyer_last, buyer_email, selected_tickets_json, payment_status) VALUES ('mismatch-rid', 'created', 1, 'mismatch-ref', 200, 'Mismatch', 'Buyer', 'mismatch@example.invalid', :tickets, 'pending')")->execute(array(':tickets' => $selected));
+$mismatchOrder = $pdo->query("SELECT * FROM tc_orders WHERE request_id = 'mismatch-rid'")->fetch(PDO::FETCH_ASSOC);
+$fakeWrongAmount = function ($reference) {
+    return array('found' => true, 'http_status' => 200, 'data' => array('Concepto' => $reference, 'Monto' => 199, 'Estado' => 'APROBADO'));
+};
+$mismatch = tickex_totalcoin_confirm_from_status($pdo, $mismatchOrder, $fakeWrongAmount);
+test_ok(empty($mismatch['confirmed']) && $mismatch['result'] === 'amount_mismatch', 'amount mismatch cannot confirm payment');
+test_ok($pdo->query("SELECT payment_status FROM tc_orders WHERE request_id = 'mismatch-rid'")->fetchColumn() === 'pending', 'mismatched order remains pending');
 
 echo "ALL LOCAL FLOW TESTS PASSED\n";

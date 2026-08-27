@@ -1,9 +1,10 @@
 <?php
 // Reconciliador de órdenes pendientes de TotalCoin.
-// Solo procesa órdenes confirmadas por webhook con emisión o email pendientes.
+// Consulta el estado oficial por ER y luego procesa emisión/email idempotente.
 
 require_once __DIR__ . '/../inc/bootstrap.php';
 require_once __DIR__ . '/../inc/order_processing.php';
+require_once __DIR__ . '/../inc/totalcoin_confirmation.php';
 
 $pdo = db();
 
@@ -24,6 +25,23 @@ try {
 }
 
 $eventoId = isset($argv[1]) ? (int)$argv[1] : 0;
+$statusWhere = "payment_status = 'pending' AND ref IS NOT NULL AND ref <> '' AND created_at >= datetime('now', '-7 days')";
+$statusParams = array();
+if ($eventoId > 0) {
+    $statusWhere .= ' AND evento_id = :status_eid';
+    $statusParams[':status_eid'] = $eventoId;
+}
+$stPending = $pdo->prepare("SELECT * FROM tc_orders WHERE $statusWhere ORDER BY created_at ASC LIMIT 50");
+$stPending->execute($statusParams);
+foreach ($stPending->fetchAll(PDO::FETCH_ASSOC) as $pendingOrder) {
+    try {
+        $confirmation = tickex_totalcoin_confirm_from_status($pdo, $pendingOrder);
+        echo sprintf("[status] request_id=%s ref=%s result=%s\n", (string)$pendingOrder['request_id'], (string)$pendingOrder['ref'], (string)$confirmation['result']);
+    } catch (Exception $e) {
+        fwrite(STDERR, sprintf("[status] request_id=%s error=%s\n", (string)$pendingOrder['request_id'], $e->getMessage()));
+    }
+}
+
 $where = "payment_status = 'confirmed' AND (processed_at IS NULL OR email_status = 'pending')";
 $params = array();
 if ($eventoId > 0) {

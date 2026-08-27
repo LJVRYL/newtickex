@@ -6,6 +6,7 @@ require_once __DIR__.'/inc/mail.php';
 require_once __DIR__ . '/inc/tc_debug.php';
 require_once __DIR__ . '/inc/order_events.php';
 require_once __DIR__ . '/inc/free_checkout.php';
+require_once __DIR__ . '/inc/totalcoin_callback_auth.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -817,7 +818,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ignore
           }
 
-          $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email);
+          // SenForms crea un PaymentToken antes del checkout. En Tickex usamos
+          // la referencia firmada para que CS/CP/CF siempre identifiquen la orden.
+          $tcCfg = tc_config();
+          $tcCallbacks = tickex_totalcoin_build_callbacks($tcCfg['callback_base'], $ref);
+          $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email, null, $tcCallbacks);
 
           try {
             if ($lastDebugId !== '' && function_exists('tc_debug_log')) {

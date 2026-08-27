@@ -83,6 +83,8 @@ if (!function_exists('tc_config')) {
                                            : 'https://apicobranzastest.totalcoin.com/api/auth/login',
             'checkout_url'    => $useProd ? 'https://apicobranzas.totalcoin.com/api/v2/checkout'
                                            : 'https://apicobranzastest.totalcoin.com/api/v2/checkout',
+            'status_url'      => $useProd ? 'https://checkoutbackend.totalcoin.com/api/v1/intention/status/'
+                                           : 'https://checkoutbackend.ltest.totalcoin.com/api/v1/intention/status/',
             'payment_page'    => $useProd ? 'https://ar.totalcoin.com/workspace/checkout/receptor?requestId='
                                            : 'https://test.totalcoin.com/workspace/checkout/receptor?requestId=',
             'username'        => getenv('TOTALCOIN_USER') ?: 'toketera.api',
@@ -164,6 +166,32 @@ if (!function_exists('tc_http_post_form')) {
     }
 }
 
+if (!function_exists('tc_http_get')) {
+    function tc_http_get($url, $bearer)
+    {
+        if (!function_exists('curl_init')) {
+            throw new RuntimeException('TotalCoin: cURL no esta disponible en el servidor.');
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, array(
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => array('Authorization: Bearer ' . $bearer, 'Accept: application/json'),
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 20,
+        ));
+        $resp = curl_exec($ch);
+        if ($resp === false) {
+            $errno = curl_errno($ch);
+            $err = curl_error($ch);
+            curl_close($ch);
+            throw new RuntimeException('TotalCoin status cURL error (errno=' . $errno . '): ' . $err);
+        }
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return array($status, $resp);
+    }
+}
+
 if (!function_exists('tc_authenticate')) {
     function tc_authenticate($cfg, &$state)
     {
@@ -202,6 +230,30 @@ if (!function_exists('tc_build_callbacks')) {
             'inproc'  => $base . '/totalcoin_callback.php?state=inprocess',
             'failed'  => $base . '/totalcoin_callback.php?state=failed',
         );
+    }
+}
+
+if (!function_exists('tc_checkout_status')) {
+    function tc_checkout_status($reference)
+    {
+        static $state = array();
+        $reference = trim((string)$reference);
+        if ($reference === '') throw new InvalidArgumentException('TotalCoin reference is required');
+
+        $cfg = tc_config();
+        $token = tc_authenticate($cfg, $state);
+        list($status, $body) = tc_http_get($cfg['status_url'] . rawurlencode($reference), $token);
+        if ($status === 404) {
+            return array('found' => false, 'http_status' => 404, 'data' => null);
+        }
+        if ($status < 200 || $status >= 300) {
+            throw new RuntimeException('TotalCoin status failed HTTP ' . $status . ' body=' . tc__sanitize_log_value($body));
+        }
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            throw new RuntimeException('TotalCoin status returned invalid JSON');
+        }
+        return array('found' => true, 'http_status' => $status, 'data' => $data);
     }
 }
 
