@@ -7,6 +7,7 @@ require_once __DIR__ . '/inc/tc_debug.php';
 require_once __DIR__ . '/inc/order_events.php';
 require_once __DIR__ . '/inc/free_checkout.php';
 require_once __DIR__ . '/inc/totalcoin_callback_auth.php';
+require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -50,7 +51,7 @@ $defaults = array(
   'amount'      => isset($_GET['amount']) ? (string)$_GET['amount'] : '',
   'concept'     => isset($_GET['concept']) ? (string)$_GET['concept'] : (isset($_GET['event']) ? (string)$_GET['event'] : ''),
   'dni'         => isset($_GET['dni']) ? (string)$_GET['dni'] : '',
-  'ref'         => isset($_GET['ref']) ? (string)$_GET['ref'] : (isset($_GET['event']) ? ('str-' . preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$_GET['event']) . '-' . time()) : ''),
+  'ref'         => isset($_GET['ref']) ? (string)$_GET['ref'] : (isset($_GET['event']) ? tickex_totalcoin_new_reference((string)$_GET['event']) : ''),
   'last_name'   => isset($_GET['last_name']) ? (string)$_GET['last_name'] : '',
   'first_name'  => isset($_GET['first_name']) ? (string)$_GET['first_name'] : '',
   'email'       => isset($_GET['email']) ? (string)$_GET['email'] : '',
@@ -628,7 +629,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   $concept = $eventName;
-  $ref = trim(isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())));
+  $ref = trim(isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId)));
   if ($ref === '') $errors[] = 'Referencia requerida';
 
   $affPost = isset($_POST['aff']) ? (int)$_POST['aff'] : 0;
@@ -809,7 +810,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
 
       if ($total > 0) {
+        $claimPdo = null;
+        $claimFingerprint = '';
+        $claimOwned = false;
         try {
+          $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
+          if ($ticketsJson === false || $ticketsJson === null) $ticketsJson = '';
+          $claimPdo = db();
+          $claimFingerprint = tickex_totalcoin_checkout_fingerprint($eventId, $total, $email, $ticketsJson);
+          $claim = tickex_totalcoin_checkout_claim($claimPdo, $ref, $claimFingerprint, 120);
+          $claimResult = isset($claim['result']) ? (string)$claim['result'] : 'pending';
+          if ($claimResult === 'ready' && !empty($claim['payment_url'])) {
+            $paymentUrl = (string)$claim['payment_url'];
+          } elseif ($claimResult === 'acquired') {
+            $claimOwned = true;
+          } elseif ($claimResult === 'conflict') {
+            throw new Exception('La referencia ya pertenece a otra selección. Recargá el checkout.');
+          } else {
+            throw new Exception('El checkout ya se está generando. Esperá unos segundos y volvé a intentar.');
+          }
+
           try {
             if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
               tc_debug_log($lastDebugId, 'gateway_start', array('event_id' => (int)$eventId, 'ref' => (string)$ref, 'amount' => (float)$total));
@@ -820,9 +840,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
           // SenForms crea un PaymentToken antes del checkout. En Tickex usamos
           // la referencia firmada para que CS/CP/CF siempre identifiquen la orden.
-          $tcCfg = tc_config();
-          $tcCallbacks = tickex_totalcoin_build_callbacks($tcCfg['callback_base'], $ref);
-          $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email, null, $tcCallbacks);
+          if ($claimOwned) {
+            $tcCfg = tc_config();
+            $tcCallbacks = tickex_totalcoin_build_callbacks($tcCfg['callback_base'], $ref);
+            $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email, null, $tcCallbacks);
+          }
 
           try {
             if ($lastDebugId !== '' && function_exists('tc_debug_log')) {
@@ -851,12 +873,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
             } catch (Exception $_e) {}
 
+            if ($claimOwned && $claimPdo) {
+              tickex_totalcoin_checkout_claim_ready($claimPdo, $ref, $claimFingerprint, $requestId, $paymentUrl);
+            }
+
             if ($requestId !== '') {
               try {
                 $pdoSave = db();
-                $ticketsJson = '';
-                $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
-                if ($ticketsJson === false || $ticketsJson === null) { $ticketsJson = ''; }
                 $ip = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
                 $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
                 $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, updated_at)
@@ -975,6 +998,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $redirectFallback = array('auto' => true, 'reason' => ($ridForGo !== '' ? 'prg_unavailable' : 'no_rid'), 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
         } catch (Exception $e) {
+          if ($claimOwned && $claimPdo && empty($paymentUrl)) {
+            try { tickex_totalcoin_checkout_claim_failed($claimPdo, $ref, $claimFingerprint, $e->getMessage()); } catch (Exception $_claimEx) {}
+          }
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público
           try {
@@ -1130,7 +1156,7 @@ include __DIR__.'/inc/layout_top.php';
         <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
           <input type="hidden" name="csrf" value="<?php echo e($csrfTokConfirm); ?>">
           <input type="hidden" name="action" value="pay">
-          <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time()))); ?>">
+          <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId))); ?>">
           <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
 
           <?php foreach ((isset($preview['selected']) ? $preview['selected'] : array()) as $ln): ?>
@@ -1181,7 +1207,7 @@ include __DIR__.'/inc/layout_top.php';
   <form method="post" id="checkoutFlow" class="tickex-safe-bottom" style="display:grid;gap:12px;">
     <input type="hidden" name="csrf" value="<?php echo e($csrfTok); ?>">
     <input type="hidden" name="action" value="pay">
-    <input type="hidden" name="ref" value="<?php echo e($defaults['ref'] !== '' ? $defaults['ref'] : ('str-' . $eventId . '-' . time())); ?>">
+    <input type="hidden" name="ref" value="<?php echo e($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId)); ?>">
     <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
 
     <div class="card" style="background:var(--panel-2);border-color:var(--line);margin:0 0 12px 0;">

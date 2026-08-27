@@ -664,6 +664,16 @@ SQL;
                         $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tc_orders_request_id ON tc_orders(request_id)");
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_tc_orders_revendedor ON tc_orders(revendedor_id)");
                         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_tc_orders_evento ON tc_orders(evento_id)");
+                        $pdo->exec("CREATE TABLE IF NOT EXISTS totalcoin_checkout_claims (
+                            ref TEXT PRIMARY KEY,
+                            fingerprint TEXT NOT NULL,
+                            status TEXT NOT NULL DEFAULT 'creating',
+                            request_id TEXT,
+                            payment_url TEXT,
+                            last_error TEXT,
+                            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        )");
                         $colsTcOrders = $pdo->query("PRAGMA table_info(tc_orders)")->fetchAll(PDO::FETCH_ASSOC);
                         $hasProcessedAt = false;
                         foreach ($colsTcOrders as $c) {
