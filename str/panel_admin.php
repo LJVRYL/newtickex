@@ -73,7 +73,7 @@ if ($tipoGlobal === 'admin_evento') {
 }
 
 $pdo = db();
-tickex_ensure_event_trash_schema($pdo);
+tickex_event_trash_ensure_schema($pdo);
 
 // Contadores globales
 $totalEntradas = 0;

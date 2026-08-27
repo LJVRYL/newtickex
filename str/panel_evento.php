@@ -34,7 +34,7 @@ if (isset($_GET['id'])) $eventoId = (int)$_GET['id'];
 if (isset($_GET['evento_id'])) $eventoId = (int)$_GET['evento_id'];
 
 $pdo = db();
-tickex_ensure_event_trash_schema($pdo);
+tickex_event_trash_ensure_schema($pdo);
 
 // Columnas del evento (para ownership)
 $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
