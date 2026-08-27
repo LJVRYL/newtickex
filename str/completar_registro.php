@@ -32,7 +32,7 @@ function ensure_registro_pendientes($pdo)
 
     // Preferido: case-insensitive
     try {
-      $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_apodo_unique_ci ON registro_pendientes(lower(apodo))");
+      $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_regpend_apodo_unique_ci ON registro_pendientes(apodo COLLATE NOCASE)");
     } catch (Exception $e) {
       // ignore
     }

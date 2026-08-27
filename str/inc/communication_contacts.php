@@ -114,7 +114,7 @@ if (!function_exists('communication_contacts_imports_ensure_schema')) {
                 rol TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )");
-            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_email ON communication_contacts_imports(lower(email))");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_email ON communication_contacts_imports(email COLLATE NOCASE)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_batch ON communication_contacts_imports(batch_label)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_admin ON communication_contacts_imports(created_by_admin_id)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_contacts_imports_created_at ON communication_contacts_imports(created_at)");

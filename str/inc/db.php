@@ -55,7 +55,7 @@ function db(){
                 unblocked_at TEXT,
                 unblocked_by_admin_id INTEGER
             )');
-            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_blocks_email_ci ON user_blocks(lower(email))");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_blocks_email_ci ON user_blocks(email COLLATE NOCASE)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_user_blocks_active ON user_blocks(active)");
         } catch (Exception $e) {
             // no bloquear si falla
@@ -324,7 +324,7 @@ function db(){
 
             // Tickex ID (apodo) en admins: best-effort único (case-insensitive)
             try {
-                $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_admin_apodo_unique ON usuarios_admin(lower(apodo))");
+                $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_admin_apodo_unique ON usuarios_admin(apodo COLLATE NOCASE)");
             } catch (Exception $e) {
                 // ignore (puede fallar si hay duplicados existentes)
             }
@@ -491,7 +491,7 @@ SQL;
 
                         // Tickex ID (apodo) en clientes: best-effort único (case-insensitive)
                         try {
-                            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_registro_pendientes_apodo_unique_ci ON registro_pendientes(lower(apodo))");
+                            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_registro_pendientes_apodo_unique_ci ON registro_pendientes(apodo COLLATE NOCASE)");
                         } catch (Exception $e) {
                             // ignore (puede fallar si hay duplicados existentes)
                         }
