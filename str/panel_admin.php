@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
+require_once __DIR__ . '/inc/event_trash.php';
 
 $title = 'Panel de administración';
 
@@ -72,6 +73,7 @@ if ($tipoGlobal === 'admin_evento') {
 }
 
 $pdo = db();
+tickex_ensure_event_trash_schema($pdo);
 
 // Contadores globales
 $totalEntradas = 0;
@@ -86,7 +88,7 @@ $q = isset($_GET['q']) ? trim($_GET['q']) : '';
 // IDs por búsqueda en eventos
 $eventIds = array();
 if ($q !== '') {
-    $stmtEv = $pdo->prepare("SELECT id FROM eventos WHERE nombre LIKE :q OR slug LIKE :q");
+    $stmtEv = $pdo->prepare("SELECT id FROM eventos WHERE borrado_en IS NULL AND (nombre LIKE :q OR slug LIKE :q)");
     $stmtEv->execute(array(':q' => '%'.$q.'%'));
     $eventIds = $stmtEv->fetchAll(PDO::FETCH_COLUMN);
 
@@ -105,11 +107,11 @@ if ($q !== '' && !$eventIds) {
     $eventos = array();
 } else {
     if ($q === '') {
-        $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
+        $stmtList = $pdo->query("SELECT * FROM eventos WHERE borrado_en IS NULL ORDER BY id DESC");
         $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $in = implode(',', array_fill(0, count($eventIds), '?'));
-        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE id IN ($in) ORDER BY id DESC");
+        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE borrado_en IS NULL AND id IN ($in) ORDER BY id DESC");
         $stmtList->execute($eventIds);
         $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
     }

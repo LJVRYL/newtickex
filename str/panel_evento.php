@@ -5,6 +5,7 @@ require_once __DIR__.'/inc/manual_income.php';
 require_once __DIR__.'/inc/produccion.php';
 require_once __DIR__.'/inc/venues.php';
 require_once __DIR__.'/inc/senforms.php';
+require_once __DIR__.'/inc/event_trash.php';
 
 require_login();
 $csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
@@ -33,6 +34,7 @@ if (isset($_GET['id'])) $eventoId = (int)$_GET['id'];
 if (isset($_GET['evento_id'])) $eventoId = (int)$_GET['evento_id'];
 
 $pdo = db();
+tickex_ensure_event_trash_schema($pdo);
 
 // Columnas del evento (para ownership)
 $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
@@ -142,26 +144,26 @@ $qList = ($eventoId <= 0 && isset($_GET['q'])) ? trim($_GET['q']) : '';
 
 if ($rol === 'super_admin' || $rol === 'superadmin') {
   if ($qList === '') {
-    $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
+    $stmtList = $pdo->query("SELECT * FROM eventos WHERE borrado_en IS NULL ORDER BY id DESC");
   } else {
-    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE nombre LIKE :q OR slug LIKE :q ORDER BY id DESC");
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE borrado_en IS NULL AND (nombre LIKE :q OR slug LIKE :q) ORDER BY id DESC");
     $stmtList->execute(array(':q' => '%'.$qList.'%'));
   }
   $eventos = $stmtList ? $stmtList->fetchAll(PDO::FETCH_ASSOC) : array();
 } elseif ($hasCreadoPor) {
   if ($qList === '') {
-    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE creado_por_admin_id = :aid ORDER BY id DESC");
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE borrado_en IS NULL AND creado_por_admin_id = :aid ORDER BY id DESC");
     $stmtList->execute(array(':aid' => $adminId));
   } else {
-    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE creado_por_admin_id = :aid AND (nombre LIKE :q OR slug LIKE :q) ORDER BY id DESC");
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE borrado_en IS NULL AND creado_por_admin_id = :aid AND (nombre LIKE :q OR slug LIKE :q) ORDER BY id DESC");
     $stmtList->execute(array(':aid' => $adminId, ':q' => '%'.$qList.'%'));
   }
   $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 } else {
   if ($qList === '') {
-    $stmtList = $pdo->query("SELECT * FROM eventos ORDER BY id DESC");
+    $stmtList = $pdo->query("SELECT * FROM eventos WHERE borrado_en IS NULL ORDER BY id DESC");
   } else {
-    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE nombre LIKE :q OR slug LIKE :q ORDER BY id DESC");
+    $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE borrado_en IS NULL AND (nombre LIKE :q OR slug LIKE :q) ORDER BY id DESC");
     $stmtList->execute(array(':q' => '%'.$qList.'%'));
   }
   $eventos = $stmtList ? $stmtList->fetchAll(PDO::FETCH_ASSOC) : array();
@@ -304,7 +306,7 @@ if ($eventoId <= 0) {
     include __DIR__.'/inc/layout_bottom.php';
     exit;
 }
-$stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id=:id");
+$stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id=:id AND borrado_en IS NULL");
 $stmtEv->execute(array(':id'=>$eventoId));
 $evento = $stmtEv->fetch(PDO::FETCH_ASSOC);
 
