@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/password_reset_security.php';
 
 $title = 'Restablecer contraseña';
 $error = '';
@@ -9,37 +10,29 @@ $token = isset($_GET['token']) ? trim($_GET['token']) : '';
 $emailToken = '';
 $pass1 = '';
 $pass2 = '';
-
-function ensure_password_reset_tokens($pdo)
-{
-    $pdo->exec("CREATE TABLE IF NOT EXISTS password_reset_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL,
-      token TEXT NOT NULL,
-      creado_en TEXT,
-      consumido_en TEXT
-    )");
-    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_prt_email ON password_reset_tokens(email)");
-}
+$csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
 
 try {
     $pdo = db();
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    ensure_password_reset_tokens($pdo);
+    tickex_password_reset_ensure_schema($pdo);
+    tickex_password_reset_prune($pdo);
 } catch (Exception $e) {
     $error = 'No se pudo preparar la base de datos.';
 }
 
 $tokenRow = null;
 if ($token !== '' && $error === '') {
-    $st = $pdo->prepare('SELECT * FROM password_reset_tokens WHERE token = :t LIMIT 1');
+    $st = $pdo->prepare("SELECT *, CASE WHEN creado_en >= datetime('now','-1 hour') THEN 1 ELSE 0 END AS vigente
+                         FROM password_reset_tokens WHERE token = :t LIMIT 1");
     $st->execute(array(':t' => $token));
     $tokenRow = $st->fetch(PDO::FETCH_ASSOC);
     if (!$tokenRow) {
         $error = 'Enlace de recuperación inválido.';
     } elseif (!empty($tokenRow['consumido_en'])) {
         $error = 'Este enlace ya fue utilizado. Pedí uno nuevo.';
+    } elseif (empty($tokenRow['vigente'])) {
+        $error = 'Este enlace venció. Pedí uno nuevo.';
     } else {
         $emailToken = $tokenRow['email'];
     }
@@ -50,8 +43,11 @@ if ($token !== '' && $error === '') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
     $pass1 = isset($_POST['pass1']) ? trim($_POST['pass1']) : '';
     $pass2 = isset($_POST['pass2']) ? trim($_POST['pass2']) : '';
+    $providedCsrf = isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '';
 
-    if ($pass1 === '' || $pass2 === '') {
+    if (!function_exists('tickex_csrf_verify') || !tickex_csrf_verify($providedCsrf)) {
+        $error = 'La sesión venció. Volvé a abrir el enlace del email.';
+    } elseif ($pass1 === '' || $pass2 === '') {
         $error = 'La contraseña es obligatoria.';
     } elseif (strlen($pass1) < 6) {
         $error = 'La contraseña debe tener al menos 6 caracteres.';
@@ -77,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
             } catch (Exception $e) {
                 // ignore alter errors
             }
-            $stmtCli = $pdo->prepare('UPDATE registro_pendientes SET password_hash = :h WHERE email = :e');
+            $stmtCli = $pdo->prepare('UPDATE registro_pendientes SET password_hash = :h WHERE email = :e COLLATE NOCASE');
             $stmtCli->execute(array(':h' => $newHash, ':e' => $emailToken));
         } catch (Exception $e) {
             // ignore
@@ -91,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
                 if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPwdU = true; break; }
             }
             if ($hasPwdU) {
-                $stmtU = $pdo->prepare('UPDATE usuarios SET password_hash = :h WHERE email = :e');
+                $stmtU = $pdo->prepare('UPDATE usuarios SET password_hash = :h WHERE email = :e COLLATE NOCASE');
                 $stmtU->execute(array(':h' => $newHash, ':e' => $emailToken));
             }
         } catch (Exception $e) {
@@ -135,6 +131,7 @@ require __DIR__ . '/inc/layout_top.php';
     Email: <strong><?php echo e($emailToken); ?></strong>
   </div>
   <form method="post">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <label for="pass1">Nueva contraseña (mín 6)</label>
     <input type="password" id="pass1" name="pass1" required autocomplete="new-password" value="<?php echo e($pass1); ?>">
 
