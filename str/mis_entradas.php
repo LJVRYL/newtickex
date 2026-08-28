@@ -55,12 +55,13 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 }
 
 // Detectar columnas opcionales en plantillas_entrada
-$hasVis = false; $hasVentaHasta = false;
+$hasVis = false; $hasVentaHasta = false; $hasQrQuantity = false;
 try {
   $colsPe = $pdo->query("PRAGMA table_info(plantillas_entrada)")->fetchAll(PDO::FETCH_ASSOC);
   foreach ($colsPe as $c) {
     if (isset($c['name']) && $c['name'] === 'visible_publico') { $hasVis = true; }
     if (isset($c['name']) && $c['name'] === 'venta_hasta') { $hasVentaHasta = true; }
+    if (isset($c['name']) && $c['name'] === 'qr_quantity') { $hasQrQuantity = true; }
   }
 } catch (Exception $e) {
   // ignorar
@@ -173,6 +174,7 @@ if ($metodo === 'POST') {
     $tipo        = isset($_POST['tipo']) ? $_POST['tipo'] : '';
     $precioStr   = isset($_POST['precio_default']) ? trim($_POST['precio_default']) : '';
     $cantStr     = isset($_POST['cantidad_default']) ? trim($_POST['cantidad_default']) : '';
+    $qrQuantity  = isset($_POST['qr_quantity']) ? (int)$_POST['qr_quantity'] : 1;
     $horaLimite  = isset($_POST['hora_limite_default']) ? trim($_POST['hora_limite_default']) : '';
     $ventaHasta  = isset($_POST['venta_hasta']) ? trim($_POST['venta_hasta']) : '';
     $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
@@ -232,6 +234,9 @@ if ($metodo === 'POST') {
         if ($cantidad < 0) {
             $errores[] = 'Cantidad no puede ser negativa.';
         }
+        if ($qrQuantity < 1 || $qrQuantity > 10) {
+            $errores[] = 'La cantidad de QR por unidad debe estar entre 1 y 10.';
+        }
 
         if ($hasVis && $precio <= 0 && isset($_POST['visible_publico']) === false) {
           // Si es gratis y no marcaron visible, por defecto queda oculto
@@ -245,6 +250,7 @@ if ($metodo === 'POST') {
           $vals = array(':admin_id',':nombre',':categoria',':tipo',':precio',':hora_limite',':reglas',':activo',':creado_en',':creado_por',':cantidad',':descripcion');
           if ($hasVis) { $cols[] = 'visible_publico'; $vals[] = ':visible_publico'; }
           if ($hasVentaHasta) { $cols[] = 'venta_hasta'; $vals[] = ':venta_hasta'; }
+          if ($hasQrQuantity) { $cols[] = 'qr_quantity'; $vals[] = ':qr_quantity'; }
 
           $sql = 'INSERT INTO plantillas_entrada ('.implode(',', $cols).') VALUES ('.implode(',', $vals).')';
           $stmt = $pdo->prepare($sql);
@@ -262,7 +268,8 @@ if ($metodo === 'POST') {
             ':cantidad'    => $cantidad,
             ':descripcion' => $descripcion,
             ':visible_publico' => $visibleFlag,
-            ':venta_hasta' => $ventaHasta
+            ':venta_hasta' => $ventaHasta,
+            ':qr_quantity' => $qrQuantity,
           ));
             $mensajeOk = 'Plantilla creada correctamente.';
         } catch (Exception $e) {
@@ -283,6 +290,7 @@ if ($metodo === 'POST') {
           );
           if ($hasVis) $set[] = 'visible_publico = :visible_publico';
           if ($hasVentaHasta) $set[] = 'venta_hasta = :venta_hasta';
+          if ($hasQrQuantity) $set[] = 'qr_quantity = :qr_quantity';
 
           $sql = 'UPDATE plantillas_entrada SET '.implode(', ', $set).' WHERE id = :id AND admin_id = :admin_id';
           $stmt = $pdo->prepare($sql);
@@ -298,6 +306,7 @@ if ($metodo === 'POST') {
             ':descripcion' => $descripcion,
             ':visible_publico' => $visibleFlag,
             ':venta_hasta' => $ventaHasta,
+            ':qr_quantity' => $qrQuantity,
             ':id'          => $idPlantilla,
             ':admin_id'    => $adminId
           ));
@@ -462,9 +471,21 @@ require __DIR__ . '/inc/layout_top.php';
           </label>
         <?php endif; ?>
 
-    <label for="cantidad_default">Cantidad por defecto</label>
+    <label for="cantidad_default">Stock de accesos (QR) por defecto</label>
     <input type="text" id="cantidad_default" name="cantidad_default"
            value="<?php echo e(val_field($editRow, 'cantidad_default', '0')); ?>">
+    <div class="muted" style="font-size:12px;">Representa personas/lugares reales. Ejemplo: 40 accesos con 4 QR por unidad permiten vender 10 paquetes.</div>
+
+    <label for="qr_quantity">QR entregados por cada unidad comprada</label>
+    <?php $qrQuantityActual = (int)val_field($editRow, 'qr_quantity', 1); ?>
+    <select id="qr_quantity" name="qr_quantity">
+      <?php for ($qrOpt = 1; $qrOpt <= 10; $qrOpt++): ?>
+        <option value="<?php echo $qrOpt; ?>" <?php echo $qrQuantityActual === $qrOpt ? 'selected' : ''; ?>>
+          <?php echo $qrOpt; ?> QR<?php echo $qrOpt === 1 ? '' : 's'; ?>
+        </option>
+      <?php endfor; ?>
+    </select>
+    <div class="muted" style="font-size:12px;">El precio corresponde al paquete completo. Cada QR descuenta un lugar del stock.</div>
 
     <label for="hora_limite_default">Hora limite (opcional)</label>
     <input type="text" id="hora_limite_default" name="hora_limite_default"
@@ -515,7 +536,8 @@ require __DIR__ . '/inc/layout_top.php';
             <th>Nombre</th>
             <th>Tipo</th>
             <th>Precio</th>
-            <th>Cant.</th>
+            <th>Stock QR</th>
+            <th>QR/unidad</th>
             <?php if ($hasVentaHasta): ?><th>Hasta</th><?php endif; ?>
             <?php if ($hasVis): ?><th>Visible</th><?php endif; ?>
             <th>Activo</th>
@@ -538,6 +560,7 @@ require __DIR__ . '/inc/layout_top.php';
                   <input type="hidden" name="tipo" value="<?php echo e($p['tipo']); ?>">
                   <input type="hidden" name="precio_default" value="<?php echo e($p['precio_default']); ?>">
                   <input type="number" name="cantidad_default" value="<?php echo (int)$p['cantidad_default']; ?>" min="0" style="width:60px;">
+                  <input type="hidden" name="qr_quantity" value="<?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?>">
                   <input type="hidden" name="hora_limite_default" value="<?php echo e(isset($p['hora_limite_default']) ? $p['hora_limite_default'] : ''); ?>">
                   <input type="hidden" name="descripcion" value="<?php echo e(isset($p['descripcion']) ? $p['descripcion'] : ''); ?>">
                   <input type="hidden" name="reglas_default" value="<?php echo e(isset($p['reglas_default']) ? $p['reglas_default'] : ''); ?>">
@@ -547,6 +570,7 @@ require __DIR__ . '/inc/layout_top.php';
                   <button class="btn" type="submit" style="padding:2px 8px;font-size:13px;">Guardar</button>
                 </form>
               </td>
+              <td><?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?></td>
               <?php if ($hasVentaHasta): ?><td><?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?></td><?php endif; ?>
               <?php if ($hasVis): ?>
                 <td>
@@ -558,6 +582,7 @@ require __DIR__ . '/inc/layout_top.php';
                     <input type="hidden" name="tipo" value="<?php echo e($p['tipo']); ?>">
                     <input type="hidden" name="precio_default" value="<?php echo e($p['precio_default']); ?>">
                     <input type="hidden" name="cantidad_default" value="<?php echo e($p['cantidad_default']); ?>">
+                    <input type="hidden" name="qr_quantity" value="<?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?>">
                     <input type="hidden" name="hora_limite_default" value="<?php echo e(isset($p['hora_limite_default']) ? $p['hora_limite_default'] : ''); ?>">
                     <input type="hidden" name="descripcion" value="<?php echo e(isset($p['descripcion']) ? $p['descripcion'] : ''); ?>">
                     <input type="hidden" name="reglas_default" value="<?php echo e(isset($p['reglas_default']) ? $p['reglas_default'] : ''); ?>">

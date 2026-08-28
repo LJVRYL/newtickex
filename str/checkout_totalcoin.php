@@ -8,6 +8,7 @@ require_once __DIR__ . '/inc/order_events.php';
 require_once __DIR__ . '/inc/free_checkout.php';
 require_once __DIR__ . '/inc/totalcoin_callback_auth.php';
 require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
+require_once __DIR__ . '/inc/ticket_packages.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -338,6 +339,7 @@ if ($eventId > 0) {
       }
       if (isset($colsTe['venta_hasta'])) { $colVentaHasta = 'venta_hasta'; }
       $sqlTp = "SELECT id, nombre, tipo, precio, cantidad_total, cantidad_disponible";
+      if (isset($colsTe['qr_quantity'])) $sqlTp .= ", qr_quantity";
       if ($colActivo) $sqlTp .= ", $colActivo AS activo";
       if ($colPublic) $sqlTp .= ", $colPublic AS publico";
       if ($colVentaHasta) $sqlTp .= ", $colVentaHasta AS venta_hasta";
@@ -376,6 +378,7 @@ if ($eventId > 0) {
           'Name'  => isset($r['nombre']) ? $r['nombre'] : 'Entrada',
           'Price' => $ticketPrice,
           'Available' => isset($r['cantidad_disponible']) ? (int)$r['cantidad_disponible'] : (isset($r['cantidad_total']) ? (int)$r['cantidad_total'] : null),
+          'QrQuantity' => tickex_ticket_qr_quantity(isset($r['qr_quantity']) ? $r['qr_quantity'] : 1),
         );
 
         // Ocultar agotadas para que no aparezcan en el checkout
@@ -394,7 +397,7 @@ if ($eventId > 0) {
       $stTp = $pdoLocal->prepare("SELECT COALESCE(tipo,'General') AS tipo, MAX(COALESCE(monto_pagado,0)) AS precio FROM entradas WHERE evento_id = :id GROUP BY tipo ORDER BY tipo ASC");
       $stTp->execute(array(':id' => $eventId));
       while ($r = $stTp->fetch(PDO::FETCH_ASSOC)) {
-        $fallbackTicket = array('Id' => $r['tipo'], 'Name' => $r['tipo'], 'Price' => (float)$r['precio']);
+        $fallbackTicket = array('Id' => $r['tipo'], 'Name' => $r['tipo'], 'Price' => (float)$r['precio'], 'QrQuantity' => 1);
         if (_tickex_checkout_is_hidden_free_ticket($fallbackTicket, $freeCheckoutTypeId)) {
           continue;
         }
@@ -515,11 +518,15 @@ foreach ($ticketTypes as $tt) {
     continue;
   }
   $price = isset($tt['Price']) ? (float)$tt['Price'] : 0;
+  $qrQuantity = tickex_ticket_qr_quantity(isset($tt['QrQuantity']) ? $tt['QrQuantity'] : 1);
+  $availableQr = isset($tt['Available']) ? $tt['Available'] : null;
   $entryOptions[] = array(
     'id'    => $tt['Id'],
     'name'  => $tt['Name'],
     'price' => $price,
-    'avail' => isset($tt['Available']) ? $tt['Available'] : null,
+    'qr_quantity' => $qrQuantity,
+    'avail' => tickex_ticket_package_capacity($availableQr, $qrQuantity),
+    'available_qr' => $availableQr,
   );
 }
 if (empty($entryOptions)) {
@@ -529,6 +536,8 @@ if (empty($entryOptions)) {
     'name'  => $defaults['concept'] !== '' ? $defaults['concept'] : 'Entrada general',
     'price' => $fallbackPrice > 0 ? $fallbackPrice : 0,
     'avail' => null,
+    'available_qr' => null,
+    'qr_quantity' => 1,
   );
 }
 
@@ -566,7 +575,13 @@ if (!function_exists('_tickex_parse_selection')) {
       }
       $lineTotal = $opt['price'] * $qty;
       $total += $lineTotal;
-      $selectedTickets[] = array('id' => $tidStr, 'name' => $opt['name'], 'qty' => $qty, 'price' => $opt['price']);
+      $selectedTickets[] = array(
+        'id' => $tidStr,
+        'name' => $opt['name'],
+        'qty' => $qty,
+        'price' => $opt['price'],
+        'qr_quantity' => tickex_ticket_qr_quantity(isset($opt['qr_quantity']) ? $opt['qr_quantity'] : 1),
+      );
     }
     return array($selectedTickets, $total);
   }
@@ -1149,6 +1164,9 @@ include __DIR__.'/inc/layout_top.php';
                   <strong><?php echo e((string)$ln['name']); ?></strong>
                   · x<?php echo (int)$ln['qty']; ?>
                   · $<?php echo e(number_format((float)$ln['price'], 0, ',', '.')); ?>
+                  <?php if (isset($ln['qr_quantity']) && (int)$ln['qr_quantity'] > 1): ?>
+                    · entrega <?php echo (int)$ln['qr_quantity']; ?> QR por unidad
+                  <?php endif; ?>
                 </li>
               <?php endforeach; ?>
             </ul>
@@ -1236,12 +1254,18 @@ include __DIR__.'/inc/layout_top.php';
             <input type="hidden" name="ticket_id[<?php echo $idx; ?>]" value="<?php echo e($opt['id']); ?>">
             <h4 style="margin:0 0 8px 0;font-size:18px;" data-ticket-name="<?php echo e($opt['name']); ?>"><?php echo e($opt['name']); ?></h4>
             <div style="font-size:24px;font-weight:700;color:var(--primary);margin-bottom:8px;">$<?php echo e(number_format($opt['price'],0,',','.')); ?></div>
+            <?php if ((int)$opt['qr_quantity'] > 1): ?>
+              <div style="font-size:13px;color:var(--ok);font-weight:700;margin-bottom:8px;">
+                Cada unidad entrega <?php echo (int)$opt['qr_quantity']; ?> QR independientes
+              </div>
+            <?php endif; ?>
             <div style="display:flex;align-items:center;gap:8px;opacity:<?php echo $isSoldOut ? '0.6' : '1'; ?>;">
               <select
                 name="qty[<?php echo $idx; ?>]"
                 data-idx="<?php echo $idx; ?>"
                 data-price="<?php echo e((string)$opt['price']); ?>"
                 data-name="<?php echo e((string)$opt['name']); ?>"
+                data-qr-quantity="<?php echo (int)$opt['qr_quantity']; ?>"
                 style="padding:4px 8px;"
                 <?php echo $isSoldOut ? 'disabled' : ''; ?>
               >
@@ -1351,8 +1375,9 @@ include __DIR__.'/inc/layout_top.php';
         const qty = parseInt(sel.value || '0', 10) || 0;
         const price = parseFloat(sel.getAttribute('data-price') || '0') || 0;
         const name = sel.getAttribute('data-name') || '';
+        const qrQuantity = parseInt(sel.getAttribute('data-qr-quantity') || '1', 10) || 1;
         if (qty > 0) {
-          lines.push({ name, qty, price, total: price * qty });
+          lines.push({ name, qty, price, qrQuantity, total: price * qty });
         }
       });
       return lines;
@@ -1387,7 +1412,8 @@ include __DIR__.'/inc/layout_top.php';
           const li = document.createElement('li');
           li.innerHTML = '<strong>' + (ln.name || '') + '</strong>' +
             ' · x' + (ln.qty || 0) +
-            ' · $' + (Number(ln.price || 0)).toLocaleString('es-AR');
+            ' · $' + (Number(ln.price || 0)).toLocaleString('es-AR') +
+            ((ln.qrQuantity || 1) > 1 ? ' · entrega ' + ln.qrQuantity + ' QR por unidad' : '');
           confirmLines.appendChild(li);
         });
       }

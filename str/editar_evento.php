@@ -140,15 +140,16 @@ if ($_SERVER["REQUEST_METHOD"]==="POST" && isset($_POST["add_from_template"])) {
         $stIns=$pdo->prepare("
             INSERT INTO tipos_entrada
               (evento_id, nombre, tipo, precio,
-               cantidad_total, cantidad_disponible, hora_limite, reglas_precio)
+               cantidad_total, cantidad_disponible, hora_limite, reglas_precio, qr_quantity)
             VALUES
-              (:eid,:nom,:tipo,:pre,:ct,:cd,:hl,:reg)
+              (:eid,:nom,:tipo,:pre,:ct,:cd,:hl,:reg,:qr_quantity)
         ");
 
         $pre = (int)($tpl["precio_default"] ?? $tpl["precio"] ?? 0);
         $ct  = (int)($tpl["cantidad_default"] ?? $tpl["cantidad_total"] ?? 0);
         $hl  = ($tpl["hora_limite_default"] ?? $tpl["hora_limite"] ?? null);
         $reg = ($tpl["reglas_default"] ?? $tpl["reglas_precio"] ?? null);
+        $qrQuantity = isset($tpl['qr_quantity']) ? max(1, min(10, (int)$tpl['qr_quantity'])) : 1;
 
         $tipo = $tpl["tipo"] ?? ($tpl["tipo_venta"] ?? null);
         if ($tipo === null || $tipo === "") {
@@ -164,7 +165,8 @@ if ($_SERVER["REQUEST_METHOD"]==="POST" && isset($_POST["add_from_template"])) {
           ":ct"   => $ct,
           ":cd"   => $ct,
           ":hl"   => $hl,
-          ":reg"  => $reg
+          ":reg"  => $reg,
+          ":qr_quantity" => $qrQuantity,
         ));
 $okMsg="Tipo agregado desde Mis Entradas.";
     }

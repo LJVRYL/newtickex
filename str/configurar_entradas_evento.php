@@ -7,10 +7,11 @@ $eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_disponible') {
   $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
   $cant = isset($_POST['cantidad_disponible']) ? (int)$_POST['cantidad_disponible'] : 0;
+  $qrQuantity = isset($_POST['qr_quantity']) ? max(1, min(10, (int)$_POST['qr_quantity'])) : 1;
   if ($teId > 0 && $cant >= 0 && $eventoId > 0) {
-    $upd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible = :cant WHERE id = :id AND evento_id = :eid");
-    $upd->execute(array(':cant' => $cant, ':id' => $teId, ':eid' => $eventoId));
-    $okMsg = "Cantidad disponible actualizada.";
+    $upd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible = :cant, qr_quantity = :qr_quantity WHERE id = :id AND evento_id = :eid");
+    $upd->execute(array(':cant' => $cant, ':qr_quantity' => $qrQuantity, ':id' => $teId, ':eid' => $eventoId));
+    $okMsg = "Disponibilidad y cantidad de QR actualizadas.";
   } else {
     $error = "Datos inválidos.";
   }
@@ -47,6 +48,7 @@ function ensure_plantillas_entrada_schema($pdo) {
       activo INTEGER NOT NULL DEFAULT 1,
       visible_publico INTEGER NOT NULL DEFAULT 1,
       venta_hasta TEXT,
+      qr_quantity INTEGER NOT NULL DEFAULT 1,
       creado_en DATETIME DEFAULT (datetime('now'))
     )");
 
@@ -71,6 +73,7 @@ function ensure_plantillas_entrada_schema($pdo) {
       'activo' => 'INTEGER NOT NULL DEFAULT 1',
       'visible_publico' => 'INTEGER NOT NULL DEFAULT 1',
       'venta_hasta' => 'TEXT',
+      'qr_quantity' => 'INTEGER NOT NULL DEFAULT 1',
       'creado_en' => "DATETIME DEFAULT (datetime('now'))",
     );
     foreach ($required as $col => $def) {
@@ -89,6 +92,7 @@ $colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_A
 $hasCategoria = false;
 $hasTipoVenta = false;
 $hasHoraLimite = false;
+$hasQrQuantity = false;
 $visCol = '';
 if (is_array($colsTE)) {
   foreach ($colsTE as $c) {
@@ -96,6 +100,7 @@ if (is_array($colsTE)) {
     if ($n === 'categoria') $hasCategoria = true;
     if ($n === 'tipo_venta') $hasTipoVenta = true;
     if ($n === 'hora_limite') $hasHoraLimite = true;
+    if ($n === 'qr_quantity') $hasQrQuantity = true;
     if ($visCol === '' && ($n === 'visible_publico' || $n === 'publico' || $n === 'venta_publico' || $n === 'visible')) {
       $visCol = (string)$c['name'];
     }
@@ -176,6 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
         $tipoVenta = strtoupper($tpl['tipo']); // FREE / PAGA / ...
         $precio    = (int)$tpl['precio_default'];
         $cant      = (int)$tpl['cantidad_default'];
+        $qrQuantity = isset($tpl['qr_quantity']) ? max(1, min(10, (int)$tpl['qr_quantity'])) : 1;
         $hora      = isset($tpl['hora_limite_default']) ? $tpl['hora_limite_default'] : null;
         $desc      = isset($tpl['descripcion']) ? $tpl['descripcion'] : null;
         $catVal    = $hasCategoria ? (isset($tpl['categoria']) ? $tpl['categoria'] : null) : null;
@@ -210,6 +216,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
           $cols[] = 'hora_limite';
           $vals[] = ':hl';
           $params[':hl'] = $hora;
+        }
+        if ($hasQrQuantity) {
+          $cols[] = 'qr_quantity';
+          $vals[] = ':qr_quantity';
+          $params[':qr_quantity'] = $qrQuantity;
         }
         if ($visCol !== '') {
           $cols[] = $visCol;
@@ -340,7 +351,8 @@ include __DIR__.'/inc/layout_top.php';
             <?php echo e($catTpl); ?> – <?php echo e($tpl['nombre']); ?>
             (<?php echo e($tpl['tipo']); ?>,
              $<?php echo (int)$tpl['precio_default']; ?>,
-             <?php echo (int)$tpl['cantidad_default']; ?>)
+             <?php echo (int)$tpl['cantidad_default']; ?> lugares,
+             <?php echo isset($tpl['qr_quantity']) ? (int)$tpl['qr_quantity'] : 1; ?> QR por unidad)
           </option>
         <?php endforeach; ?>
       </select>
@@ -351,6 +363,7 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card">
   <h3>Tipos de entrada del evento</h3>
+  <div class="muted" style="margin-bottom:8px;">Total y disponible representan accesos reales. Cada QR emitido consume un acceso.</div>
 
   <?php if (empty($tiposEvento)): ?>
     <div class="muted">Este evento todavía no tiene tipos de entrada configurados.</div>
@@ -365,6 +378,7 @@ include __DIR__.'/inc/layout_top.php';
           <th>Precio</th>
           <th>Total</th>
           <th>Disponible</th>
+          <th>QR/unidad</th>
           <th>Hora límite</th>
           <?php if ($visCol): ?><th>Visible</th><?php endif; ?>
           <th>Acciones</th>
@@ -383,12 +397,20 @@ include __DIR__.'/inc/layout_top.php';
             <td>$<?php echo (int)$te['precio']; ?></td>
             <td><?php echo (int)$te['cantidad_total']; ?></td>
             <td>
-              <form method="post" style="margin:0;display:inline;">
+              <form method="post" id="type-config-<?php echo (int)$te['id']; ?>" style="margin:0;display:inline;">
                 <input type="hidden" name="action" value="update_disponible">
                 <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
                 <input type="number" name="cantidad_disponible" value="<?php echo (int)$te['cantidad_disponible']; ?>" min="0" style="width:60px;">
                 <button class="btn" type="submit" style="padding:2px 8px;font-size:13px;">Guardar</button>
               </form>
+            </td>
+            <td>
+              <?php $teQrQuantity = isset($te['qr_quantity']) ? max(1, min(10, (int)$te['qr_quantity'])) : 1; ?>
+              <select name="qr_quantity" form="type-config-<?php echo (int)$te['id']; ?>" style="width:auto;min-width:72px;">
+                <?php for ($qrOpt = 1; $qrOpt <= 10; $qrOpt++): ?>
+                  <option value="<?php echo $qrOpt; ?>" <?php echo $teQrQuantity === $qrOpt ? 'selected' : ''; ?>><?php echo $qrOpt; ?></option>
+                <?php endfor; ?>
+              </select>
             </td>
             <td><?php echo e($hl); ?></td>
             <?php if ($visCol): ?>

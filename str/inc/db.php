@@ -430,6 +430,16 @@ SQL;
 
                                 $pdo->exec("INSERT OR IGNORE INTO email_templates (context,name,enabled,is_html,from_email,from_name,reply_to,extra_params,subject,body)
                                 VALUES (
+                                    'entradas_compra',
+                                    'Entradas de una compra',
+                                    1,0,
+                                    'no-reply@tickex.com.ar','Tickex','no-reply@tickex.com.ar','-f no-reply@tickex.com.ar',
+                                    'Tus entradas para el evento',
+                                    'Hola {{nombre}},\n\n¡Tu pago fue aprobado! Esta compra incluye {{cantidad}} entrada(s):\n\n{{entradas}}\n\nCada enlace muestra un QR independiente. Podés compartir cada enlace con la persona que usará esa entrada.\n\nTickex\n'
+                                )");
+
+                                $pdo->exec("INSERT OR IGNORE INTO email_templates (context,name,enabled,is_html,from_email,from_name,reply_to,extra_params,subject,body)
+                                VALUES (
                                     'registro_step1',
                                     'Registro (confirmación de email)',
                                     1,0,
@@ -895,10 +905,11 @@ SQL;
 
             // tipos_entrada: visibilidad y fecha de corte
             $colsTe = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-            $hasVisTe = false; $hasVentaHastaTe = false;
+            $hasVisTe = false; $hasVentaHastaTe = false; $hasQrQuantityTe = false;
             foreach ($colsTe as $c) {
                 if (isset($c['name']) && $c['name'] === 'visible_publico') { $hasVisTe = true; }
                 if (isset($c['name']) && $c['name'] === 'venta_hasta') { $hasVentaHastaTe = true; }
+                if (isset($c['name']) && $c['name'] === 'qr_quantity') { $hasQrQuantityTe = true; }
             }
             if (!$hasVisTe) {
                 $pdo->exec("ALTER TABLE tipos_entrada ADD COLUMN visible_publico INTEGER DEFAULT 1");
@@ -906,19 +917,26 @@ SQL;
             if (!$hasVentaHastaTe) {
                 $pdo->exec("ALTER TABLE tipos_entrada ADD COLUMN venta_hasta TEXT");
             }
+            if (!$hasQrQuantityTe) {
+                $pdo->exec("ALTER TABLE tipos_entrada ADD COLUMN qr_quantity INTEGER NOT NULL DEFAULT 1");
+            }
 
-            // plantillas_entrada: visibilidad y fecha de corte
+            // plantillas_entrada: visibilidad, fecha de corte y QR por paquete
             $colsPe = $pdo->query("PRAGMA table_info(plantillas_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-            $hasVisPe = false; $hasVentaHastaPe = false;
+            $hasVisPe = false; $hasVentaHastaPe = false; $hasQrQuantityPe = false;
             foreach ($colsPe as $c) {
                 if (isset($c['name']) && $c['name'] === 'visible_publico') { $hasVisPe = true; }
                 if (isset($c['name']) && $c['name'] === 'venta_hasta') { $hasVentaHastaPe = true; }
+                if (isset($c['name']) && $c['name'] === 'qr_quantity') { $hasQrQuantityPe = true; }
             }
             if (!$hasVisPe) {
                 $pdo->exec("ALTER TABLE plantillas_entrada ADD COLUMN visible_publico INTEGER DEFAULT 1");
             }
             if (!$hasVentaHastaPe) {
                 $pdo->exec("ALTER TABLE plantillas_entrada ADD COLUMN venta_hasta TEXT");
+            }
+            if (!$hasQrQuantityPe) {
+                $pdo->exec("ALTER TABLE plantillas_entrada ADD COLUMN qr_quantity INTEGER NOT NULL DEFAULT 1");
             }
         } catch (Exception $e) {
             // ignore schema checks errors
