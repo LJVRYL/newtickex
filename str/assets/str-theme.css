@@ -103,6 +103,27 @@ body {
   filter: brightness(0.98);
 }
 
+/* Los enlaces dentro de una tarjeta heredan el color de enlace del tema.
+   Cuando el enlace es un boton, debe conservar el contraste del boton. */
+.card a.btn,
+.card a.btn:visited,
+.card a.btn:hover {
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.card a.btn.secondary,
+.card a.btn.secondary:visited,
+.card a.btn.secondary:hover {
+  color: var(--ink);
+}
+
+.card a.btn.danger,
+.card a.btn.danger:visited,
+.card a.btn.danger:hover {
+  color: var(--err);
+}
+
 .btn-panel {
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #eaf2ff;
