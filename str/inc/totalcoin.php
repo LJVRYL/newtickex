@@ -72,9 +72,47 @@ if (!function_exists('tc_debug_log')) {
     }
 }
 
+if (!function_exists('tc_credentials')) {
+    function tc_credentials()
+    {
+        $username = getenv('TOTALCOIN_USER');
+        $password = getenv('TOTALCOIN_PASS');
+        $username = ($username === false) ? '' : trim((string)$username);
+        $password = ($password === false) ? '' : (string)$password;
+
+        $configuredFile = getenv('TOTALCOIN_CREDENTIALS_FILE');
+        $candidates = array();
+        if (is_string($configuredFile) && trim($configuredFile) !== '') {
+            $candidates[] = trim($configuredFile);
+        }
+        // __DIR__ = .../web/str/inc; el archivo seguro vive fuera del DocumentRoot de STR.
+        $candidates[] = dirname(dirname(__DIR__)) . '/.secrets/totalcoin_credentials.php';
+
+        foreach (array_unique($candidates) as $credentialsFile) {
+            if ($username !== '' && $password !== '') break;
+            if (!is_file($credentialsFile) || !is_readable($credentialsFile)) continue;
+            $loaded = include $credentialsFile;
+            if (!is_array($loaded)) continue;
+            if ($username === '' && isset($loaded['username'])) {
+                $username = trim((string)$loaded['username']);
+            }
+            if ($password === '' && isset($loaded['password'])) {
+                $password = (string)$loaded['password'];
+            }
+        }
+
+        if ($username === '' || $password === '') {
+            throw new RuntimeException('TotalCoin: credenciales no configuradas.');
+        }
+
+        return array('username' => $username, 'password' => $password);
+    }
+}
+
 if (!function_exists('tc_config')) {
     function tc_config()
     {
+        $credentials = tc_credentials();
         $prod = getenv('TOTALCOIN_PROD');
         $useProd = ($prod === false) ? true : ($prod !== '0' && strtolower($prod) !== 'false');
         $cfg = array(
@@ -87,8 +125,8 @@ if (!function_exists('tc_config')) {
                                            : 'https://checkoutbackend.ltest.totalcoin.com/api/v1/intention/status/',
             'payment_page'    => $useProd ? 'https://ar.totalcoin.com/workspace/checkout/receptor?requestId='
                                            : 'https://test.totalcoin.com/workspace/checkout/receptor?requestId=',
-            'username'        => getenv('TOTALCOIN_USER') ?: 'toketera.api',
-            'password'        => getenv('TOTALCOIN_PASS') ?: '*CogE7WC2w21bZQP',
+            'username'        => $credentials['username'],
+            'password'        => $credentials['password'],
             'merchant_prod'   => getenv('TOTALCOIN_MERCHANT_PROD') ?: 'E4FDEE3A-5976-4C66-BEE2-DB72DE84ACC4',
             'merchant_test'   => getenv('TOTALCOIN_MERCHANT_TEST') ?: '9D5E791A-4AF8-40CE-974A-7B1F38E580ED',
             'logo_url'        => getenv('TOTALCOIN_LOGO_URL') ?: null,
