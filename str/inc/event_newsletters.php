@@ -20,6 +20,7 @@ if (!function_exists('event_newsletters_ensure_schema')) {
             cta_label TEXT NOT NULL DEFAULT "Comprar entradas",
             checkout_url TEXT,
             instagram_url TEXT,
+            lineup_image_path TEXT,
             template_id INTEGER,
             campaign_id INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -28,6 +29,9 @@ if (!function_exists('event_newsletters_ensure_schema')) {
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_event_newsletter_admin ON communication_event_newsletters(created_by_admin_id)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_event_newsletter_template ON communication_event_newsletters(template_id)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_event_newsletter_campaign ON communication_event_newsletters(campaign_id)');
+        if (!event_newsletters_table_has_column($pdo, 'communication_event_newsletters', 'lineup_image_path')) {
+            $pdo->exec('ALTER TABLE communication_event_newsletters ADD COLUMN lineup_image_path TEXT');
+        }
 
         $pdo->exec('CREATE TABLE IF NOT EXISTS communication_event_newsletter_artists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,15 +165,23 @@ if (!function_exists('event_newsletters_event_defaults')) {
             'edition' => $name,
             'location_text' => $location,
             'intro_text' => trim((string)(isset($event['descripcion']) ? $event['descripcion'] : '')),
-            'about_text' => '',
+            'about_text' => event_newsletters_default_about_text(),
             'cta_label' => 'Comprar entradas',
             'checkout_url' => event_newsletters_absolute_url('checkout_totalcoin.php?event=' . $eventId),
-            'instagram_url' => '',
+            'instagram_url' => 'https://www.instagram.com/saveth3rave/',
+            'lineup_image_path' => '',
             'event_name' => $name,
             'event_slug' => $slug,
             'event_date' => event_newsletters_format_date(isset($event['fecha_desde']) ? $event['fecha_desde'] : ''),
             'flyer_url' => $flyer,
         );
+    }
+}
+
+if (!function_exists('event_newsletters_default_about_text')) {
+    function event_newsletters_default_about_text()
+    {
+        return "SAVE THE RAVE es un ciclo de música electrónica nacido en Buenos Aires en 2021, dedicado al EBM, el electro, el techno y otras expresiones de la escena electrónica underground. Con Aixa Yael y Chemical Pulp como residentes, el ciclo se consolidó a lo largo de más de cuatro años como un espacio de encuentro para artistas, DJs y público, priorizando una cuidada curaduría musical y una experiencia centrada en la pista de baile.\n\nA lo largo de sus ediciones han pasado por la cabina de SAVE THE RAVE artistas nacionales como Gina Demarchi, May McLaren, Happy707, Klauss, Zisko, Forello, Ana Hagen, Jessica Bellomo, JXXXO, Naiborg y Fango, además de invitados internacionales como Delia (Chile), Fabricio (Uruguay), Simetrik0002 (Chile), OHM.IO (Paraguay), Uma Scheffer (México), MM (México) y ENFAN (Francia).\n\nCon una fuerte identidad dentro de la escena independiente, SAVE THE RAVE continúa apostando por el encuentro entre referentes internacionales y artistas emergentes, manteniendo como eje principal el sonido, la comunidad y la cultura rave.";
     }
 }
 
@@ -259,30 +271,40 @@ if (!function_exists('event_newsletters_render')) {
         $cta = trim((string)(isset($newsletter['cta_label']) ? $newsletter['cta_label'] : 'Comprar entradas'));
         $checkout = trim((string)(isset($newsletter['checkout_url']) ? $newsletter['checkout_url'] : ''));
         $instagram = trim((string)(isset($newsletter['instagram_url']) ? $newsletter['instagram_url'] : ''));
+        $lineupImage = trim((string)(isset($newsletter['lineup_image_path']) ? $newsletter['lineup_image_path'] : ''));
+        $lineupImageUrl = $lineupImage !== '' ? event_newsletters_absolute_url($lineupImage) : '';
         $subject = trim((string)(isset($newsletter['subject']) ? $newsletter['subject'] : $eventName));
 
         $artistHtml = '';
         $artistText = array();
+        $artistNames = array();
         foreach ($artists as $artist) {
             $name = trim((string)(isset($artist['artist_name']) ? $artist['artist_name'] : ''));
             if ($name === '') continue;
             $review = trim((string)(isset($artist['review_text']) ? $artist['review_text'] : ''));
-            $image = trim((string)(isset($artist['image_path']) ? $artist['image_path'] : ''));
-            $imageUrl = $image !== '' ? event_newsletters_absolute_url($image) : '';
-            $imageHtml = $imageUrl !== '' ? '<img src="' . event_newsletters_escape($imageUrl) . '" width="576" alt="' . event_newsletters_escape($name) . '" style="display:block;width:100%;max-width:576px;height:auto;margin:0 0 22px 0;" />' : '';
             $reviewHtml = $review !== '' ? '<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#d1d1d1;">' . nl2br(event_newsletters_escape($review)) . '</p>' : '';
-            $artistHtml .= '<tr><td style="padding:30px 32px;border-top:1px solid #262626;">' . $imageHtml . '<h2 style="margin:0;font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:38px;line-height:42px;color:#ffffff;text-transform:uppercase;">' . event_newsletters_escape($name) . '</h2>' . $reviewHtml . '</td></tr>';
+            $artistHtml .= '<tr><td style="padding:18px 0 14px 0;border-bottom:1px solid #1d1d1d;"><p style="margin:0;font-family:\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;font-size:48px;line-height:46px;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">' . event_newsletters_escape($name) . '</p>' . $reviewHtml . '</td></tr>';
             $artistText[] = $name . ($review !== '' ? "\n" . $review : '');
+            $artistNames[] = $name;
         }
 
         $logo = event_newsletters_absolute_url('templates/newsletters/assets/logo-str.png');
-        $flyerHtml = $flyer !== '' ? '<tr><td><img src="' . event_newsletters_escape($flyer) . '" width="640" alt="' . event_newsletters_escape($eventName) . '" style="display:block;width:100%;max-width:640px;height:auto;" /></td></tr>' : '';
-        $introHtml = $intro !== '' ? '<tr><td style="padding:30px 32px;border-top:1px solid #262626;"><p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:29px;color:#eeeeee;">' . nl2br(event_newsletters_escape($intro)) . '</p></td></tr>' : '';
-        $aboutHtml = $about !== '' ? '<tr><td style="padding:30px 32px;border-top:1px solid #262626;"><h3 style="margin:0 0 12px;font-family:Arial Black,Arial,sans-serif;color:#ffffff;text-transform:uppercase;">Sobre el evento</h3><p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#d1d1d1;">' . nl2br(event_newsletters_escape($about)) . '</p></td></tr>' : '';
-        $ctaHtml = ($checkout !== '' && $cta !== '') ? '<tr><td align="center" style="padding:36px 32px;border-top:1px solid #262626;"><a href="' . event_newsletters_escape($checkout) . '" target="_blank" style="display:inline-block;padding:18px 28px;background:#18dc72;color:#05110a;text-decoration:none;font-family:Arial Black,Arial,sans-serif;font-size:22px;text-transform:uppercase;border-radius:8px;">' . event_newsletters_escape($cta) . '</a></td></tr>' : '';
+        $aboutImage = event_newsletters_absolute_url('templates/newsletters/assets/sobre-fiesta.jpg');
+        $finalBackground = event_newsletters_absolute_url('templates/newsletters/assets/final-abajo.jpg');
+        $flyerHtml = $flyer !== '' ? '<tr><td style="padding:20px 52px 22px 52px;"><img src="' . event_newsletters_escape($flyer) . '" width="576" alt="' . event_newsletters_escape($eventName) . '" style="width:100%;max-width:576px;height:auto;" /></td></tr>' : '';
+        $introHtml = $intro !== '' ? '<tr><td style="padding:10px 52px 30px 52px;border-bottom:1px solid #262626;"><p style="margin:0;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;font-size:18px;line-height:28px;color:#f0f0f0;font-weight:500;">' . nl2br(event_newsletters_escape($intro)) . '</p></td></tr>' : '';
+        $lineupImageHtml = $lineupImageUrl !== '' ? '<tr><td style="padding:20px 52px 24px 52px;border-bottom:1px solid #262626;"><img src="' . event_newsletters_escape($lineupImageUrl) . '" width="576" alt="Artistas" style="width:100%;max-width:576px;height:auto;" /></td></tr>' : '';
+        $aboutParagraphs = '';
+        foreach (preg_split('/\R\s*\R/', $about) as $paragraph) {
+            if (trim($paragraph) !== '') $aboutParagraphs .= '<p style="margin:0 0 16px 0;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;font-size:16px;line-height:25px;color:#d1d1d1;">' . nl2br(event_newsletters_escape(trim($paragraph))) . '</p>';
+        }
+        $aboutHtml = '<tr><td style="padding:28px 52px 8px 52px;border-top:1px solid #262626;"><p style="margin:0 0 16px;font-family:\'Courier New\',Courier,monospace;font-size:12px;letter-spacing:1.8px;color:#9a9a9a;text-transform:uppercase;">Sobre la fiesta</p><img src="' . event_newsletters_escape($aboutImage) . '" width="576" alt="SAVE THE RAVE" style="width:100%;max-width:576px;height:auto;margin:0 0 22px 0;" />' . $aboutParagraphs . '<p style="margin:20px 0 0;font-family:\'Arial Black\',Arial,sans-serif;font-size:17px;line-height:26px;color:#ffffff;">¿Cuándo? ' . event_newsletters_escape($date) . '.<br>¿Dónde? ' . event_newsletters_escape($location) . '.</p></td></tr>';
+        $ctaHtml = ($checkout !== '' && $cta !== '') ? '<tr><td background="' . event_newsletters_escape($finalBackground) . '" style="padding:0;border-top:1px solid #262626;background-image:url(\'' . event_newsletters_escape($finalBackground) . '\');background-size:cover;background-position:center;"><table role="presentation" width="100%"><tr><td align="center" style="padding:58px 32px;"><a href="' . event_newsletters_escape($checkout) . '" target="_blank" style="display:inline-block;padding:24px 34px;background:#000000;color:#ffffff;text-decoration:none;font-family:\'Arial Black\',Arial,sans-serif;font-size:34px;line-height:34px;text-transform:uppercase;">' . event_newsletters_escape($cta) . '</a></td></tr></table></td></tr>' : '';
         $instagramHtml = $instagram !== '' ? '<a href="' . event_newsletters_escape($instagram) . '" target="_blank" style="color:#bdbdbd;text-decoration:none;">Instagram</a> &nbsp;·&nbsp; ' : '';
 
-        $html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . event_newsletters_escape($subject) . '</title></head><body style="margin:0;padding:0;background:#05050b;color:#ffffff;"><div style="display:none;max-height:0;overflow:hidden;">' . event_newsletters_escape($subject) . '</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#05050b;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:640px;background:#0b0b12;border:1px solid #242431;"><tr><td align="center" style="padding:34px 32px 26px;"><img src="' . event_newsletters_escape($logo) . '" width="320" alt="SAVE THE RAVE" style="display:block;width:100%;max-width:320px;height:auto;margin:0 auto;"><p style="margin:20px 0 6px;font-family:Arial Black,Arial,sans-serif;font-size:34px;line-height:38px;text-transform:uppercase;">' . event_newsletters_escape($edition) . '</p><p style="margin:0;font-family:Courier New,monospace;font-size:14px;line-height:23px;color:#bdbdbd;text-transform:uppercase;">' . event_newsletters_escape($date) . ($location !== '' ? '<br>' . event_newsletters_escape($location) : '') . '</p></td></tr>' . $flyerHtml . $introHtml . $artistHtml . $aboutHtml . $ctaHtml . '<tr><td align="center" style="padding:24px 32px;border-top:1px solid #262626;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#8d8d8d;">' . $instagramHtml . '<a href="' . event_newsletters_escape(event_newsletters_base_url()) . '" target="_blank" style="color:#bdbdbd;text-decoration:none;">Tickex</a></td></tr></table></td></tr></table></body></html>';
+        $topNames = !empty($artistNames) ? implode(' - ', $artistNames) : $edition;
+        $artistsBlock = '<tr><td style="padding:30px 52px 12px 52px;border-bottom:1px solid #262626;"><p style="margin:0 0 16px;font-family:\'Courier New\',Courier,monospace;font-size:12px;letter-spacing:1.8px;color:#9a9a9a;text-transform:uppercase;">Line Up</p></td></tr>' . $lineupImageHtml . '<tr><td style="padding:0 52px;border-bottom:1px solid #262626;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">' . $artistHtml . '</table></td></tr>';
+        $html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . event_newsletters_escape($subject) . '</title></head><body style="margin:0;padding:0;background:#000000;color:#ffffff;"><div style="display:none;max-height:0;overflow:hidden;">' . event_newsletters_escape($subject) . '</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#000000;"><tr><td align="center" style="padding:0;"><table role="presentation" width="680" cellspacing="0" cellpadding="0" border="0" style="width:680px;max-width:100%;background:#000000;"><tr><td style="padding:42px 52px 18px;border-bottom:1px solid #262626;"><p style="margin:0 0 14px;font-family:\'Courier New\',Courier,monospace;font-size:12px;letter-spacing:1.8px;color:#9a9a9a;text-transform:uppercase;">' . event_newsletters_escape($edition) . '</p><img src="' . event_newsletters_escape($logo) . '" width="396" alt="SAVE THE RAVE" style="display:block;margin:0 auto;width:396px;max-width:100%;height:auto;"><p style="margin:14px 0 0;font-family:\'Arial Black\',Arial,sans-serif;font-size:34px;line-height:36px;color:#ffffff;font-weight:800;text-transform:uppercase;">' . event_newsletters_escape($edition) . '</p><p style="margin:20px 0 0;font-family:\'Courier New\',Courier,monospace;font-size:15px;line-height:24px;color:#c3c3c3;text-transform:uppercase;">' . event_newsletters_escape($date) . ($location !== '' ? '<br>' . event_newsletters_escape($location) : '') . '</p></td></tr><tr><td style="padding:28px 52px 18px;border-bottom:1px solid #262626;"><p style="margin:0;font-family:\'Arial Black\',Arial,sans-serif;font-size:34px;line-height:36px;color:#ffffff;font-weight:900;text-transform:uppercase;">' . event_newsletters_escape($topNames) . '</p><p style="margin:14px 0 0;font-family:\'Courier New\',Courier,monospace;font-size:15px;color:#cdcdcd;text-transform:uppercase;">' . ($location !== '' ? 'En ' . event_newsletters_escape($location) : '') . '</p></td></tr>' . $flyerHtml . $introHtml . $artistsBlock . $aboutHtml . $ctaHtml . '<tr><td style="padding:24px 52px;border-top:1px solid #262626;font-family:Arial,sans-serif;font-size:13px;color:#8d8d8d;">' . $instagramHtml . '<a href="' . event_newsletters_escape(event_newsletters_base_url()) . '" target="_blank" style="color:#bdbdbd;text-decoration:none;">Tickex</a></td></tr></table></td></tr></table></body></html>';
 
         $textParts = array($edition, $date, $location, $intro);
         if (!empty($artistText)) $textParts[] = implode("\n\n", $artistText);

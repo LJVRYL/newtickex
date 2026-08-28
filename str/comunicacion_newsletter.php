@@ -41,9 +41,10 @@ $form = array(
     'edition'=>isset($defaults['edition']) ? $defaults['edition'] : '',
     'location_text'=>isset($defaults['location_text']) ? $defaults['location_text'] : '',
     'intro_text'=>isset($defaults['intro_text']) ? $defaults['intro_text'] : '',
-    'about_text'=>'', 'cta_label'=>'Comprar entradas',
+    'about_text'=>isset($defaults['about_text']) ? $defaults['about_text'] : '', 'cta_label'=>'Comprar entradas',
     'checkout_url'=>isset($defaults['checkout_url']) ? $defaults['checkout_url'] : '',
-    'instagram_url'=>'', 'template_id'=>0, 'campaign_id'=>0,
+    'instagram_url'=>isset($defaults['instagram_url']) ? $defaults['instagram_url'] : '',
+    'lineup_image_path'=>'', 'template_id'=>0, 'campaign_id'=>0,
 );
 if ($newsletter) foreach ($form as $key=>$unused) if (array_key_exists($key, $newsletter)) $form[$key] = $newsletter[$key];
 $artists = $newsletter ? event_newsletters_artists($pdo, (int)$newsletter['id']) : ($event ? event_newsletters_default_artists($pdo, $eventId) : array());
@@ -54,38 +55,14 @@ if (!function_exists('event_newsletter_collect_artists')) {
     {
         $names = isset($_POST['artist_name']) && is_array($_POST['artist_name']) ? $_POST['artist_name'] : array();
         $reviews = isset($_POST['artist_review']) && is_array($_POST['artist_review']) ? $_POST['artist_review'] : array();
-        $existing = isset($_POST['artist_existing_image']) && is_array($_POST['artist_existing_image']) ? $_POST['artist_existing_image'] : array();
-        $remove = isset($_POST['artist_remove_image']) && is_array($_POST['artist_remove_image']) ? $_POST['artist_remove_image'] : array();
-        $count = min(8, max(count($names), count($reviews), count($existing)));
+        $count = min(8, max(count($names), count($reviews)));
         $out = array();
         for ($i=0; $i<$count; $i++) {
             $name = trim((string)(isset($names[$i]) ? $names[$i] : ''));
             $review = trim((string)(isset($reviews[$i]) ? $reviews[$i] : ''));
-            $image = trim((string)(isset($existing[$i]) ? $existing[$i] : ''));
-            $prefix = 'newsletter_uploads/event_' . (int)$eventId . '/';
-            if ($image !== '' && strpos($image, $prefix) !== 0) $image = '';
-            if (isset($remove[$i]) && (string)$remove[$i] === '1') $image = '';
-            if (isset($_FILES['artist_image']['error'][$i]) && (int)$_FILES['artist_image']['error'][$i] !== UPLOAD_ERR_NO_FILE) {
-                $file = array(
-                    'name'=>isset($_FILES['artist_image']['name'][$i]) ? $_FILES['artist_image']['name'][$i] : '',
-                    'type'=>isset($_FILES['artist_image']['type'][$i]) ? $_FILES['artist_image']['type'][$i] : '',
-                    'tmp_name'=>isset($_FILES['artist_image']['tmp_name'][$i]) ? $_FILES['artist_image']['tmp_name'][$i] : '',
-                    'error'=>$_FILES['artist_image']['error'][$i],
-                    'size'=>isset($_FILES['artist_image']['size'][$i]) ? $_FILES['artist_image']['size'][$i] : 0,
-                );
-                $upload = event_newsletters_upload_artist_image($file, $eventId);
-                if (empty($upload['ok'])) {
-                    $error = isset($upload['error']) ? $upload['error'] : 'No se pudo subir una imagen.';
-                    return $out;
-                }
-                $image = (string)$upload['path'];
-            }
-            if ($name === '' && $review === '' && $image === '') continue;
-            if ($name === '') {
-                $error = 'Cada bloque con foto o reseña debe tener el nombre del artista.';
-                return $out;
-            }
-            $out[] = array('artist_name'=>$name,'review_text'=>$review,'image_path'=>$image,'sort_order'=>count($out));
+            if ($name === '' && $review === '') continue;
+            if ($name === '') { $error = 'Cada reseña debe tener el nombre del artista.'; return $out; }
+            $out[] = array('artist_name'=>$name,'review_text'=>$review,'image_path'=>'','sort_order'=>count($out));
         }
         return $out;
     }
@@ -97,16 +74,16 @@ if (!function_exists('event_newsletter_save_form')) {
         $pdo->beginTransaction();
         try {
             $existing = event_newsletters_find($pdo, $eventId);
-            $params = array(':subject'=>$form['subject'],':edition'=>$form['edition'],':location'=>$form['location_text'],':intro'=>$form['intro_text'],':about'=>$form['about_text'],':cta'=>$form['cta_label'],':checkout'=>$form['checkout_url'],':instagram'=>$form['instagram_url']);
+            $params = array(':subject'=>$form['subject'],':edition'=>$form['edition'],':location'=>$form['location_text'],':intro'=>$form['intro_text'],':about'=>$form['about_text'],':cta'=>$form['cta_label'],':checkout'=>$form['checkout_url'],':instagram'=>$form['instagram_url'],':lineup'=>$form['lineup_image_path']);
             if ($existing) {
                 $params[':id'] = (int)$existing['id'];
-                $st = $pdo->prepare('UPDATE communication_event_newsletters SET subject=:subject,edition=:edition,location_text=:location,intro_text=:intro,about_text=:about,cta_label=:cta,checkout_url=:checkout,instagram_url=:instagram,updated_at=CURRENT_TIMESTAMP WHERE id=:id');
+                $st = $pdo->prepare('UPDATE communication_event_newsletters SET subject=:subject,edition=:edition,location_text=:location,intro_text=:intro,about_text=:about,cta_label=:cta,checkout_url=:checkout,instagram_url=:instagram,lineup_image_path=:lineup,updated_at=CURRENT_TIMESTAMP WHERE id=:id');
                 $st->execute($params);
                 $newsletterId = (int)$existing['id'];
             } else {
                 $params[':event'] = (int)$eventId;
                 $params[':admin'] = (int)$adminId;
-                $st = $pdo->prepare('INSERT INTO communication_event_newsletters (event_id,created_by_admin_id,subject,edition,location_text,intro_text,about_text,cta_label,checkout_url,instagram_url) VALUES (:event,:admin,:subject,:edition,:location,:intro,:about,:cta,:checkout,:instagram)');
+                $st = $pdo->prepare('INSERT INTO communication_event_newsletters (event_id,created_by_admin_id,subject,edition,location_text,intro_text,about_text,cta_label,checkout_url,instagram_url,lineup_image_path) VALUES (:event,:admin,:subject,:edition,:location,:intro,:about,:cta,:checkout,:instagram,:lineup)');
                 $st->execute($params);
                 $newsletterId = (int)$pdo->lastInsertId();
             }
@@ -132,6 +109,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $event) {
     else {
         $action = isset($_POST['action']) ? (string)$_POST['action'] : 'save';
         foreach (array('subject','edition','location_text','intro_text','about_text','cta_label','checkout_url','instagram_url') as $key) $form[$key] = trim((string)(isset($_POST[$key]) ? $_POST[$key] : ''));
+        $form['lineup_image_path'] = trim((string)(isset($_POST['lineup_existing_image']) ? $_POST['lineup_existing_image'] : ''));
+        $lineupPrefix = 'newsletter_uploads/event_' . (int)$eventId . '/';
+        if ($form['lineup_image_path'] !== '' && strpos($form['lineup_image_path'], $lineupPrefix) !== 0) $form['lineup_image_path'] = '';
+        if (isset($_POST['remove_lineup_image']) && (string)$_POST['remove_lineup_image'] === '1') $form['lineup_image_path'] = '';
+        if ($error === '' && isset($_FILES['lineup_image']) && (int)$_FILES['lineup_image']['error'] !== UPLOAD_ERR_NO_FILE) {
+            $lineupUpload = event_newsletters_upload_artist_image($_FILES['lineup_image'], $eventId);
+            if (empty($lineupUpload['ok'])) $error = isset($lineupUpload['error']) ? $lineupUpload['error'] : 'No se pudo subir la imagen del lineup.';
+            else $form['lineup_image_path'] = (string)$lineupUpload['path'];
+        }
         if ($form['subject'] === '' || $form['edition'] === '') $error = 'Completá el asunto y el título/edición.';
         foreach (array('checkout_url','instagram_url') as $key) if ($error === '' && $form[$key] !== '' && !filter_var($form[$key], FILTER_VALIDATE_URL)) $error = 'Revisá las URLs ingresadas.';
         $artists = event_newsletter_collect_artists($eventId, $error);
@@ -202,12 +188,13 @@ include __DIR__ . '/inc/layout_top.php';
 <div class="card"><h3 style="margin-top:0;">Datos del evento</h3><p class="muted">Flyer, fecha y venue se toman automáticamente. El texto sigue siendo editable.</p><div class="nl-form-grid">
 <div style="grid-column:1/-1;"><label>Asunto del email</label><input name="subject" maxlength="180" required value="<?php echo e($form['subject']); ?>"></div><div><label>Título / edición</label><input name="edition" maxlength="160" required value="<?php echo e($form['edition']); ?>"></div><div><label>Lugar</label><input name="location_text" maxlength="220" value="<?php echo e($form['location_text']); ?>"></div><div style="grid-column:1/-1;"><label>Introducción</label><textarea name="intro_text" rows="5" maxlength="3000"><?php echo e($form['intro_text']); ?></textarea></div><div style="grid-column:1/-1;"><label>Sobre el evento / ciclo</label><textarea name="about_text" rows="5" maxlength="5000"><?php echo e($form['about_text']); ?></textarea></div><div><label>Texto del botón</label><input name="cta_label" maxlength="80" value="<?php echo e($form['cta_label']); ?>"></div><div><label>Instagram</label><input type="url" name="instagram_url" value="<?php echo e($form['instagram_url']); ?>"></div><div style="grid-column:1/-1;"><label>Enlace de compra</label><input type="url" name="checkout_url" value="<?php echo e($form['checkout_url']); ?>"></div></div>
 <?php if(!empty($defaults['flyer_url'])): ?><div style="margin-top:14px;"><div class="muted">Flyer del evento</div><img src="<?php echo e($defaults['flyer_url']); ?>" alt="Flyer" style="max-width:260px;width:100%;border-radius:10px;"></div><?php else: ?><p class="muted">Este evento no tiene flyer cargado.</p><?php endif; ?></div>
-<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;"><div><h3 style="margin:0;">Artistas</h3><div class="muted">Desde Producción solo se importan los nombres.</div></div><button class="btn secondary" type="button" id="addArtist">+ Agregar artista</button></div><div id="artistList">
-<?php foreach($artists as $i=>$artist): ?><div class="nl-artist"><div style="display:flex;justify-content:space-between;"><strong>Artista <span class="artist-number"><?php echo $i+1; ?></span></strong><button type="button" class="btn danger remove-artist">Quitar</button></div><div class="nl-form-grid" style="margin-top:10px;"><div><label>Nombre</label><input name="artist_name[]" maxlength="160" value="<?php echo e($artist['artist_name']); ?>"></div><div><label>Imagen (máx. 5 MB)</label><input type="file" name="artist_image[]" accept="image/jpeg,image/png,image/webp"></div><div style="grid-column:1/-1;"><label>Reseña</label><textarea name="artist_review[]" rows="5" maxlength="5000"><?php echo e(isset($artist['review_text'])?$artist['review_text']:''); ?></textarea></div></div><?php if(!empty($artist['image_path'])): ?><div style="margin-top:10px;display:flex;gap:10px;align-items:center;"><img src="<?php echo e(event_newsletters_absolute_url($artist['image_path'])); ?>" alt="" style="width:110px;height:80px;object-fit:cover;border-radius:8px;"><label><input type="checkbox" name="artist_remove_image[<?php echo $i; ?>]" value="1"> Quitar imagen</label></div><?php endif; ?><input type="hidden" name="artist_existing_image[]" value="<?php echo e(isset($artist['image_path'])?$artist['image_path']:''); ?>"></div><?php endforeach; ?>
+<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;"><div><h3 style="margin:0;">Artistas</h3><div class="muted">Desde Producción solo se importan los nombres. Subí una única imagen conjunta del lineup.</div></div><button class="btn secondary" type="button" id="addArtist">+ Agregar artista</button></div>
+<div style="margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:10px;"><label>Imagen conjunta del artista o lineup (máx. 5 MB)</label><input type="file" name="lineup_image" accept="image/jpeg,image/png,image/webp"><input type="hidden" name="lineup_existing_image" value="<?php echo e($form['lineup_image_path']); ?>"><?php if($form['lineup_image_path']!==''): ?><div style="display:flex;gap:10px;align-items:center;margin-top:10px;"><img src="<?php echo e(event_newsletters_absolute_url($form['lineup_image_path'])); ?>" alt="Lineup" style="width:180px;height:110px;object-fit:cover;border-radius:8px;"><label><input type="checkbox" name="remove_lineup_image" value="1"> Quitar imagen actual</label></div><?php endif; ?></div><div id="artistList">
+<?php foreach($artists as $i=>$artist): ?><div class="nl-artist"><div style="display:flex;justify-content:space-between;"><strong>Artista <span class="artist-number"><?php echo $i+1; ?></span></strong><button type="button" class="btn danger remove-artist">Quitar</button></div><div style="margin-top:10px;"><label>Nombre</label><input name="artist_name[]" maxlength="160" value="<?php echo e($artist['artist_name']); ?>"><label style="margin-top:10px;">Reseña</label><textarea name="artist_review[]" rows="5" maxlength="5000"><?php echo e(isset($artist['review_text'])?$artist['review_text']:''); ?></textarea></div></div><?php endforeach; ?>
 </div></div>
 <div class="card"><h3 style="margin-top:0;">Preparar campaña</h3><p class="muted">Guardar no envía emails. Elegí una audiencia, creá la campaña y confirmá el envío desde Campañas.</p><label>Audiencia</label><select name="audience_id"><option value="">Seleccioná una audiencia…</option><?php foreach($audiences as $audience): ?><option value="<?php echo (int)$audience['id']; ?>"><?php echo e($audience['name']); ?></option><?php endforeach; ?></select><?php if(empty($audiences)): ?><p class="muted"><a href="comunicacion_audiencias.php">Crear audiencia</a></p><?php endif; ?><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"><button class="btn secondary" name="action" value="save">Guardar borrador</button><button class="btn secondary" name="action" value="preview">Guardar y previsualizar</button><button class="btn" name="action" value="prepare_campaign">Crear/actualizar campaña</button><?php if($newsletter): ?><a class="btn secondary" href="comunicacion_newsletter.php?event_id=<?php echo $eventId; ?>&preview=1" target="_blank">Abrir preview</a><?php endif; ?></div></div>
 </div><div class="card" style="position:sticky;top:12px;"><h3 style="margin-top:0;">Vista previa</h3><?php if($preview): ?><iframe class="nl-preview" title="Preview" srcdoc="<?php echo e($preview['body_html']); ?>"></iframe><?php elseif($newsletter): ?><iframe class="nl-preview" title="Preview" src="comunicacion_newsletter.php?event_id=<?php echo $eventId; ?>&preview=1"></iframe><?php else: ?><div class="muted">Guardá el borrador para generar la vista previa.</div><?php endif; ?></div></div></form>
-<template id="artistTemplate"><div class="nl-artist"><div style="display:flex;justify-content:space-between;"><strong>Artista <span class="artist-number"></span></strong><button type="button" class="btn danger remove-artist">Quitar</button></div><div class="nl-form-grid" style="margin-top:10px;"><div><label>Nombre</label><input name="artist_name[]" maxlength="160"></div><div><label>Imagen (máx. 5 MB)</label><input type="file" name="artist_image[]" accept="image/jpeg,image/png,image/webp"></div><div style="grid-column:1/-1;"><label>Reseña</label><textarea name="artist_review[]" rows="5" maxlength="5000"></textarea></div></div><input type="hidden" name="artist_existing_image[]" value=""></div></template>
+<template id="artistTemplate"><div class="nl-artist"><div style="display:flex;justify-content:space-between;"><strong>Artista <span class="artist-number"></span></strong><button type="button" class="btn danger remove-artist">Quitar</button></div><div style="margin-top:10px;"><label>Nombre</label><input name="artist_name[]" maxlength="160"><label style="margin-top:10px;">Reseña</label><textarea name="artist_review[]" rows="5" maxlength="5000"></textarea></div></div></template>
 <script>(function(){var list=document.getElementById('artistList'),add=document.getElementById('addArtist');function renumber(){var b=list.querySelectorAll('.nl-artist');for(var i=0;i<b.length;i++){b[i].querySelector('.artist-number').textContent=String(i+1);var r=b[i].querySelector('input[name^="artist_remove_image"]');if(r)r.name='artist_remove_image['+i+']';}}add.addEventListener('click',function(){if(list.querySelectorAll('.nl-artist').length>=8){alert('Máximo 8 artistas.');return;}list.appendChild(document.getElementById('artistTemplate').content.cloneNode(true));renumber();});list.addEventListener('click',function(e){var btn=e.target.closest('.remove-artist');if(!btn)return;btn.closest('.nl-artist').remove();if(!list.querySelector('.nl-artist'))add.click();renumber();});renumber();})();</script>
 <?php endif; ?>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

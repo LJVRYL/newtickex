@@ -23,9 +23,10 @@ $event = event_newsletters_find_event($pdo, 1, 7, false);
 $newsletter = array(
     'subject'=>'STR — Nueva fecha', 'edition'=>'SAVE THE RAVE — NUEVA FECHA',
     'location_text'=>'Rincón 1330', 'intro_text'=>'Nos encontramos nuevamente.',
-    'about_text'=>'Cultura rave independiente.', 'cta_label'=>'Comprar entradas',
+    'about_text'=>event_newsletters_default_about_text(), 'cta_label'=>'Comprar entradas',
     'checkout_url'=>'https://str.tickex.com.ar/checkout_totalcoin.php?event=1',
     'instagram_url'=>'https://instagram.com/saveth3rave',
+    'lineup_image_path'=>'newsletter_uploads/event_1/lineup.jpg',
 );
 $artists = array(
     array('artist_name'=>'Artista Uno','review_text'=>'Primera reseña.','image_path'=>'newsletter_uploads/event_1/uno.jpg'),
@@ -36,6 +37,10 @@ newsletter_test_assert($rendered['subject'] === 'STR — Nueva fecha', 'configur
 newsletter_test_assert(strpos($rendered['body_html'], 'event_flyers/str.jpg') !== false, 'event flyer is reused');
 newsletter_test_assert(strpos($rendered['body_html'], 'Artista Uno') !== false && strpos($rendered['body_html'], 'Artista Dos') !== false, 'all artists are rendered');
 newsletter_test_assert(strpos($rendered['body_html'], 'Primera reseña.') !== false, 'artist reviews are rendered');
+newsletter_test_assert(strpos($rendered['body_html'], 'newsletter_uploads/event_1/lineup.jpg') !== false, 'one combined lineup image is rendered');
+newsletter_test_assert(substr_count($rendered['body_html'], 'newsletter_uploads/event_1/lineup.jpg') === 1, 'combined lineup image is not duplicated per artist');
+newsletter_test_assert(strpos($rendered['body_html'], 'sobre-fiesta.jpg') !== false && strpos($rendered['body_html'], 'final-abajo.jpg') !== false, 'original fixed visual assets are preserved');
+newsletter_test_assert(strpos($rendered['body_html'], 'SAVE THE RAVE es un ciclo') !== false, 'fixed SAVE THE RAVE description is included');
 newsletter_test_assert(strpos($rendered['body_html'], 'Comprar entradas') !== false, 'checkout CTA is rendered');
 newsletter_test_assert(strpos($rendered['body_text'], 'Artista Dos') !== false, 'plain text alternative includes artists');
 
