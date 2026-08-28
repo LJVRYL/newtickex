@@ -474,6 +474,7 @@ include __DIR__.'/inc/layout_top.php';
     <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
     <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
     <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
+    <a class="btn pe-action-btn" href="comunicacion_newsletter.php?event_id=<?php echo (int)$eventoId; ?>">Ir al newsletter</a>
     <a class="btn pe-action-btn" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
     <a class="btn danger" href="eliminar_evento.php?id=<?php echo (int)$eventoId; ?>&csrf=<?php echo urlencode($csrf); ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Eliminar</a>
     <a class="btn pe-action-btn" href="panel_evento.php" title="Volver">
