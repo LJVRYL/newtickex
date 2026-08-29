@@ -51,4 +51,24 @@ $templateId = event_newsletters_sync_template($pdo, array('template_id'=>0) + $n
 newsletter_test_assert($templateId > 0, 'newsletter becomes a communication template');
 $stored = $pdo->query('SELECT * FROM communication_templates WHERE id=' . (int)$templateId)->fetch(PDO::FETCH_ASSOC);
 newsletter_test_assert($stored && strpos($stored['body_html_template'], 'Artista Uno') !== false, 'stored template contains final rendered content');
+
+$pdo->exec("INSERT INTO communication_event_newsletters (event_id,created_by_admin_id,subject,edition) VALUES (1,7,'Primero','Primero')");
+$firstNewsletterId = (int)$pdo->lastInsertId();
+newsletter_test_assert(event_newsletters_publish($pdo, $firstNewsletterId, 7), 'newsletter can be published to the permanent link');
+$latest = event_newsletters_latest_published($pdo, 7);
+newsletter_test_assert($latest && (int)$latest['event']['id'] === 1, 'permanent link resolves the published newsletter');
+$pdo->exec("INSERT INTO eventos VALUES (2,'SEGUNDO EVENTO','segundo','Otra fecha','event_flyers/segundo.jpg','2026-10-10 23:59:00',7,NULL)");
+$pdo->exec("INSERT INTO communication_event_newsletters (event_id,created_by_admin_id,subject,edition) VALUES (2,7,'Segundo','Segundo')");
+$secondNewsletterId = (int)$pdo->lastInsertId();
+event_newsletters_publish($pdo, $secondNewsletterId, 7);
+$latest = event_newsletters_latest_published($pdo, 7);
+newsletter_test_assert($latest && (int)$latest['event']['id'] === 2, 'permanent link always resolves the latest publication');
+$pdo->exec("INSERT INTO eventos VALUES (3,'EVENTO DE OTRO ADMIN','tercero','No mezclar','event_flyers/tercero.jpg','2026-11-10 23:59:00',8,NULL)");
+$pdo->exec("INSERT INTO communication_event_newsletters (event_id,created_by_admin_id,subject,edition) VALUES (3,8,'Tercero','Tercero')");
+$otherAdminNewsletterId = (int)$pdo->lastInsertId();
+event_newsletters_publish($pdo, $otherAdminNewsletterId, 8);
+$latest = event_newsletters_latest_published($pdo, 7);
+newsletter_test_assert($latest && (int)$latest['event']['id'] === 2, 'another administrator publication never replaces this administrator newsletter');
+newsletter_test_assert(event_newsletters_latest_published($pdo, 8)['event']['id'] == 3, 'each administrator resolves only their own latest newsletter');
+newsletter_test_assert(substr(event_newsletters_public_url(7), -22) === 'newsletter.php?admin=7', 'public newsletter URL remains stable per administrator');
 echo 'ALL EVENT NEWSLETTER TESTS PASSED' . PHP_EOL;

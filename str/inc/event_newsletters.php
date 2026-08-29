@@ -23,6 +23,7 @@ if (!function_exists('event_newsletters_ensure_schema')) {
             lineup_image_path TEXT,
             template_id INTEGER,
             campaign_id INTEGER,
+            published_at TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )');
@@ -32,6 +33,10 @@ if (!function_exists('event_newsletters_ensure_schema')) {
         if (!event_newsletters_table_has_column($pdo, 'communication_event_newsletters', 'lineup_image_path')) {
             $pdo->exec('ALTER TABLE communication_event_newsletters ADD COLUMN lineup_image_path TEXT');
         }
+        if (!event_newsletters_table_has_column($pdo, 'communication_event_newsletters', 'published_at')) {
+            $pdo->exec('ALTER TABLE communication_event_newsletters ADD COLUMN published_at TEXT');
+        }
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_event_newsletter_published ON communication_event_newsletters(published_at)');
 
         $pdo->exec('CREATE TABLE IF NOT EXISTS communication_event_newsletter_artists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -193,6 +198,42 @@ if (!function_exists('event_newsletters_find')) {
         $st->execute(array(':eid' => (int)$eventId));
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ? $row : null;
+    }
+}
+
+if (!function_exists('event_newsletters_public_url')) {
+    function event_newsletters_public_url($adminId)
+    {
+        return event_newsletters_absolute_url('newsletter.php?admin=' . (int)$adminId);
+    }
+}
+
+if (!function_exists('event_newsletters_publish')) {
+    function event_newsletters_publish($pdo, $newsletterId, $adminId)
+    {
+        event_newsletters_ensure_schema($pdo);
+        $st = $pdo->prepare('UPDATE communication_event_newsletters SET published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND created_by_admin_id=:admin');
+        $st->execute(array(':id' => (int)$newsletterId, ':admin' => (int)$adminId));
+        return $st->rowCount() === 1;
+    }
+}
+
+if (!function_exists('event_newsletters_latest_published')) {
+    function event_newsletters_latest_published($pdo, $adminId)
+    {
+        event_newsletters_ensure_schema($pdo);
+        $adminId = (int)$adminId;
+        if ($adminId <= 0) return null;
+        $trashSql = event_newsletters_table_has_column($pdo, 'eventos', 'borrado_en') ? ' AND e.borrado_en IS NULL' : '';
+        $st = $pdo->prepare('SELECT n.* FROM communication_event_newsletters n JOIN eventos e ON e.id=n.event_id WHERE n.published_at IS NOT NULL AND n.created_by_admin_id=:admin' . $trashSql . ' ORDER BY datetime(n.published_at) DESC,n.id DESC LIMIT 1');
+        $st->execute(array(':admin' => $adminId));
+        $newsletter = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$newsletter) return null;
+        $eventSt = $pdo->prepare('SELECT * FROM eventos WHERE id=:id LIMIT 1');
+        $eventSt->execute(array(':id' => (int)$newsletter['event_id']));
+        $event = $eventSt->fetch(PDO::FETCH_ASSOC);
+        if (!$event) return null;
+        return array('newsletter' => $newsletter, 'event' => $event);
     }
 }
 
