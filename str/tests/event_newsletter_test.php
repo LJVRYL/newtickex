@@ -39,6 +39,9 @@ newsletter_test_assert(strpos($rendered['body_html'], 'Artista Uno') !== false &
 newsletter_test_assert(strpos($rendered['body_html'], 'Primera reseña.') !== false, 'artist reviews are rendered');
 newsletter_test_assert(strpos($rendered['body_html'], 'newsletter_uploads/event_1/lineup.jpg') !== false, 'one combined lineup image is rendered');
 newsletter_test_assert(substr_count($rendered['body_html'], 'newsletter_uploads/event_1/lineup.jpg') === 1, 'combined lineup image is not duplicated per artist');
+newsletter_test_assert(strpos($rendered['body_html'], 'Artista Uno') < strpos($rendered['body_html'], 'newsletter_uploads/event_1/lineup.jpg'), 'principal artist is rendered above the lineup image');
+newsletter_test_assert(strpos($rendered['body_html'], 'Artista Dos') > strpos($rendered['body_html'], 'newsletter_uploads/event_1/lineup.jpg'), 'secondary artists are rendered below the lineup image');
+newsletter_test_assert(substr_count($rendered['body_html'], 'SAVE THE RAVE — NUEVA FECHA') === 1, 'event edition is rendered only once');
 newsletter_test_assert(strpos($rendered['body_html'], 'sobre-fiesta.jpg') !== false && strpos($rendered['body_html'], 'final-abajo.jpg') !== false, 'original fixed visual assets are preserved');
 newsletter_test_assert(strpos($rendered['body_html'], 'SAVE THE RAVE es un ciclo') !== false, 'fixed SAVE THE RAVE description is included');
 newsletter_test_assert(strpos($rendered['body_html'], 'Comprar entradas') !== false, 'checkout CTA is rendered');
