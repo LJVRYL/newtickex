@@ -129,8 +129,11 @@ if (!function_exists('communication_delivery_feedback_process_line')) {
         if (!$event) return array('parsed'=>false,'stored'=>false);
 
         if ($event['type'] === 'accepted') {
-            $st = $pdo->prepare('INSERT INTO communication_exim_messages(exim_message_id,trace_id,sender_email,accepted_at,created_at,updated_at) VALUES(:mid,:trace,:sender,:at,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(exim_message_id) DO UPDATE SET trace_id=excluded.trace_id,sender_email=excluded.sender_email,accepted_at=excluded.accepted_at,updated_at=CURRENT_TIMESTAMP');
-            $st->execute(array(':mid'=>$event['message_id'],':trace'=>$event['trace_id'],':sender'=>$event['sender'],':at'=>$event['observed_at']));
+            $messageParams = array(':mid'=>$event['message_id'],':trace'=>$event['trace_id'],':sender'=>$event['sender'],':at'=>$event['observed_at']);
+            $st = $pdo->prepare('INSERT OR IGNORE INTO communication_exim_messages(exim_message_id,trace_id,sender_email,accepted_at,created_at,updated_at) VALUES(:mid,:trace,:sender,:at,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)');
+            $st->execute($messageParams);
+            $st = $pdo->prepare('UPDATE communication_exim_messages SET trace_id=:trace,sender_email=:sender,accepted_at=:at,updated_at=CURRENT_TIMESTAMP WHERE exim_message_id=:mid');
+            $st->execute($messageParams);
             $up = $pdo->prepare("UPDATE email_logs SET exim_message_id=:mid,delivery_status=COALESCE(NULLIF(delivery_status,''),'accepted'),delivery_status_at=COALESCE(delivery_status_at,:at) WHERE trace_id=:trace");
             $up->execute(array(':mid'=>$event['message_id'],':at'=>$event['observed_at'],':trace'=>$event['trace_id']));
             return array('parsed'=>true,'stored'=>true,'type'=>'accepted');
@@ -183,8 +186,11 @@ if (!function_exists('communication_delivery_feedback_process_log')) {
         }
         $newOffset = ftell($fh);
         fclose($fh);
-        $up = $pdo->prepare('INSERT INTO communication_delivery_log_cursors(log_path,inode,byte_offset,updated_at) VALUES(:path,:inode,:offset,CURRENT_TIMESTAMP) ON CONFLICT(log_path) DO UPDATE SET inode=excluded.inode,byte_offset=excluded.byte_offset,updated_at=CURRENT_TIMESTAMP');
-        $up->execute(array(':path'=>$logPath,':inode'=>$inode,':offset'=>$newOffset));
+        $cursorParams = array(':path'=>$logPath,':inode'=>$inode,':offset'=>$newOffset);
+        $up = $pdo->prepare('INSERT OR IGNORE INTO communication_delivery_log_cursors(log_path,inode,byte_offset,updated_at) VALUES(:path,:inode,:offset,CURRENT_TIMESTAMP)');
+        $up->execute($cursorParams);
+        $up = $pdo->prepare('UPDATE communication_delivery_log_cursors SET inode=:inode,byte_offset=:offset,updated_at=CURRENT_TIMESTAMP WHERE log_path=:path');
+        $up->execute($cursorParams);
         $counts['offset'] = $newOffset;
         return $counts;
     }
