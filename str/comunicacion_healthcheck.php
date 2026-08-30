@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/communication_ops.php';
+require_once __DIR__ . '/inc/communication_delivery_feedback.php';
 
 require_login();
 $cu = current_user();
@@ -98,6 +99,7 @@ $logs = communication_ops_fetch_latest_logs($pdo, $organizationId, 120);
 $templates = communication_campaigns_fetch_templates($pdo, $organizationId, $adminId, $isSuper);
 $audiences = communication_campaigns_fetch_audiences($pdo, $organizationId, $adminId, $isSuper);
 $campaigns = communication_ops_fetch_campaigns($pdo, $organizationId, $adminId, $isSuper);
+$deliveryMetrics = communication_delivery_feedback_metrics($pdo, 30, $adminId, $isSuper);
 
 $title = 'Comunicacion - Health Check';
 include __DIR__ . '/inc/layout_top.php';
@@ -110,6 +112,17 @@ include __DIR__ . '/inc/layout_top.php';
     <h2 style="margin:0;">Health Check Tecnico</h2>
   </div>
   <span class="muted">Operacion, integridad, logging y pruebas controladas.</span>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Entrega real de emails (ultimos 30 dias)</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+    <div><div class="muted">Entregados por Exim</div><strong><?php echo (int)$deliveryMetrics['delivered']; ?></strong></div>
+    <div><div class="muted">Demoras registradas</div><strong><?php echo (int)$deliveryMetrics['deferred']; ?></strong></div>
+    <div><div class="muted">Rebotes</div><strong><?php echo (int)$deliveryMetrics['bounced']; ?></strong></div>
+    <div><div class="muted">Casillas inexistentes detectadas</div><strong><?php echo (int)$deliveryMetrics['hard_bounces']; ?></strong></div>
+  </div>
+  <p class="muted" style="margin-bottom:0;">Los rebotes se muestran para revision. Esta version no bloquea contactos automaticamente.</p>
 </div>
 
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">

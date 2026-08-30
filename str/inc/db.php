@@ -1,5 +1,6 @@
 <?php
 // inc/db.php (PHP5-safe)
+require_once __DIR__ . '/communication_delivery_feedback.php';
 function db(){
     static $pdo = null;
     if ($pdo) return $pdo;
@@ -411,6 +412,7 @@ SQL;
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_created_at ON email_logs(created_at)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_to ON email_logs(to_email)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_context ON email_logs(context)");
+            communication_delivery_feedback_ensure_schema($pdo);
 
                         // email_templates: plantillas editables para envíos del sistema
                         $pdo->exec("CREATE TABLE IF NOT EXISTS email_templates (
