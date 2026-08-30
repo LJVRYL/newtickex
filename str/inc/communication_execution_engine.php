@@ -3,6 +3,7 @@ require_once __DIR__ . '/communication_contacts.php';
 require_once __DIR__ . '/communication_campaigns.php';
 require_once __DIR__ . '/communication_template_renderer.php';
 require_once __DIR__ . '/communication_transport.php';
+require_once __DIR__ . '/communication_suppressions.php';
 
 if (!function_exists('communication_execution_now')) {
     function communication_execution_now()
@@ -116,6 +117,7 @@ if (!function_exists('communication_execution_ensure_schema')) {
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_run_status ON communication_campaign_run_recipients(run_id, status)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_campaign_fp ON communication_campaign_run_recipients(campaign_id, recipient_fingerprint, status)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_attempts_run ON communication_campaign_delivery_attempts(run_id, recipient_fingerprint)');
+        communication_suppressions_ensure_schema($pdo);
     }
 }
 
@@ -238,7 +240,7 @@ if (!function_exists('communication_execution_update_command')) {
         while ($attempts < 3 && !$updated) {
             $attempts++;
             try {
-                $st = $pdo->prepare('UPDATE communication_execution_commands SET status = :st, result_json = :rj, error_text = :er, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+                $st = $pdo->prepare('UPDATE communication_execution_commands SET status = :st, result_json = :rj, error_text = :er, locked_by = NULL, lock_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
                 $st->execute($params);
                 $updated = true;
             } catch (PDOException $e) {
@@ -319,7 +321,7 @@ if (!function_exists('communication_execution_update_run_snapshot')) {
 }
 
 if (!function_exists('communication_execution_materialize_recipients')) {
-    function communication_execution_materialize_recipients($pdo, $runId, $campaignId, $contacts)
+    function communication_execution_materialize_recipients($pdo, $runId, $campaignId, $contacts, $organizationId = 1, $adminId = 0)
     {
         $contacts = is_array($contacts) ? $contacts : array();
         $count = 0;
@@ -328,7 +330,8 @@ if (!function_exists('communication_execution_materialize_recipients')) {
 
         foreach ($contacts as $row) {
             $email = isset($row['email']) ? trim((string)$row['email']) : '';
-            if ($email === '') continue;
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !empty($row['bloqueado'])) continue;
+            if (communication_suppressions_is_suppressed($pdo, $organizationId, $adminId, $email)) continue;
             $name = isset($row['nombre']) ? (string)$row['nombre'] : '';
             $fp = communication_execution_email_fingerprint($email);
             $st->execute(array(
@@ -457,6 +460,15 @@ if (!function_exists('communication_execution_finalize_run_and_campaign')) {
     {
         $counts = communication_execution_refresh_run_counters($pdo, $runId);
 
+        $pending = (int)$counts['queued'] + (int)$counts['processing'];
+        if ($pending > 0) {
+            return array(
+                'complete' => false,
+                'campaign_status' => 'sending',
+                'counts' => $counts,
+            );
+        }
+
         $stRun = $pdo->prepare('UPDATE communication_campaign_runs SET status = :st, finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
         $stCamp = $pdo->prepare('UPDATE communication_campaigns SET status = :st, sent_at = CASE WHEN :st = "sent" THEN CURRENT_TIMESTAMP ELSE sent_at END, failed_at = CASE WHEN :st = "failed" THEN CURRENT_TIMESTAMP ELSE failed_at END, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
 
@@ -475,7 +487,7 @@ if (!function_exists('communication_execution_finalize_run_and_campaign')) {
             ), 'run.finalized|' . (int)$runId . '|' . (string)$campaignStatus);
         }
 
-        return array('campaign_status' => $campaignStatus, 'counts' => $counts);
+        return array('complete' => true, 'campaign_status' => $campaignStatus, 'counts' => $counts);
     }
 }
 
@@ -488,7 +500,10 @@ if (!function_exists('communication_execution_process_run_recipients')) {
         $runId = (int)$run['id'];
         $campaignId = (int)$campaign['id'];
 
-        $stSel = $pdo->prepare('SELECT * FROM communication_campaign_run_recipients WHERE run_id = :rid AND status IN (\'queued\',\'processing\',\'transient_error\') ORDER BY id ASC LIMIT :lim');
+        $stRecover = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :queued, locked_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE run_id = :rid AND status = :processing AND locked_until IS NOT NULL AND locked_until <= CURRENT_TIMESTAMP');
+        $stRecover->execute(array(':queued' => 'queued', ':processing' => 'processing', ':rid' => $runId));
+
+        $stSel = $pdo->prepare('SELECT * FROM communication_campaign_run_recipients WHERE run_id = :rid AND status = \'queued\' ORDER BY id ASC LIMIT :lim');
         $stSel->bindValue(':rid', $runId, PDO::PARAM_INT);
         $stSel->bindValue(':lim', $batchSize, PDO::PARAM_INT);
         $stSel->execute();
@@ -506,8 +521,9 @@ if (!function_exists('communication_execution_process_run_recipients')) {
                 continue;
             }
 
-            $stLock = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, locked_until = datetime(\'now\',\'+5 minutes\'), attempt_count = :an, last_attempt_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
-            $stLock->execute(array(':st' => 'processing', ':an' => $attemptNo, ':id' => $recipientId));
+            $stLock = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, locked_until = datetime(\'now\',\'+5 minutes\'), attempt_count = :an, last_attempt_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND status = :queued');
+            $stLock->execute(array(':st' => 'processing', ':an' => $attemptNo, ':id' => $recipientId, ':queued' => 'queued'));
+            if ($stLock->rowCount() === 0) continue;
 
             if (communication_execution_is_duplicate_accepted($pdo, $campaignId, $runId, $fingerprint)) {
                 $stDup = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
@@ -518,14 +534,24 @@ if (!function_exists('communication_execution_process_run_recipients')) {
             $data = communication_variables_default_sample();
             $data['nombre'] = isset($rcpt['recipient_name']) && trim((string)$rcpt['recipient_name']) !== '' ? (string)$rcpt['recipient_name'] : (isset($data['nombre']) ? $data['nombre'] : '');
             $data['fecha'] = communication_execution_now();
+            $unsubscribeToken = communication_suppressions_token_for($pdo, $organizationId, isset($scope['admin_id']) ? (int)$scope['admin_id'] : 0, $email);
+            $unsubscribeUrl = communication_suppressions_url($unsubscribeToken);
+            $data['unsubscribe_url'] = $unsubscribeUrl;
 
             $subjectSnapshot = isset($run['snapshot_subject']) ? (string)$run['snapshot_subject'] : '';
             $htmlSnapshot = isset($run['snapshot_body_html']) ? (string)$run['snapshot_body_html'] : '';
             $textSnapshot = isset($run['snapshot_body_text']) ? (string)$run['snapshot_body_text'] : '';
 
             $subject = communication_template_renderer_apply($subjectSnapshot, $data);
-            $bodyHtml = communication_template_renderer_apply($htmlSnapshot, $data);
+            $htmlData = $data;
+            if (isset($htmlData['nombre'])) {
+                $htmlData['nombre'] = htmlspecialchars((string)$htmlData['nombre'], ENT_QUOTES, 'UTF-8');
+            }
+            $bodyHtml = communication_template_renderer_apply($htmlSnapshot, $htmlData);
             $bodyText = communication_template_renderer_apply($textSnapshot, $data);
+            $footerBodies = communication_suppressions_append_footer($bodyHtml, $bodyText, $unsubscribeUrl);
+            $bodyHtml = $footerBodies['body_html'];
+            $bodyText = $footerBodies['body_text'];
 
             $transport = communication_transport_send($pdo, (int)$organizationId, array(
                 'channel' => 'email',
@@ -533,6 +559,7 @@ if (!function_exists('communication_execution_process_run_recipients')) {
                 'subject' => $subject,
                 'body_html' => $bodyHtml,
                 'body_text' => $bodyText,
+                'unsubscribe_url' => $unsubscribeUrl,
             ), array(
                 'channel' => 'email',
                 'campaign_id' => $campaignId,
@@ -564,7 +591,7 @@ if (!function_exists('communication_execution_process_run_recipients')) {
             while ($upAttempts < 4 && !$updatedRecipient) {
                 $upAttempts++;
                 try {
-                    $stUp = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, last_response_code = :rc, last_response_message = :rm, provider_name = :pn, provider_message_id = :pmid, processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+                    $stUp = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, last_response_code = :rc, last_response_message = :rm, provider_name = :pn, provider_message_id = :pmid, locked_until = NULL, processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
                     $stUp->execute($paramsUp);
                     $updatedRecipient = true;
                 } catch (PDOException $e) {
@@ -578,6 +605,8 @@ if (!function_exists('communication_execution_process_run_recipients')) {
                 }
             }
         }
+
+        return count($rows);
     }
 }
 
@@ -665,7 +694,7 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
             $filters = communication_contacts_filters_from_json(isset($audience['filters_json']) ? $audience['filters_json'] : '');
             $allContacts = communication_contacts_resolve($pdo, $scope);
             $targetRows = communication_contacts_apply_filters(array_values($allContacts), $filters);
-            communication_execution_materialize_recipients($pdo, $runId, $campaignId, $targetRows);
+            communication_execution_materialize_recipients($pdo, $runId, $campaignId, $targetRows, $organizationId, $requestAdminId);
 
             if (function_exists('communication_ops_log')) {
                 communication_ops_log($pdo, $organizationId, 'engine', 'run.snapshot_materialized', 'info', 'Snapshot y destinatarios materializados.', array(
@@ -688,6 +717,7 @@ if (!function_exists('communication_execution_process_command_execute_campaign')
 
         return array(
             'ok' => true,
+            'complete' => !empty($final['complete']),
             'run_id' => $runId,
             'campaign_status' => isset($final['campaign_status']) ? $final['campaign_status'] : null,
             'counts' => isset($final['counts']) ? $final['counts'] : array(),
@@ -722,6 +752,11 @@ if (!function_exists('communication_execution_process_single_command')) {
             if (!empty($result['cancelled'])) {
                 communication_execution_update_command($pdo, $commandId, 'cancelled', json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), isset($result['message']) ? $result['message'] : null);
                 return array('processed' => true, 'status' => 'cancelled', 'result' => $result);
+            }
+
+            if (empty($result['complete'])) {
+                communication_execution_update_command($pdo, $commandId, 'queued', json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), null);
+                return array('processed' => true, 'status' => 'queued', 'result' => $result);
             }
 
             communication_execution_update_command($pdo, $commandId, 'done', json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), null);
@@ -763,23 +798,25 @@ if (!function_exists('communication_execution_process_queue')) {
             $workerId = 'worker-' . getmypid() . '-' . mt_rand(1000, 9999);
         }
 
-        $stSel = $pdo->prepare('SELECT id FROM communication_execution_commands WHERE status = :st AND (scheduled_for IS NULL OR scheduled_for <= CURRENT_TIMESTAMP) ORDER BY id ASC LIMIT :lim');
-        $stSel->bindValue(':st', 'queued');
-        $stSel->bindValue(':lim', $maxCommands, PDO::PARAM_INT);
-        $stSel->execute();
-        $ids = $stSel->fetchAll(PDO::FETCH_COLUMN);
-
         $out = array(
             'worker_id' => $workerId,
             'recovered' => $recovered,
-            'picked' => count($ids),
+            'picked' => 0,
             'done' => 0,
             'failed' => 0,
             'cancelled' => 0,
             'details' => array(),
         );
 
-        foreach ($ids as $id) {
+        for ($iteration = 0; $iteration < $maxCommands; $iteration++) {
+            // Elegir de nuevo en cada vuelta permite que un comando reencolado
+            // continúe con el lote siguiente dentro de la misma ejecución.
+            $stSel = $pdo->prepare('SELECT id FROM communication_execution_commands WHERE status = :st AND (scheduled_for IS NULL OR scheduled_for <= CURRENT_TIMESTAMP) ORDER BY id ASC LIMIT 1');
+            $stSel->execute(array(':st' => 'queued'));
+            $id = $stSel->fetchColumn();
+            if (!$id) break;
+
+            $out['picked']++;
             $res = communication_execution_process_single_command($pdo, (int)$id, $workerId, $batchSize);
             $out['details'][] = array('command_id' => (int)$id, 'result' => $res);
             if (!empty($res['processed'])) {

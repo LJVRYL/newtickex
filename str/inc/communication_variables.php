@@ -52,6 +52,12 @@ if (!function_exists('communication_variables_catalog')) {
                 'type' => 'string',
                 'example' => 'Tickex Producciones',
             ),
+            'unsubscribe_url' => array(
+                'label' => 'URL de baja',
+                'description' => 'Enlace personal para dejar de recibir campañas del organizador.',
+                'type' => 'url',
+                'example' => 'https://str.tickex.com.ar/unsubscribe.php?token=ejemplo',
+            ),
         );
     }
 }

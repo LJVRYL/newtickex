@@ -276,9 +276,13 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
         }
     }
 
-    $fromEmail = isset($opts['from_email']) ? $opts['from_email'] : 'no-reply@tickex.com.ar';
-    $fromName2 = isset($opts['from_name']) ? $opts['from_name'] : '';
-    $replyTo   = isset($opts['reply_to']) ? $opts['reply_to'] : $fromEmail;
+    $to = trim(str_replace(array("\r", "\n"), '', (string)$to));
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
+    $subject = trim(str_replace(array("\r", "\n"), ' ', (string)$subject));
+
+    $fromEmail = isset($opts['from_email']) ? trim(str_replace(array("\r", "\n"), '', (string)$opts['from_email'])) : 'no-reply@tickex.com.ar';
+    $fromName2 = isset($opts['from_name']) ? trim(str_replace(array("\r", "\n"), ' ', (string)$opts['from_name'])) : '';
+    $replyTo   = isset($opts['reply_to']) ? trim(str_replace(array("\r", "\n"), '', (string)$opts['reply_to'])) : $fromEmail;
     $extra     = isset($opts['extra_params']) ? $opts['extra_params'] : '';
 
     $traceId = tickex_mail_make_trace_id();
@@ -300,8 +304,11 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
 
     $fromHeader = $fromEmail;
     if ($fromName2 !== '') {
-        $fromHeader = $fromName2 . ' <' . $fromEmail . '>';
+        $encodedFromName = preg_match('/[^\x20-\x7E]/', $fromName2) ? '=?UTF-8?B?' . base64_encode($fromName2) . '?=' : $fromName2;
+        $fromHeader = $encodedFromName . ' <' . $fromEmail . '>';
     }
+
+    $encodedSubject = preg_match('/[^\x20-\x7E]/', $subject) ? '=?UTF-8?B?' . base64_encode($subject) . '?=' : $subject;
 
     $contentType = 'text/plain';
     if (!empty($opts['content_type'])) {
@@ -329,9 +336,9 @@ function tickex_send_mail($to, $subject, $body, $fromOrOpts = 'no-reply@tickex.c
     if (is_string($fakeTransport) && strtolower(trim($fakeTransport)) === 'fake') {
         $ok = true;
     } elseif ($extra !== '') {
-        $ok = @mail($to, $subject, $body, $headers, $extra);
+        $ok = @mail($to, $encodedSubject, $body, $headers, $extra);
     } else {
-        $ok = @mail($to, $subject, $body, $headers);
+        $ok = @mail($to, $encodedSubject, $body, $headers);
     }
 
     if (!$ok) {

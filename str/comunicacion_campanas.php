@@ -743,7 +743,17 @@ include __DIR__ . '/inc/layout_top.php';
         'Comando #' + enqueueData.command_id
       ]);
 
-      fetch(workerUrl + '?max=100&worker=' + encodeURIComponent('ui-' + campaignId + '-' + Date.now()), { credentials: 'same-origin' })
+      fetch(workerUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: new URLSearchParams({
+          csrf: csrfToken,
+          max: '100',
+          batch_size: '200',
+          worker: 'ui-' + campaignId + '-' + Date.now()
+        }).toString()
+      })
         .then(function(response) { return response.text(); })
         .then(function() {
           setStatus('Worker lanzado. Consultando progreso...', 25, [

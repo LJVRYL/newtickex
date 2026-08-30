@@ -31,6 +31,10 @@ if (!function_exists('communication_transport_provider_legacy_mail_send')) {
             'related_id' => isset($context['campaign_run_id']) ? (int)$context['campaign_run_id'] : null,
             'is_html' => $isHtml ? 1 : 0,
         );
+        $unsubscribeUrl = isset($message['unsubscribe_url']) ? trim((string)$message['unsubscribe_url']) : '';
+        if ($unsubscribeUrl !== '') {
+            $opts['headers_extra'] = 'List-Unsubscribe: <' . $unsubscribeUrl . ">\r\n" . 'List-Unsubscribe-Post: List-Unsubscribe=One-Click';
+        }
 
         $ok = tickex_send_mail($to, $subject, $body, $opts);
 

@@ -3,24 +3,56 @@ require_once __DIR__ . '/../inc/bootstrap.php';
 require_once __DIR__ . '/../inc/communication_execution_engine.php';
 require_once __DIR__ . '/../inc/communication_ops.php';
 
+$isCli = (PHP_SAPI === 'cli');
+if (!$isCli) {
+    require_login();
+    $cu = current_user();
+    $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
+    $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
+    $isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+    if (!$isAllowed) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(array('ok' => false, 'error' => 'Acceso restringido.'));
+        exit;
+    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        header('Allow: POST');
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(array('ok' => false, 'error' => 'Metodo no permitido.'));
+        exit;
+    }
+    $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+    if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+        http_response_code(400);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(array('ok' => false, 'error' => 'CSRF invalido.'));
+        exit;
+    }
+}
+
 $pdo = db();
+$input = $isCli ? array() : $_POST;
 $max = 5;
-if (isset($_GET['max'])) {
-    $max = (int)$_GET['max'];
+if (isset($input['max'])) {
+    $max = (int)$input['max'];
 }
 if ($max <= 0) $max = 5;
+if ($max > 100) $max = 100;
 
 $batchSize = 200;
-if (isset($_GET['batch_size'])) {
-    $batchSize = (int)$_GET['batch_size'];
-} elseif (isset($_GET['batch'])) {
-    $batchSize = (int)$_GET['batch'];
+if (isset($input['batch_size'])) {
+    $batchSize = (int)$input['batch_size'];
+} elseif (isset($input['batch'])) {
+    $batchSize = (int)$input['batch'];
 }
 if ($batchSize <= 0) $batchSize = 200;
+if ($batchSize > 500) $batchSize = 500;
 
-$workerId = isset($_GET['worker']) ? trim((string)$_GET['worker']) : '';
+$workerId = isset($input['worker']) ? trim((string)$input['worker']) : '';
 if ($workerId === '') {
-    $workerId = 'web-worker-' . getmypid();
+    $workerId = ($isCli ? 'cli-worker-' : 'web-worker-') . getmypid();
 }
 
 $result = communication_execution_process_queue($pdo, $max, $workerId, $batchSize);

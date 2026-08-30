@@ -268,12 +268,27 @@ function db(){
                 latency_ms INTEGER,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS communication_email_preferences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL DEFAULT 1,
+                admin_id INTEGER NOT NULL DEFAULT 0,
+                email TEXT NOT NULL,
+                token TEXT NOT NULL,
+                unsubscribed_at TEXT,
+                reason TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(organization_id, admin_id, email),
+                UNIQUE(token)
+            )');
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_exec_cmd_status ON communication_execution_commands(status, scheduled_for)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_exec_cmd_campaign ON communication_execution_commands(campaign_id)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_runs_campaign ON communication_campaign_runs(campaign_id, status)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_run_status ON communication_campaign_run_recipients(run_id, status)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_campaign_fp ON communication_campaign_run_recipients(campaign_id, recipient_fingerprint, status)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_attempts_run ON communication_campaign_delivery_attempts(run_id, recipient_fingerprint)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_email_pref_scope ON communication_email_preferences(organization_id, admin_id, unsubscribed_at)");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_comm_email_pref_email ON communication_email_preferences(email COLLATE NOCASE)");
         } catch (Exception $e) {
             // no bloquear si falla
         }

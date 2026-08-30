@@ -488,7 +488,7 @@ include __DIR__ . '/inc/layout_top.php';
     <div>
       <label>Bloqueado</label>
       <select name="filter_blocked">
-        <option value="" <?php echo !isset($formFilters['blocked']) ? 'selected' : ''; ?>>Todos</option>
+        <option value="" <?php echo !isset($formFilters['blocked']) ? 'selected' : ''; ?>>Todos (no recomendado)</option>
         <option value="yes" <?php echo (isset($formFilters['blocked']) && $formFilters['blocked'] === 'yes') ? 'selected' : ''; ?>>Si</option>
         <option value="no" <?php echo (isset($formFilters['blocked']) && $formFilters['blocked'] === 'no') ? 'selected' : ''; ?>>No</option>
       </select>

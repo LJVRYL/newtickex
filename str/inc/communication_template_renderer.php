@@ -17,7 +17,11 @@ if (!function_exists('communication_template_renderer_apply')) {
             if (isset($data[$key]) && !is_array($data[$key]) && !is_object($data[$key])) {
                 $val = (string)$data[$key];
             }
-            $templateText = preg_replace('/{{\s*' . preg_quote($key, '/') . '\s*}}/', $val, $templateText);
+            $templateText = preg_replace_callback(
+                '/{{\s*' . preg_quote($key, '/') . '\s*}}/',
+                function () use ($val) { return $val; },
+                $templateText
+            );
         }
 
         return $templateText;

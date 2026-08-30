@@ -4,7 +4,7 @@ if (!function_exists('communication_contacts_add_row')) {
     function communication_contacts_add_row(&$contacts, $email, $source, $data)
     {
         $email = trim((string)$email);
-        if ($email === '') return;
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return;
 
         $key = strtolower($email);
         if (!isset($contacts[$key])) {
