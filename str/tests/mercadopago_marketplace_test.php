@@ -29,6 +29,7 @@ tickex_mp_ensure_schema($pdo);
 
 mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('mercadopago_marketplace_accounts','mercadopago_event_configs','mercadopago_oauth_states','mercadopago_webhook_events')")->fetchColumn() === 4, 'marketplace schema is created');
 mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM pragma_table_info('tc_orders') WHERE name IN ('payment_provider','provider_payment_id','provider_preference_id','marketplace_fee','seller_admin_id')")->fetchColumn() === 5, 'payment attribution columns are created');
+mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM pragma_table_info('tc_orders') WHERE name IN ('ticket_subtotal','service_fee_amount','service_fee_percent','mp_cost_estimate_percent')")->fetchColumn() === 4, 'service cost audit columns are created');
 
 $encrypted = tickex_mp_encrypt('APP_USR-secret-value');
 mp_test_assert(strpos($encrypted, 'APP_USR-secret-value') === false, 'access token is never stored as plain text');
@@ -61,25 +62,36 @@ mp_test_assert($default['provider'] === 'totalcoin', 'existing events remain on 
 $missingEstimateRejected = false;
 try { tickex_mp_save_platform_settings($pdo, 10, 0, true, 1); } catch (Exception $e) { $missingEstimateRejected = true; }
 mp_test_assert($missingEstimateRejected, 'commercial policy cannot be enabled without a Mercado Pago cost estimate');
-tickex_mp_save_platform_settings($pdo, 10, 6, true, 1);
+tickex_mp_save_platform_settings($pdo, 10, 7.99, true, 1);
 tickex_mp_save_admin_policy($pdo, 7, 'str_owner', '', 1);
 $saved = tickex_mp_save_event_config($pdo, 15, 7, 'totalcoin', 0);
 mp_test_assert($saved['provider'] === 'totalcoin', 'SAVE THE RAVE keeps TotalCoin');
 $clientConfig = tickex_mp_event_config($pdo, 16);
 mp_test_assert($clientConfig['provider'] === 'mercadopago', 'client organizers are forced to Mercado Pago');
-mp_test_assert(abs($clientConfig['marketplace_fee_percent'] - 4.0) < 0.001, 'Tickex fee completes the configured ten percent target estimate');
+mp_test_assert(abs($clientConfig['service_charge_percent'] - 10.0) < 0.001, 'client checkout adds the configured ten percent service charge');
+mp_test_assert(abs($clientConfig['marketplace_fee_percent'] - 1.1009) < 0.001, 'Tickex fee is calculated over the final checkout total');
 $forced = tickex_mp_save_event_config($pdo, 16, 8, 'totalcoin', 0);
 mp_test_assert($forced['provider'] === 'mercadopago', 'client cannot switch its event to TotalCoin');
-$override = tickex_mp_save_admin_policy($pdo, 8, 'client', '3.25', 1);
-mp_test_assert(abs(tickex_mp_event_config($pdo, 16)['marketplace_fee_percent'] - 3.25) < 0.001, 'superadministrator can set a special Tickex fee per client');
+$override = tickex_mp_save_admin_policy($pdo, 8, 'client', '12', 1);
+$overriddenConfig = tickex_mp_event_config($pdo, 16);
+mp_test_assert(abs($overriddenConfig['service_charge_percent'] - 12.0) < 0.001, 'superadministrator can set a special service charge per client');
+mp_test_assert(abs($overriddenConfig['marketplace_fee_percent'] - 2.7243) < 0.001, 'special service charge preserves the organizer nominal price');
+$insufficientOverrideRejected = false;
+try { tickex_mp_save_admin_policy($pdo, 8, 'client', '5', 1); } catch (Exception $e) { $insufficientOverrideRejected = true; }
+mp_test_assert($insufficientOverrideRejected, 'service charge cannot leave the organizer paying the estimated Mercado Pago fee');
 $otherAdminRejected = false;
 try { tickex_mp_save_event_config($pdo, 15, 8, 'totalcoin', 0); } catch (Exception $e) { $otherAdminRejected = true; }
 mp_test_assert($otherAdminRejected, 'another administrator cannot change the event payment account');
 mp_test_assert(abs(tickex_mp_marketplace_fee(10000, 8.5) - 850) < 0.001, 'marketplace fee is calculated once over the order total');
+$breakdown = tickex_mp_checkout_breakdown(10000, 10, 7.99);
+mp_test_assert(abs($breakdown['checkout_total'] - 11000) < 0.001, 'buyer pays ten percent service charge over ticket prices');
+mp_test_assert(abs($breakdown['mp_cost_estimate'] - 878.90) < 0.001, 'Mercado Pago estimated cost is calculated over the checkout total');
+mp_test_assert(abs($breakdown['marketplace_fee'] - 121.10) < 0.001, 'Tickex receives only the remaining service charge');
+mp_test_assert(abs($breakdown['organizer_net_estimate'] - 10000) < 0.001, 'organizer keeps the full nominal ticket price');
 
 $capturedPayload = null;
 $checkout = tickex_mp_create_preference($pdo, 7, array(
-    'amount' => 10000,
+    'amount' => 11000,
     'concept' => 'Entrada Evento de prueba',
     'dni' => '12345678',
     'reference' => 'tickex-mp-test-ref',
@@ -87,13 +99,15 @@ $checkout = tickex_mp_create_preference($pdo, 7, array(
     'first_name' => 'Persona',
     'email' => 'persona@example.invalid',
     'event_id' => 15,
-    'fee_percent' => 8.5,
+    'fee_percent' => $breakdown['marketplace_fee_percent'],
+    'marketplace_fee' => $breakdown['marketplace_fee'],
 ), function ($payload, $seller) use (&$capturedPayload) {
     $capturedPayload = $payload;
     return array('id' => 'TEST-PREFERENCE-1', 'sandbox_init_point' => 'https://sandbox.mercadopago.test/checkout?pref_id=TEST-PREFERENCE-1');
 });
 mp_test_assert($checkout['request_id'] === 'mp-TEST-PREFERENCE-1', 'preference receives a provider-scoped request id');
-mp_test_assert(abs($capturedPayload['marketplace_fee'] - 850) < 0.001, 'Checkout Pro receives the Tickex marketplace fee');
+mp_test_assert(abs($capturedPayload['marketplace_fee'] - 121.10) < 0.001, 'Checkout Pro receives only the Tickex remainder');
+mp_test_assert(abs($capturedPayload['items'][0]['unit_price'] - 11000) < 0.001, 'Checkout Pro charges the buyer the ticket subtotal plus service cost');
 mp_test_assert($capturedPayload['external_reference'] === 'tickex-mp-test-ref', 'preference carries the internal Tickex reference');
 mp_test_assert(strpos($capturedPayload['notification_url'], 'mercadopago_webhook.php') !== false, 'preference registers the HTTPS webhook');
 

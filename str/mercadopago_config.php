@@ -81,6 +81,7 @@ $configured = tickex_mp_configured();
 $settings = tickex_mp_platform_settings($pdo);
 $policy = tickex_mp_admin_policy($pdo, $adminId);
 $effectiveFee = tickex_mp_effective_platform_fee_percent($settings, $policy);
+$effectiveServiceCharge = tickex_mp_effective_service_charge_percent($settings, $policy);
 $stEvents = $pdo->prepare("SELECT e.id,e.nombre,e.fecha_desde,c.provider,c.marketplace_fee_percent FROM eventos e LEFT JOIN mercadopago_event_configs c ON c.event_id=e.id WHERE e.creado_por_admin_id=:admin AND (e.borrado_en IS NULL) ORDER BY e.id DESC");
 $stEvents->execute(array(':admin' => $adminId));
 $events = $stEvents->fetchAll(PDO::FETCH_ASSOC);
@@ -123,7 +124,7 @@ include __DIR__ . '/inc/layout_top.php';
     <strong>Politica de esta cuenta:</strong> <?php echo $policy['account_type'] === 'str_owner' ? 'SAVE THE RAVE / cuenta interna' : 'Organizador cliente'; ?>
     <div class="muted"><?php echo $policy['account_type'] === 'str_owner' ? 'Puede elegir TotalCoin o Mercado Pago por evento.' : 'Los eventos pagos utilizan Mercado Pago obligatoriamente.'; ?></div>
     <?php if ($policy['account_type'] !== 'str_owner'): ?>
-      <div class="muted">Costo total objetivo: <?php echo e(number_format((float)$settings['total_cost_target_percent'], 2, ',', '.')); ?>% · comisión Tickex aplicada: <?php echo e(number_format((float)$effectiveFee, 2, ',', '.')); ?>% · costo Mercado Pago estimado: <?php echo e(number_format((float)$settings['mp_cost_estimate_percent'], 2, ',', '.')); ?>%.</div>
+      <div class="muted">Costo de servicio al comprador: <?php echo e(number_format((float)$effectiveServiceCharge, 2, ',', '.')); ?>% · fee Tickex estimado sobre el total: <?php echo e(number_format((float)$effectiveFee, 2, ',', '.')); ?>% · costo Mercado Pago estimado: <?php echo e(number_format((float)$settings['mp_cost_estimate_percent'], 2, ',', '.')); ?>%.</div>
     <?php endif; ?>
   </div>
 </div>
@@ -131,11 +132,11 @@ include __DIR__ . '/inc/layout_top.php';
 <?php if ($isSuper): ?>
 <div class="card">
   <h3 style="margin-top:0;">Politica general de la plataforma</h3>
-  <p class="muted">La comision Tickex se calcula como costo total objetivo menos costo estimado de Mercado Pago. El costo real de Mercado Pago puede variar segun el medio y plazo elegido.</p>
+  <p class="muted">El comprador paga el costo de servicio sobre las entradas. Tickex toma solamente el remanente estimado despues de la comision de Mercado Pago, para que el organizador conserve el precio nominal publicado.</p>
   <form method="post">
     <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <div style="display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:10px;align-items:end;">
-      <label>Costo total objetivo (%)<input type="number" name="total_cost_target_percent" min="0" max="100" step="0.01" value="<?php echo e($settings['total_cost_target_percent']); ?>"></label>
+      <label>Costo de servicio al comprador (%)<input type="number" name="total_cost_target_percent" min="0" max="100" step="0.01" value="<?php echo e($settings['total_cost_target_percent']); ?>"></label>
       <label>Costo estimado Mercado Pago (%)<input type="number" name="mp_cost_estimate_percent" min="0" max="100" step="0.01" value="<?php echo e($settings['mp_cost_estimate_percent']); ?>"></label>
       <div><strong>Fee resultante Tickex:</strong><br><?php echo e(number_format((float)tickex_mp_effective_platform_fee_percent($settings, array('platform_fee_override_percent' => null)), 2, ',', '.')); ?>%</div>
     </div>
@@ -155,7 +156,7 @@ include __DIR__ . '/inc/layout_top.php';
       <div style="display:grid;grid-template-columns:minmax(230px,1fr) 210px 190px auto;gap:10px;align-items:end;">
         <div><strong><?php echo e(isset($adminRow['nombre']) ? $adminRow['nombre'] : 'Administrador'); ?></strong><div class="muted">#<?php echo (int)$adminRow['id']; ?> · <?php echo e(isset($adminRow['email']) ? $adminRow['email'] : ''); ?> · MP <?php echo $adminAccount && $adminAccount['status'] === 'connected' ? 'conectado' : 'sin conectar'; ?></div></div>
         <label>Tipo de cuenta<select name="account_type"><option value="client"<?php echo $adminPolicy['account_type'] === 'client' ? ' selected' : ''; ?>>Organizador cliente</option><option value="str_owner"<?php echo $adminPolicy['account_type'] === 'str_owner' ? ' selected' : ''; ?>>SAVE THE RAVE / interna</option></select></label>
-        <label>Fee Tickex especial (%)<input type="number" name="fee_override" min="0" max="100" step="0.01" placeholder="Usar general" value="<?php echo $adminPolicy['platform_fee_override_percent'] === null ? '' : e($adminPolicy['platform_fee_override_percent']); ?>"></label>
+        <label>Costo de servicio especial (%)<input type="number" name="fee_override" min="0" max="100" step="0.01" placeholder="Usar general" value="<?php echo $adminPolicy['platform_fee_override_percent'] === null ? '' : e($adminPolicy['platform_fee_override_percent']); ?>"></label>
         <button class="btn" type="submit" name="save_policy" value="1">Guardar</button>
       </div>
     </form>
@@ -179,7 +180,7 @@ include __DIR__ . '/inc/layout_top.php';
           <button class="btn" type="submit" name="save_event" value="1">Guardar</button>
         <?php else: ?>
           <input type="hidden" name="provider" value="mercadopago">
-          <div><strong>Mercado Pago Split</strong><div class="muted">Fee Tickex automático: <?php echo e(number_format((float)$eventConfig['marketplace_fee_percent'], 2, ',', '.')); ?>%</div></div>
+          <div><strong>Mercado Pago Split</strong><div class="muted">Servicio al comprador: <?php echo e(number_format((float)$eventConfig['service_charge_percent'], 2, ',', '.')); ?>% · fee Tickex estimado: <?php echo e(number_format((float)$eventConfig['marketplace_fee_percent'], 2, ',', '.')); ?>%</div></div>
           <span class="muted">Administrado por Tickex</span>
         <?php endif; ?>
       </div>

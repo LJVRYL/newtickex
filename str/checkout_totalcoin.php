@@ -24,6 +24,9 @@ $eventOwnerAdminId = 0;
 $paymentProvider = 'totalcoin';
 $paymentProviderPreferenceId = '';
 $paymentProviderFee = null;
+$checkoutServicePercent = 0;
+$checkoutMpCostPercent = 0;
+$checkoutBreakdown = null;
 $gatewayRequestId = '';
 $step = 'select';
 $csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
@@ -38,6 +41,9 @@ $communicationTrackingToken = preg_replace('/[^a-f0-9]/i', '', $communicationTra
 if (strlen($communicationTrackingToken) < 32 || strlen($communicationTrackingToken) > 96) $communicationTrackingToken = '';
 $preview = array(
   'selected' => array(),
+  'subtotal' => 0,
+  'service_fee' => 0,
+  'service_percent' => 0,
   'total' => 0,
   'dni' => '',
   'first_name' => '',
@@ -299,6 +305,10 @@ if ($eventId > 0) {
       try {
         $eventPaymentConfig = tickex_mp_event_config($pdoLocal, $eventId);
         $paymentProvider = isset($eventPaymentConfig['provider']) && $eventPaymentConfig['provider'] === 'mercadopago' ? 'mercadopago' : 'totalcoin';
+        if ($paymentProvider === 'mercadopago') {
+          $checkoutServicePercent = isset($eventPaymentConfig['service_charge_percent']) ? (float)$eventPaymentConfig['service_charge_percent'] : 0;
+          $checkoutMpCostPercent = isset($eventPaymentConfig['mp_cost_estimate_percent']) ? (float)$eventPaymentConfig['mp_cost_estimate_percent'] : 0;
+        }
       } catch (Exception $_mpConfigError) {
         $paymentProvider = 'totalcoin';
       }
@@ -689,6 +699,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $selQty = isset($_POST['selected_qty']) ? $_POST['selected_qty'] : (isset($_POST['qty']) ? $_POST['qty'] : array());
   list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors);
 
+  $ticketSubtotal = $total;
+  $serviceFeeAmount = 0;
+  if ($paymentProvider === 'mercadopago' && $ticketSubtotal > 0) {
+    $checkoutBreakdown = tickex_mp_checkout_breakdown($ticketSubtotal, $checkoutServicePercent, $checkoutMpCostPercent);
+    $serviceFeeAmount = (float)$checkoutBreakdown['service_fee'];
+    $total = (float)$checkoutBreakdown['checkout_total'];
+  }
+
   if ($total <= 0 && empty($selectedTickets)) {
     $errors[] = 'Seleccioná al menos una entrada.';
   }
@@ -697,6 +715,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Pasar al paso de confirmación (form visible)
     $step = 'confirm';
     $preview['selected'] = $selectedTickets;
+    $preview['subtotal'] = $ticketSubtotal;
+    $preview['service_fee'] = $serviceFeeAmount;
+    $preview['service_percent'] = $checkoutServicePercent;
     $preview['total'] = $total;
     $preview['ref'] = $ref;
     $preview['dni'] = trim((string)(isset($defaults['dni']) ? $defaults['dni'] : ''));
@@ -716,6 +737,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $preview['selected'] = $selectedTickets;
+    $preview['subtotal'] = $ticketSubtotal;
+    $preview['service_fee'] = $serviceFeeAmount;
+    $preview['service_percent'] = $checkoutServicePercent;
     $preview['total'] = $total;
     $preview['ref'] = $ref;
     $preview['dni'] = $dni;
@@ -889,6 +913,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $email,
                 'event_id' => $eventId,
                 'fee_percent' => isset($eventPaymentConfig['marketplace_fee_percent']) ? (float)$eventPaymentConfig['marketplace_fee_percent'] : 0,
+                'marketplace_fee' => $checkoutBreakdown ? (float)$checkoutBreakdown['marketplace_fee'] : 0,
               ));
               $paymentUrl = (string)$mpCheckout['payment_url'];
               $gatewayRequestId = (string)$mpCheckout['request_id'];
@@ -984,12 +1009,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':ctok' => $communicationAttribution ? (string)$communicationAttribution['tracking_token'] : null,
               ));
               tickex_mp_ensure_order_columns($pdoSave);
-              $stProvider = $pdoSave->prepare("UPDATE tc_orders SET payment_provider=:provider, provider_preference_id=COALESCE(provider_preference_id,:preference), marketplace_fee=COALESCE(marketplace_fee,:fee), seller_admin_id=COALESCE(seller_admin_id,:seller), updated_at=CURRENT_TIMESTAMP WHERE request_id=:rid");
+              $stProvider = $pdoSave->prepare("UPDATE tc_orders SET payment_provider=:provider, provider_preference_id=COALESCE(provider_preference_id,:preference), marketplace_fee=COALESCE(marketplace_fee,:fee), seller_admin_id=COALESCE(seller_admin_id,:seller), ticket_subtotal=:subtotal, service_fee_amount=:service_fee, service_fee_percent=:service_percent, mp_cost_estimate_percent=:mp_cost_percent, updated_at=CURRENT_TIMESTAMP WHERE request_id=:rid");
               $stProvider->execute(array(
                 ':provider' => $paymentProvider,
                 ':preference' => $paymentProvider === 'mercadopago' ? ($paymentProviderPreferenceId !== '' ? $paymentProviderPreferenceId : preg_replace('/^mp-/', '', $requestId)) : null,
                 ':fee' => $paymentProvider === 'mercadopago' ? $paymentProviderFee : null,
                 ':seller' => $eventOwnerAdminId > 0 ? $eventOwnerAdminId : null,
+                ':subtotal' => isset($ticketSubtotal) ? (float)$ticketSubtotal : (float)$total,
+                ':service_fee' => $paymentProvider === 'mercadopago' ? (float)$serviceFeeAmount : 0,
+                ':service_percent' => $paymentProvider === 'mercadopago' ? (float)$checkoutServicePercent : 0,
+                ':mp_cost_percent' => $paymentProvider === 'mercadopago' ? (float)$checkoutMpCostPercent : 0,
                 ':rid' => $requestId,
               ));
               try {
@@ -1224,7 +1253,13 @@ include __DIR__.'/inc/layout_top.php';
                 </li>
               <?php endforeach; ?>
             </ul>
-            <div style="margin-top:10px;font-size:16px;font-weight:700;">Total: $<?php echo e(number_format((float)$preview['total'], 0, ',', '.')); ?></div>
+            <?php if ((float)$preview['service_fee'] > 0): ?>
+              <div style="margin-top:10px;display:grid;gap:4px;font-size:14px;">
+                <div>Entradas: $<?php echo e(number_format((float)$preview['subtotal'], 0, ',', '.')); ?></div>
+                <div>Costo de servicio (<?php echo e(number_format((float)$preview['service_percent'], 2, ',', '.')); ?>%): $<?php echo e(number_format((float)$preview['service_fee'], 0, ',', '.')); ?></div>
+              </div>
+            <?php endif; ?>
+            <div style="margin-top:10px;font-size:16px;font-weight:700;">Total a pagar: $<?php echo e(number_format((float)$preview['total'], 0, ',', '.')); ?></div>
           <?php else: ?>
             <div class="muted" style="margin-top:6px;">No hay entradas seleccionadas.</div>
           <?php endif; ?>
@@ -1346,7 +1381,10 @@ include __DIR__.'/inc/layout_top.php';
         <?php endforeach; ?>
 
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px;">
-          <div style="font-size:18px;font-weight:700;">Total: <span id="totalDisplay">$0</span></div>
+          <div style="text-align:right;">
+            <?php if ($checkoutServicePercent > 0): ?><div class="muted" style="font-size:13px;">Costo de servicio <?php echo e(number_format($checkoutServicePercent, 2, ',', '.')); ?>%: <span id="serviceDisplay">$0</span></div><?php endif; ?>
+            <div style="font-size:18px;font-weight:700;">Total a pagar: <span id="totalDisplay">$0</span></div>
+          </div>
           <button class="btn" type="button" id="btnContinue">Comprar entradas</button>
         </div>
       </div>
@@ -1355,7 +1393,8 @@ include __DIR__.'/inc/layout_top.php';
         <div class="card" style="margin:0;background:transparent;border:1px solid var(--line);">
           <div class="muted" style="font-size:12px;">Confirmación</div>
           <ul id="confirmLines" style="margin:8px 0 0 18px;"></ul>
-          <div style="margin-top:10px;font-size:16px;font-weight:700;">Total: <span id="totalConfirm">$0</span></div>
+          <?php if ($checkoutServicePercent > 0): ?><div class="muted" style="margin-top:10px;font-size:13px;">Costo de servicio <?php echo e(number_format($checkoutServicePercent, 2, ',', '.')); ?>%: <span id="serviceConfirm">$0</span></div><?php endif; ?>
+          <div style="margin-top:6px;font-size:16px;font-weight:700;">Total a pagar: <span id="totalConfirm">$0</span></div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;margin-top:10px;">
@@ -1408,10 +1447,13 @@ include __DIR__.'/inc/layout_top.php';
     const form = document.getElementById('checkoutFlow');
     const qtySelects = document.querySelectorAll('#checkoutFlow select[name^="qty"]');
     const totalDisplay = document.getElementById('totalDisplay');
+    const serviceDisplay = document.getElementById('serviceDisplay');
     const stepSelect = document.getElementById('stepSelect');
     const stepConfirm = document.getElementById('stepConfirm');
     const confirmLines = document.getElementById('confirmLines');
     const totalConfirm = document.getElementById('totalConfirm');
+    const serviceConfirm = document.getElementById('serviceConfirm');
+    const servicePercent = <?php echo json_encode((float)$checkoutServicePercent); ?>;
     const btnContinue = document.getElementById('btnContinue');
     const btnBack = document.getElementById('btnBack');
 
@@ -1441,10 +1483,13 @@ include __DIR__.'/inc/layout_top.php';
 
     function recalc() {
       const lines = readLines();
-      let total = 0;
-      lines.forEach(ln => { total += (ln.total || 0); });
+      let subtotal = 0;
+      lines.forEach(ln => { subtotal += (ln.total || 0); });
+      const serviceFee = Math.round((subtotal * servicePercent / 100) * 100) / 100;
+      const total = subtotal + serviceFee;
+      if (serviceDisplay) serviceDisplay.textContent = '$' + serviceFee.toLocaleString('es-AR');
       totalDisplay.textContent = '$' + total.toLocaleString('es-AR');
-      return { lines, total };
+      return { lines, subtotal, serviceFee, total };
     }
 
     function setConfirmEnabled(enabled) {
@@ -1475,6 +1520,9 @@ include __DIR__.'/inc/layout_top.php';
       }
       if (totalConfirm) {
         totalConfirm.textContent = '$' + r.total.toLocaleString('es-AR');
+      }
+      if (serviceConfirm) {
+        serviceConfirm.textContent = '$' + r.serviceFee.toLocaleString('es-AR');
       }
 
       if (stepSelect) stepSelect.classList.add('tickex-hidden');

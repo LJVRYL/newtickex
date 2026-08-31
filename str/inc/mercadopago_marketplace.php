@@ -143,6 +143,10 @@ if (!function_exists('tickex_mp_ensure_order_columns')) {
             'provider_preference_id' => 'TEXT',
             'marketplace_fee' => 'REAL',
             'seller_admin_id' => 'INTEGER',
+            'ticket_subtotal' => 'REAL',
+            'service_fee_amount' => 'REAL',
+            'service_fee_percent' => 'REAL',
+            'mp_cost_estimate_percent' => 'REAL',
         );
         foreach ($wanted as $name => $type) {
             if (!isset($columns[$name])) $pdo->exec('ALTER TABLE tc_orders ADD COLUMN ' . $name . ' ' . $type);
@@ -355,6 +359,7 @@ if (!function_exists('tickex_mp_event_config')) {
         $provider = isset($row['provider']) && $row['provider'] === 'mercadopago' ? 'mercadopago' : 'totalcoin';
         if (!empty($settings['enforcement_enabled']) && $policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
         $row['provider'] = $provider;
+        $row['service_charge_percent'] = tickex_mp_effective_service_charge_percent($settings, $policy);
         $row['marketplace_fee_percent'] = tickex_mp_effective_platform_fee_percent($settings, $policy);
         $row['total_cost_target_percent'] = (float)$settings['total_cost_target_percent'];
         $row['mp_cost_estimate_percent'] = (float)$settings['mp_cost_estimate_percent'];
@@ -406,7 +411,8 @@ if (!function_exists('tickex_mp_save_platform_settings')) {
         $totalTarget = max(0, min(100, round((float)$totalTarget, 4)));
         $mpEstimate = max(0, min(100, round((float)$mpEstimate, 4)));
         if ($enabled && $mpEstimate <= 0) throw new RuntimeException('Carga una estimacion de la comision de Mercado Pago antes de activar la politica.');
-        if ($enabled && $mpEstimate >= $totalTarget) throw new RuntimeException('El costo estimado de Mercado Pago debe ser menor que el costo total objetivo.');
+        $serviceShareOfCheckout = $totalTarget > 0 ? ($totalTarget / (100 + $totalTarget)) * 100 : 0;
+        if ($enabled && $mpEstimate >= $serviceShareOfCheckout) throw new RuntimeException('La comision estimada de Mercado Pago no deja margen dentro del costo de servicio configurado.');
         $st = $pdo->prepare('UPDATE mercadopago_platform_settings SET enforcement_enabled=:enabled,total_cost_target_percent=:total,mp_cost_estimate_percent=:mp,updated_by_admin_id=:admin,updated_at=CURRENT_TIMESTAMP WHERE id=1');
         $st->execute(array(':enabled' => $enabled ? 1 : 0, ':total' => $totalTarget, ':mp' => $mpEstimate, ':admin' => (int)$updatedBy));
         return tickex_mp_platform_settings($pdo);
@@ -437,6 +443,13 @@ if (!function_exists('tickex_mp_save_admin_policy')) {
         tickex_mp_ensure_schema($pdo);
         $accountType = $accountType === 'str_owner' ? 'str_owner' : 'client';
         $override = trim((string)$feeOverride) === '' ? null : max(0, min(100, round((float)$feeOverride, 4)));
+        if ($accountType === 'client' && $override !== null) {
+            $settings = tickex_mp_platform_settings($pdo);
+            $serviceShareOfCheckout = $override > 0 ? ($override / (100 + $override)) * 100 : 0;
+            if (!empty($settings['enforcement_enabled']) && $serviceShareOfCheckout <= (float)$settings['mp_cost_estimate_percent']) {
+                throw new RuntimeException('El costo de servicio especial no alcanza para cubrir la comision estimada de Mercado Pago.');
+            }
+        }
         $st = $pdo->prepare("INSERT OR REPLACE INTO mercadopago_admin_policies (admin_id,account_type,platform_fee_override_percent,updated_by_admin_id,created_at,updated_at) VALUES (:admin,:type,:fee,:updated_by,COALESCE((SELECT created_at FROM mercadopago_admin_policies WHERE admin_id=:admin),CURRENT_TIMESTAMP),CURRENT_TIMESTAMP)");
         $st->execute(array(':admin' => (int)$adminId, ':type' => $accountType, ':fee' => $override, ':updated_by' => (int)$updatedBy));
         return tickex_mp_admin_policy($pdo, $adminId);
@@ -446,10 +459,44 @@ if (!function_exists('tickex_mp_save_admin_policy')) {
 if (!function_exists('tickex_mp_effective_platform_fee_percent')) {
     function tickex_mp_effective_platform_fee_percent(array $settings, array $policy)
     {
+        $servicePercent = tickex_mp_effective_service_charge_percent($settings, $policy);
+        $serviceShareOfCheckout = $servicePercent > 0 ? ($servicePercent / (100 + $servicePercent)) * 100 : 0;
+        return max(0, round($serviceShareOfCheckout - (float)$settings['mp_cost_estimate_percent'], 4));
+    }
+}
+
+if (!function_exists('tickex_mp_effective_service_charge_percent')) {
+    function tickex_mp_effective_service_charge_percent(array $settings, array $policy)
+    {
         if (array_key_exists('platform_fee_override_percent', $policy) && $policy['platform_fee_override_percent'] !== null && $policy['platform_fee_override_percent'] !== '') {
             return max(0, min(100, (float)$policy['platform_fee_override_percent']));
         }
-        return max(0, round((float)$settings['total_cost_target_percent'] - (float)$settings['mp_cost_estimate_percent'], 4));
+        return max(0, min(100, (float)$settings['total_cost_target_percent']));
+    }
+}
+
+if (!function_exists('tickex_mp_checkout_breakdown')) {
+    function tickex_mp_checkout_breakdown($ticketSubtotal, $servicePercent, $mpCostPercent)
+    {
+        $subtotal = max(0, round((float)$ticketSubtotal, 2));
+        $servicePercent = max(0, min(100, (float)$servicePercent));
+        $mpCostPercent = max(0, min(100, (float)$mpCostPercent));
+        $serviceFee = round($subtotal * $servicePercent / 100, 2);
+        $checkoutTotal = round($subtotal + $serviceFee, 2);
+        $mpCost = round($checkoutTotal * $mpCostPercent / 100, 2);
+        $platformFee = max(0, round($checkoutTotal - $subtotal - $mpCost, 2));
+        $platformPercent = $checkoutTotal > 0 ? round($platformFee * 100 / $checkoutTotal, 4) : 0;
+        return array(
+            'ticket_subtotal' => $subtotal,
+            'service_charge_percent' => $servicePercent,
+            'service_fee' => $serviceFee,
+            'checkout_total' => $checkoutTotal,
+            'mp_cost_estimate_percent' => $mpCostPercent,
+            'mp_cost_estimate' => $mpCost,
+            'marketplace_fee_percent' => $platformPercent,
+            'marketplace_fee' => $platformFee,
+            'organizer_net_estimate' => round($checkoutTotal - $mpCost - $platformFee, 2),
+        );
     }
 }
 
@@ -468,7 +515,9 @@ if (!function_exists('tickex_mp_create_preference')) {
         $account = tickex_mp_refresh_account($pdo, $adminId, false);
         $amount = round((float)$params['amount'], 2);
         if ($amount <= 0) throw new RuntimeException('El monto de Mercado Pago es invalido.');
-        $fee = tickex_mp_marketplace_fee($amount, isset($params['fee_percent']) ? $params['fee_percent'] : 0);
+        $fee = isset($params['marketplace_fee'])
+            ? max(0, round((float)$params['marketplace_fee'], 2))
+            : tickex_mp_marketplace_fee($amount, isset($params['fee_percent']) ? $params['fee_percent'] : 0);
         $config = tickex_mp_config();
         $ref = (string)$params['reference'];
         $site = $config['site_url'];
