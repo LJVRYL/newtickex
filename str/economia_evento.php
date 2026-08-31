@@ -41,7 +41,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Entradas vendidas</div>
+      <div class="muted" style="font-size:12px;">Paquetes vendidos</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;">
         <?php echo (int)$ecoStats['entradas_vendidas']; ?>
       </div>

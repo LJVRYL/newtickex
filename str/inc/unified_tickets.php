@@ -722,10 +722,9 @@ function get_unified_stats($pdo, $evento_id) {
     // ===== CONTAR STR =====
     try {
         $colCheck = get_checkin_column($pdo);
-        $hiddenClause = build_hidden_entries_where_clause($pdo, $colCheck);
-
-        // Count STR entries by classification (paid vs gratis)
-        $sqlStr = "SELECT tipo, monto_pagado FROM entradas WHERE evento_id = ?" . $hiddenClause;
+        // Las métricas globales cuentan todo QR emitido, incluso los ocultos.
+        // La ocultación sólo afecta el listado operativo hasta el check-in.
+        $sqlStr = "SELECT tipo, monto_pagado FROM entradas WHERE evento_id = ?";
         $stmtStr = $pdo->prepare($sqlStr);
         $stmtStr->execute(array($evento_id));
         $strRows = $stmtStr->fetchAll(PDO::FETCH_ASSOC);
@@ -756,7 +755,7 @@ function get_unified_stats($pdo, $evento_id) {
         $stats['total'] += $strTotal;
         $stats['paid'] += $strPaid;
         
-        $sqlCheck = "SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1" . $hiddenClause;
+        $sqlCheck = "SELECT COUNT(*) FROM entradas WHERE evento_id = ? AND $colCheck = 1";
         $stmtC = $pdo->prepare($sqlCheck);
         $stmtC->execute(array($evento_id));
         $stats['checkins'] += (int)$stmtC->fetchColumn();
@@ -784,7 +783,7 @@ function get_unified_stats($pdo, $evento_id) {
         } catch (Exception $_e) {}
         
         if (!$hasBridgeView && !$hasBridgeTable) {
-            return $stats; // sin bridge
+            throw new Exception('Sin bridge');
         }
 
         // Elegir tabla si aporta selected_type_name/selected_type
@@ -815,7 +814,7 @@ function get_unified_stats($pdo, $evento_id) {
         }
         
         if (empty($mappedSlugs)) {
-            return $stats; // sin slug mapping
+            throw new Exception('Sin slug mapping');
         }
         
         // Contar total de bridge entries (SOLO PAGADAS - consistente con get_unified_entries)
@@ -910,12 +909,65 @@ function get_unified_stats($pdo, $evento_id) {
     
     $stats['pendiente'] = $stats['total'] - $stats['checkins'];
     
-    // Actualizar stock_total: inicial (tipos_entrada) + todas las entradas cargadas (STR + TICKEX + manuales)
-    if ($stats['stock_total'] !== null) {
-        $stats['stock_total'] = $stockTotalInicial + $stats['total'];
-    }
+    // cantidad_total ya representa la capacidad inicial. No se le vuelven a
+    // sumar las entradas emitidas porque eso infla artificialmente el stock.
+    if ($stats['stock_total'] !== null) $stats['stock_total'] = $stockTotalInicial;
     
     return $stats;
+}
+
+if (!function_exists('tickex_paid_package_breakdown')) {
+    function tickex_paid_package_breakdown($pdo, $eventoId)
+    {
+        $result = array();
+        $requests = array();
+        $columns = detect_table_columns($pdo, 'entradas');
+        $requestSelect = isset($columns['tc_order_request_id']) ? 'tc_order_request_id' : "'' AS tc_order_request_id";
+        $st = $pdo->prepare("SELECT tipo, COALESCE(monto_pagado,0) AS monto_pagado, $requestSelect FROM entradas WHERE evento_id=:eid AND monto_pagado>0");
+        $st->execute(array(':eid' => (int)$eventoId));
+        while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
+            $type = trim((string)$row['tipo']);
+            if ($type === '') $type = 'Desconocido';
+            if (!isset($result[$type])) $result[$type] = array('cantidad' => 0, 'monto' => 0.0);
+            $result[$type]['monto'] += (float)$row['monto_pagado'];
+            $requestId = trim((string)$row['tc_order_request_id']);
+            if ($requestId === '') {
+                $result[$type]['cantidad']++;
+            } else {
+                if (!isset($requests[$requestId])) $requests[$requestId] = array();
+                $requests[$requestId][$type] = true;
+            }
+        }
+
+        if (!empty($requests) && has_table($pdo, 'tc_orders')) {
+            $stOrder = $pdo->prepare('SELECT selected_tickets_json FROM tc_orders WHERE request_id=:rid LIMIT 1');
+            foreach ($requests as $requestId => $fallbackTypes) {
+                $stOrder->execute(array(':rid' => $requestId));
+                $json = $stOrder->fetchColumn();
+                $tickets = is_string($json) ? json_decode($json, true) : null;
+                $counted = false;
+                if (is_array($tickets)) {
+                    foreach ($tickets as $ticket) {
+                        $quantity = max(0, (int)(isset($ticket['qty']) ? $ticket['qty'] : 0));
+                        if ($quantity <= 0) continue;
+                        $type = trim((string)(isset($ticket['name']) ? $ticket['name'] : ''));
+                        if ($type === '') $type = key($fallbackTypes);
+                        if (!isset($result[$type])) $result[$type] = array('cantidad' => 0, 'monto' => 0.0);
+                        $result[$type]['cantidad'] += $quantity;
+                        $counted = true;
+                    }
+                }
+                if (!$counted) {
+                    foreach ($fallbackTypes as $type => $_true) {
+                        if (!isset($result[$type])) $result[$type] = array('cantidad' => 0, 'monto' => 0.0);
+                        $result[$type]['cantidad']++;
+                    }
+                }
+            }
+        }
+
+        return $result;
+    }
 }
 
 /**
@@ -961,19 +1013,13 @@ function get_economic_stats($pdo, $evento_id) {
     );
     
     try {
-        // ==== STR: entradas pagadas (monto_pagado > 0) ====
-        $sqlStr = "SELECT COUNT(*) as qty, SUM(COALESCE(monto_pagado, 0)) as monto, tipo
-                   FROM entradas 
-                   WHERE evento_id = :eid AND monto_pagado > 0
-                   GROUP BY tipo
-                   ORDER BY tipo";
-        $stmtStr = $pdo->prepare($sqlStr);
-        $stmtStr->execute(array(':eid' => $evento_id));
-        
-        while ($row = $stmtStr->fetch(PDO::FETCH_ASSOC)) {
-            $tipo = isset($row['tipo']) ? trim((string)$row['tipo']) : 'Desconocido';
-            $qty = isset($row['qty']) ? (int)$row['qty'] : 0;
-            $monto = isset($row['monto']) ? (float)$row['monto'] : 0;
+        // ==== STR: paquetes/ventas pagadas y recaudación ====
+        // Varios QR de un mismo paquete cuentan como una venta, pero sus
+        // importes distribuidos se suman para conservar la recaudación exacta.
+        $paidPackages = tickex_paid_package_breakdown($pdo, $evento_id);
+        foreach ($paidPackages as $tipo => $packageRow) {
+            $qty = isset($packageRow['cantidad']) ? (int)$packageRow['cantidad'] : 0;
+            $monto = isset($packageRow['monto']) ? (float)$packageRow['monto'] : 0;
             
             $stats['entradas_vendidas'] += $qty;
             $stats['total_recaudado'] += $monto;
