@@ -91,6 +91,23 @@ if (!function_exists('tickex_mp_ensure_schema')) {
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_mp_event_configs_admin ON mercadopago_event_configs(admin_id, provider)");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS mercadopago_platform_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            enforcement_enabled INTEGER NOT NULL DEFAULT 0,
+            total_cost_target_percent REAL NOT NULL DEFAULT 10,
+            mp_cost_estimate_percent REAL NOT NULL DEFAULT 0,
+            updated_by_admin_id INTEGER,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )");
+        $pdo->exec("INSERT OR IGNORE INTO mercadopago_platform_settings (id,enforcement_enabled,total_cost_target_percent,mp_cost_estimate_percent) VALUES (1,0,10,0)");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS mercadopago_admin_policies (
+            admin_id INTEGER PRIMARY KEY,
+            account_type TEXT NOT NULL DEFAULT 'client',
+            platform_fee_override_percent REAL,
+            updated_by_admin_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )");
         $pdo->exec("CREATE TABLE IF NOT EXISTS mercadopago_oauth_states (
             state_hash TEXT PRIMARY KEY,
             admin_id INTEGER NOT NULL,
@@ -329,13 +346,20 @@ if (!function_exists('tickex_mp_event_config')) {
     {
         tickex_mp_ensure_schema($pdo);
         $ownerId = tickex_mp_event_owner_id($pdo, $eventId);
+        $settings = tickex_mp_platform_settings($pdo);
+        $policy = tickex_mp_admin_policy($pdo, $ownerId);
         $st = $pdo->prepare('SELECT * FROM mercadopago_event_configs WHERE event_id=:event LIMIT 1');
         $st->execute(array(':event' => (int)$eventId));
         $row = $st->fetch(PDO::FETCH_ASSOC);
-        if (!$row) return array('event_id' => (int)$eventId, 'admin_id' => $ownerId, 'provider' => 'totalcoin', 'marketplace_fee_percent' => 0.0, 'enabled' => 1);
+        if (!$row) $row = array('event_id' => (int)$eventId, 'admin_id' => $ownerId, 'provider' => 'totalcoin', 'enabled' => 1);
         $provider = isset($row['provider']) && $row['provider'] === 'mercadopago' ? 'mercadopago' : 'totalcoin';
+        if (!empty($settings['enforcement_enabled']) && $policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
         $row['provider'] = $provider;
-        $row['marketplace_fee_percent'] = max(0, min(100, (float)$row['marketplace_fee_percent']));
+        $row['marketplace_fee_percent'] = tickex_mp_effective_platform_fee_percent($settings, $policy);
+        $row['total_cost_target_percent'] = (float)$settings['total_cost_target_percent'];
+        $row['mp_cost_estimate_percent'] = (float)$settings['mp_cost_estimate_percent'];
+        $row['account_type'] = $policy['account_type'];
+        $row['enforcement_enabled'] = (int)$settings['enforcement_enabled'];
         return $row;
     }
 }
@@ -346,8 +370,11 @@ if (!function_exists('tickex_mp_save_event_config')) {
         tickex_mp_ensure_schema($pdo);
         $ownerId = tickex_mp_event_owner_id($pdo, $eventId);
         if ($ownerId <= 0 || $ownerId !== (int)$adminId) throw new RuntimeException('No podes modificar el medio de pago de este evento.');
+        $settings = tickex_mp_platform_settings($pdo);
+        $policy = tickex_mp_admin_policy($pdo, $adminId);
         $provider = $provider === 'mercadopago' ? 'mercadopago' : 'totalcoin';
-        $feePercent = max(0, min(100, round((float)$feePercent, 4)));
+        if (!empty($settings['enforcement_enabled']) && $policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
+        $feePercent = tickex_mp_effective_platform_fee_percent($settings, $policy);
         if ($provider === 'mercadopago') {
             $account = tickex_mp_account($pdo, $adminId, false);
             if (!$account || $account['status'] !== 'connected') throw new RuntimeException('Primero conecta la cuenta de Mercado Pago del organizador.');
@@ -356,6 +383,73 @@ if (!function_exists('tickex_mp_save_event_config')) {
             VALUES (:event, :admin, :provider, :fee, 1, COALESCE((SELECT created_at FROM mercadopago_event_configs WHERE event_id=:event), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)");
         $st->execute(array(':event' => (int)$eventId, ':admin' => (int)$adminId, ':provider' => $provider, ':fee' => $feePercent));
         return tickex_mp_event_config($pdo, $eventId);
+    }
+}
+
+if (!function_exists('tickex_mp_platform_settings')) {
+    function tickex_mp_platform_settings($pdo)
+    {
+        tickex_mp_ensure_schema($pdo);
+        $row = $pdo->query('SELECT * FROM mercadopago_platform_settings WHERE id=1 LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return array('enforcement_enabled' => 0, 'total_cost_target_percent' => 10.0, 'mp_cost_estimate_percent' => 0.0);
+        $row['enforcement_enabled'] = !empty($row['enforcement_enabled']) ? 1 : 0;
+        $row['total_cost_target_percent'] = max(0, min(100, (float)$row['total_cost_target_percent']));
+        $row['mp_cost_estimate_percent'] = max(0, min(100, (float)$row['mp_cost_estimate_percent']));
+        return $row;
+    }
+}
+
+if (!function_exists('tickex_mp_save_platform_settings')) {
+    function tickex_mp_save_platform_settings($pdo, $totalTarget, $mpEstimate, $enabled, $updatedBy)
+    {
+        tickex_mp_ensure_schema($pdo);
+        $totalTarget = max(0, min(100, round((float)$totalTarget, 4)));
+        $mpEstimate = max(0, min(100, round((float)$mpEstimate, 4)));
+        if ($enabled && $mpEstimate <= 0) throw new RuntimeException('Carga una estimacion de la comision de Mercado Pago antes de activar la politica.');
+        if ($enabled && $mpEstimate >= $totalTarget) throw new RuntimeException('El costo estimado de Mercado Pago debe ser menor que el costo total objetivo.');
+        $st = $pdo->prepare('UPDATE mercadopago_platform_settings SET enforcement_enabled=:enabled,total_cost_target_percent=:total,mp_cost_estimate_percent=:mp,updated_by_admin_id=:admin,updated_at=CURRENT_TIMESTAMP WHERE id=1');
+        $st->execute(array(':enabled' => $enabled ? 1 : 0, ':total' => $totalTarget, ':mp' => $mpEstimate, ':admin' => (int)$updatedBy));
+        return tickex_mp_platform_settings($pdo);
+    }
+}
+
+if (!function_exists('tickex_mp_admin_policy')) {
+    function tickex_mp_admin_policy($pdo, $adminId)
+    {
+        tickex_mp_ensure_schema($pdo);
+        $st = $pdo->prepare('SELECT * FROM mercadopago_admin_policies WHERE admin_id=:admin LIMIT 1');
+        $st->execute(array(':admin' => (int)$adminId));
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return array('admin_id' => (int)$adminId, 'account_type' => 'client', 'platform_fee_override_percent' => null);
+        $row['account_type'] = isset($row['account_type']) && $row['account_type'] === 'str_owner' ? 'str_owner' : 'client';
+        if ($row['platform_fee_override_percent'] !== null && $row['platform_fee_override_percent'] !== '') {
+            $row['platform_fee_override_percent'] = max(0, min(100, (float)$row['platform_fee_override_percent']));
+        } else {
+            $row['platform_fee_override_percent'] = null;
+        }
+        return $row;
+    }
+}
+
+if (!function_exists('tickex_mp_save_admin_policy')) {
+    function tickex_mp_save_admin_policy($pdo, $adminId, $accountType, $feeOverride, $updatedBy)
+    {
+        tickex_mp_ensure_schema($pdo);
+        $accountType = $accountType === 'str_owner' ? 'str_owner' : 'client';
+        $override = trim((string)$feeOverride) === '' ? null : max(0, min(100, round((float)$feeOverride, 4)));
+        $st = $pdo->prepare("INSERT OR REPLACE INTO mercadopago_admin_policies (admin_id,account_type,platform_fee_override_percent,updated_by_admin_id,created_at,updated_at) VALUES (:admin,:type,:fee,:updated_by,COALESCE((SELECT created_at FROM mercadopago_admin_policies WHERE admin_id=:admin),CURRENT_TIMESTAMP),CURRENT_TIMESTAMP)");
+        $st->execute(array(':admin' => (int)$adminId, ':type' => $accountType, ':fee' => $override, ':updated_by' => (int)$updatedBy));
+        return tickex_mp_admin_policy($pdo, $adminId);
+    }
+}
+
+if (!function_exists('tickex_mp_effective_platform_fee_percent')) {
+    function tickex_mp_effective_platform_fee_percent(array $settings, array $policy)
+    {
+        if (array_key_exists('platform_fee_override_percent', $policy) && $policy['platform_fee_override_percent'] !== null && $policy['platform_fee_override_percent'] !== '') {
+            return max(0, min(100, (float)$policy['platform_fee_override_percent']));
+        }
+        return max(0, round((float)$settings['total_cost_target_percent'] - (float)$settings['mp_cost_estimate_percent'], 4));
     }
 }
 

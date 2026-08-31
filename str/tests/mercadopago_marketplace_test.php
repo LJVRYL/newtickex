@@ -23,7 +23,8 @@ $pdo = new PDO('sqlite:' . $dbFile);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec("CREATE TABLE eventos (id INTEGER PRIMARY KEY,nombre TEXT,creado_por_admin_id INTEGER,borrado_en TEXT)");
 $pdo->exec("CREATE TABLE tc_orders (id INTEGER PRIMARY KEY AUTOINCREMENT,request_id TEXT UNIQUE,ref TEXT,amount REAL,state TEXT,payment_status TEXT,payment_confirmed_at TEXT,updated_at TEXT,seller_admin_id INTEGER,payment_provider TEXT)");
-$pdo->exec("INSERT INTO eventos(id,nombre,creado_por_admin_id) VALUES(15,'Evento de prueba',7)");
+$pdo->exec("INSERT INTO eventos(id,nombre,creado_por_admin_id) VALUES(15,'Evento STR',7)");
+$pdo->exec("INSERT INTO eventos(id,nombre,creado_por_admin_id) VALUES(16,'Evento cliente',8)");
 tickex_mp_ensure_schema($pdo);
 
 mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('mercadopago_marketplace_accounts','mercadopago_event_configs','mercadopago_oauth_states','mercadopago_webhook_events')")->fetchColumn() === 4, 'marketplace schema is created');
@@ -48,10 +49,29 @@ $account = tickex_mp_account($pdo, 7, true);
 mp_test_assert($account && $account['status'] === 'connected' && $account['mp_user_id'] === '70001', 'seller account is linked to its Tickex administrator');
 mp_test_assert($account['access_token'] === 'APP_USR-seller-token', 'seller token is decrypted only when required');
 
+tickex_mp_save_account_tokens($pdo, 8, array(
+    'access_token' => 'APP_USR-client-token',
+    'refresh_token' => 'TG-client-refresh-token',
+    'user_id' => '80001',
+    'expires_in' => 15552000,
+));
+
 $default = tickex_mp_event_config($pdo, 15);
 mp_test_assert($default['provider'] === 'totalcoin', 'existing events remain on TotalCoin by default');
-$saved = tickex_mp_save_event_config($pdo, 15, 7, 'mercadopago', 8.5);
-mp_test_assert($saved['provider'] === 'mercadopago' && abs($saved['marketplace_fee_percent'] - 8.5) < 0.001, 'Mercado Pago and Tickex commission are configured per event');
+$missingEstimateRejected = false;
+try { tickex_mp_save_platform_settings($pdo, 10, 0, true, 1); } catch (Exception $e) { $missingEstimateRejected = true; }
+mp_test_assert($missingEstimateRejected, 'commercial policy cannot be enabled without a Mercado Pago cost estimate');
+tickex_mp_save_platform_settings($pdo, 10, 6, true, 1);
+tickex_mp_save_admin_policy($pdo, 7, 'str_owner', '', 1);
+$saved = tickex_mp_save_event_config($pdo, 15, 7, 'totalcoin', 0);
+mp_test_assert($saved['provider'] === 'totalcoin', 'SAVE THE RAVE keeps TotalCoin');
+$clientConfig = tickex_mp_event_config($pdo, 16);
+mp_test_assert($clientConfig['provider'] === 'mercadopago', 'client organizers are forced to Mercado Pago');
+mp_test_assert(abs($clientConfig['marketplace_fee_percent'] - 4.0) < 0.001, 'Tickex fee completes the configured ten percent target estimate');
+$forced = tickex_mp_save_event_config($pdo, 16, 8, 'totalcoin', 0);
+mp_test_assert($forced['provider'] === 'mercadopago', 'client cannot switch its event to TotalCoin');
+$override = tickex_mp_save_admin_policy($pdo, 8, 'client', '3.25', 1);
+mp_test_assert(abs(tickex_mp_event_config($pdo, 16)['marketplace_fee_percent'] - 3.25) < 0.001, 'superadministrator can set a special Tickex fee per client');
 $otherAdminRejected = false;
 try { tickex_mp_save_event_config($pdo, 15, 8, 'totalcoin', 0); } catch (Exception $e) { $otherAdminRejected = true; }
 mp_test_assert($otherAdminRejected, 'another administrator cannot change the event payment account');
