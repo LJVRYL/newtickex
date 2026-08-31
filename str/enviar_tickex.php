@@ -3,7 +3,7 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require_once __DIR__.'/inc/bootstrap.php';
-require_once __DIR__.'/inc/mail.php';
+require_once __DIR__.'/inc/manual_ticket_issuance.php';
 require_login();
 $cu = current_user();
 $rol = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
@@ -34,7 +34,7 @@ foreach ($eventos as $ev) {
 
   // Tipos de entrada (todas, incluso ocultas/inactivas)
   try {
-    $stT = $pdo->prepare("SELECT id, nombre, tipo, precio FROM tipos_entrada WHERE evento_id = :id ORDER BY id ASC");
+    $stT = $pdo->prepare("SELECT id, nombre, tipo, precio, cantidad_disponible, qr_quantity FROM tipos_entrada WHERE evento_id = :id ORDER BY id ASC");
     $stT->execute(array(':id'=>$eid));
     while ($row = $stT->fetch(PDO::FETCH_ASSOC)) {
       $tiposPorEvento[$eid][] = array(
@@ -42,34 +42,9 @@ foreach ($eventos as $ev) {
         'nombre' => $row['nombre'],
         'tipo' => $row['tipo'],
         'precio' => $row['precio'],
+        'cantidad_disponible' => $row['cantidad_disponible'],
+        'qr_quantity' => tickex_ticket_qr_quantity(isset($row['qr_quantity']) ? $row['qr_quantity'] : 1),
         'origen' => 'tipo',
-      );
-    }
-  } catch (Exception $e) {}
-    // Removed incomplete code fragment '$e' that caused syntax error
-
-  // Plantillas de entrada (por si no existen tipos cargados)
-  try {
-    $colsPl = $pdo->query("PRAGMA table_info(plantillas_entrada)")->fetchAll(PDO::FETCH_ASSOC);
-    $hasEvCol = false;
-    foreach ($colsPl as $c) { if (!empty($c['name']) && $c['name']==='evento_id') { $hasEvCol = true; break; } }
-    $sqlPl = "SELECT id, nombre, tipo, precio";
-    if ($hasEvCol) {
-      $sqlPl .= " FROM plantillas_entrada WHERE evento_id = :id ORDER BY id ASC";
-      $stP = $pdo->prepare($sqlPl);
-      $stP->execute(array(':id'=>$eid));
-    } else {
-      $sqlPl .= " FROM plantillas_entrada ORDER BY id ASC";
-      $stP = $pdo->prepare($sqlPl);
-      $stP->execute();
-    }
-    while ($row = $stP->fetch(PDO::FETCH_ASSOC)) {
-      $tiposPorEvento[$eid][] = array(
-        'id' => $row['id'],
-        'nombre' => $row['nombre'],
-        'tipo' => $row['tipo'],
-        'precio' => $row['precio'],
-        'origen' => 'plantilla',
       );
     }
   } catch (Exception $e) {}
@@ -80,14 +55,19 @@ $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
-    $tipoId   = isset($_POST['tipo_id']) ? trim($_POST['tipo_id']) : '';
+    $tipoId   = isset($_POST['tipo_id']) ? (int)$_POST['tipo_id'] : 0;
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
     $nombre   = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
     $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
+    $mode     = isset($_POST['modo']) ? (string)$_POST['modo'] : 'courtesy';
+    $quantity = isset($_POST['cantidad']) ? (int)$_POST['cantidad'] : 1;
     $hidden   = (isset($_POST['oculto']) && in_array($rol, array('super_admin','superadmin'), true)) ? 1 : 0;
 
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
-    if ($tipoId === '') $errors[] = 'Seleccioná un tipo de entrada.';
+    if ($tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
+    if (!in_array($mode, array('courtesy','manual_transfer'), true)) $errors[] = 'Seleccioná una modalidad válida.';
+    if ($quantity < 1 || $quantity > 20) $errors[] = 'La cantidad de promociones debe estar entre 1 y 20.';
 
     // Resolver email por Tickex ID (apodo) si no viene email
     if ($email === '' && $tickexId !== '') {
@@ -126,135 +106,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($email === '') $errors[] = 'Ingresá el email del destinatario o su Tickex ID.';
 
     if (empty($errors)) {
-        // Generar código único
-        $codigo = 'CORT-' . strtoupper(substr(md5($email . microtime(true)), 0, 10));
-        $fecha  = date('Y-m-d H:i:s');
         $nombreIns = $nombre !== '' ? $nombre : $email;
         try {
-            $cols = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
-            $hasOculto = false;
-            foreach ($cols as $c) {
-                if (isset($c['name']) && $c['name'] === 'oculto') {
-                    $hasOculto = true;
-                    break;
-                }
-            }
-            if (!$hasOculto) {
-                try {
-                    $pdo->exec("ALTER TABLE entradas ADD COLUMN oculto INTEGER NOT NULL DEFAULT 0");
-                    $hasOculto = true;
-                } catch (Exception $e) {
-                    // ignore if alter fails
-                }
-            }
-
-            if ($hasOculto) {
-                $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id, oculto) VALUES (:n,:e,:f,:c,0,:t,0,:ev,:h)");
-                $params = array(
-                    ':n'  => $nombreIns,
-                    ':e'  => $email,
-                    ':f'  => $fecha,
-                    ':c'  => $codigo,
-                    ':t'  => $tipoId,
-                    ':ev' => $eventoId,
-                    ':h'  => $hidden,
-                );
-            } else {
-                $stmt = $pdo->prepare("INSERT INTO entradas (nombre, email, fecha_registro, codigo, checked_in, tipo, monto_pagado, evento_id) VALUES (:n,:e,:f,:c,0,:t,0,:ev)");
-                $params = array(
-                    ':n'  => $nombreIns,
-                    ':e'  => $email,
-                    ':f'  => $fecha,
-                    ':c'  => $codigo,
-                    ':t'  => $tipoId,
-                    ':ev' => $eventoId,
-                );
-            }
-            $stmt->execute($params);
-            $entradaId = (int)$pdo->lastInsertId();
-            $success = 'Entrada creada y asignada a ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
-
-            // Envío automático de email
-            $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : 'str.tickex.com.ar';
-            $scheme = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && (string)$_SERVER['SERVER_PORT'] === '443')) ? 'https' : 'http';
-            $baseUrl = $scheme . '://' . $host;
-            if (stripos($host, 'localhost') !== false || preg_match('/^\d+\.\d+\.\d+\.\d+$/', $host)) {
-              $baseUrl = 'https://str.tickex.com.ar';
-            }
-
-            $ticketUrl = $baseUrl . '/ticket.php?c=' . urlencode($codigo);
-            $checkinUrl = $baseUrl . '/checkin.php?c=' . urlencode($codigo);
-            $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urlencode($checkinUrl);
-
-            $asunto = "¡Recibiste una entrada de cortesía!";
-            $mensajeTxt = "Hola $nombreIns,\n\nTe han asignado una entrada de cortesía para el evento.\n\n";
-            $mensajeTxt .= "Código de entrada: $codigo\n";
-            $mensajeTxt .= "Tipo: $tipoId\n";
-            $mensajeTxt .= "Fecha de registro: $fecha\n\n";
-            $mensajeTxt .= "Ver tu ticket: $ticketUrl\n";
-            $mensajeTxt .= "Link de check-in: $checkinUrl\n\n";
-            $mensajeTxt .= "Mostrá el QR en la puerta para ingresar.\n\n";
-            $mensajeTxt .= "¡Nos vemos!\nEquipo Tickex";
-
-            $mensajeHtml = '';
-            $mensajeHtml .= '<div style="font-family:Arial,sans-serif;color:#111;line-height:1.45">';
-            $mensajeHtml .= '<h2 style="margin:0 0 10px">Tu Tickex de cortesía</h2>';
-            $mensajeHtml .= '<p>Hola <strong>' . htmlspecialchars($nombreIns, ENT_QUOTES, 'UTF-8') . '</strong>, te asignamos una entrada de cortesía.</p>';
-            $mensajeHtml .= '<p style="margin:10px 0">';
-            $mensajeHtml .= 'Código: <strong>' . htmlspecialchars($codigo, ENT_QUOTES, 'UTF-8') . '</strong><br>';
-            $mensajeHtml .= 'Tipo: <strong>' . htmlspecialchars($tipoId, ENT_QUOTES, 'UTF-8') . '</strong><br>';
-            $mensajeHtml .= 'Fecha: <strong>' . htmlspecialchars($fecha, ENT_QUOTES, 'UTF-8') . '</strong>';
-            $mensajeHtml .= '</p>';
-            $mensajeHtml .= '<p style="margin:12px 0">';
-            $mensajeHtml .= '<a href="' . htmlspecialchars($ticketUrl, ENT_QUOTES, 'UTF-8') . '">Ver ticket</a> · ';
-            $mensajeHtml .= '<a href="' . htmlspecialchars($checkinUrl, ENT_QUOTES, 'UTF-8') . '">Link check-in</a>';
-            $mensajeHtml .= '</p>';
-            $mensajeHtml .= '<div style="margin:12px 0">';
-            $mensajeHtml .= '<img src="' . htmlspecialchars($qrUrl, ENT_QUOTES, 'UTF-8') . '" alt="QR Ticket" style="width:220px;max-width:100%;border:1px solid #ddd;border-radius:8px;padding:6px;background:#fff">';
-            $mensajeHtml .= '</div>';
-            $mensajeHtml .= '<p style="font-size:13px;color:#555">Si no ves la imagen del QR, abrí el enlace de ticket para visualizarlo desde el navegador.</p>';
-            $mensajeHtml .= '</div>';
-
-            $mailOk = tickex_send_mail($email, $asunto, $mensajeHtml, array(
-              'context'       => 'tickex_cortesia',
-              'related_table' => 'entradas',
-              'related_id'    => $entradaId,
-              'from_email'    => 'info@tickex.com.ar',
-              'from_name'     => 'Tickex',
-              'reply_to'      => 'info@tickex.com.ar',
-              'extra_params'  => '-f info@tickex.com.ar',
-              'is_html'       => 1,
-              'headers_extra' => "X-Alt-Text: " . str_replace("\n", ' | ', $mensajeTxt),
+            $result = tickex_manual_issue_package($pdo, array(
+                'evento_id' => $eventoId,
+                'tipo_id' => $tipoId,
+                'cantidad' => $quantity,
+                'modo' => $mode,
+                'email' => $email,
+                'nombre' => $nombreIns,
+                'admin_id' => (int)$cu['id'],
+                'restrict_to_admin' => $rol === 'admin_evento',
+                'oculto' => $hidden,
             ));
-
-            // Mejor feedback: intentar traer trace_id del log para correlacionar con Exim/Gmail
-            $traceId = '';
-            $mailOk2 = null;
-            $mailErr = '';
-            try {
-              $stL = $pdo->prepare("SELECT trace_id, mail_ok, error_text FROM email_logs WHERE related_table = 'entradas' AND related_id = :rid ORDER BY id DESC LIMIT 1");
-              $stL->execute(array(':rid' => $entradaId));
-              $rowL = $stL->fetch(PDO::FETCH_ASSOC);
-              if ($rowL) {
-                if (isset($rowL['trace_id'])) $traceId = (string)$rowL['trace_id'];
-                if (isset($rowL['mail_ok'])) $mailOk2 = ((int)$rowL['mail_ok'] === 1);
-                if (!empty($rowL['error_text'])) $mailErr = (string)$rowL['error_text'];
-              }
-            } catch (Exception $e) {
-              // ignore
+            $success = 'Se emitieron ' . (int)$result['issued_quantity'] . ' QR independientes para ' . e($email) . '.';
+            if ($mode === 'manual_transfer') {
+                $success .= ' Pago registrado: $' . number_format((float)$result['total'], 2, ',', '.') . '.';
+            } else {
+                $success .= ' Emisión de cortesía, sin ingreso registrado.';
             }
-
-            $finalOk = ($mailOk2 !== null) ? (bool)$mailOk2 : (bool)$mailOk;
-            $success .= $finalOk ? ' — Email: OK' : ' — Email: con fallas';
-            if ($traceId !== '') {
-              $success .= ' — Trace: ' . htmlspecialchars($traceId, ENT_QUOTES, 'UTF-8');
-              $success .= ' — Gmail: rfc822msgid:tickex-' . htmlspecialchars($traceId, ENT_QUOTES, 'UTF-8') . '@tickex.com.ar';
-            }
-            if (!$finalOk && $mailErr !== '') {
-              $errors[] = 'Error de envío: ' . $mailErr;
-            }
+            $success .= $result['email_status'] === 'sent' ? ' Email: OK.' : ' Email pendiente o con fallas.';
+            if ($result['email_status'] !== 'sent' && $result['email_error'] !== '') $errors[] = 'Error de envío: ' . $result['email_error'];
         } catch (Exception $e) {
-            $errors[] = 'No se pudo crear la entrada: ' . $e->getMessage();
+            $errors[] = 'No se pudieron emitir las entradas: ' . $e->getMessage();
         }
     }
 }
@@ -265,7 +139,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver</a>
   <h2 style="margin:0;">Enviar Tickex</h2>
-  <span class="muted">Emití entradas de cortesía y asignalas a un usuario Tickex.</span>
+  <span class="muted">Registrá una transferencia o emití cortesías respetando paquetes, QR y stock.</span>
 </div>
 
 <?php if (!empty($errors)): ?>
@@ -284,6 +158,7 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card" style="max-width:900px;">
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+    <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <div>
       <label>Evento</label>
       <select name="evento_id" required>
@@ -299,14 +174,26 @@ include __DIR__.'/inc/layout_top.php';
         <option value="">Elegí tipo</option>
         <?php foreach ($tiposPorEvento as $eid => $tipos): ?>
           <?php foreach ($tipos as $t): ?>
-            <?php $labelOrigen = ($t['origen'] === 'plantilla') ? '[Plantilla]' : '[Tipo]'; ?>
-            <option value="<?php echo e($t['nombre']); ?>" data-evento="<?php echo (int)$eid; ?>">
-              <?php echo $labelOrigen; ?> #<?php echo (int)$t['id']; ?> — <?php echo e($t['nombre']); ?>
+            <option value="<?php echo (int)$t['id']; ?>" data-evento="<?php echo (int)$eid; ?>">
+              #<?php echo (int)$t['id']; ?> — <?php echo e($t['nombre']); ?> — $<?php echo number_format((float)$t['precio'], 2, ',', '.'); ?> — entrega <?php echo (int)$t['qr_quantity']; ?> QR — stock <?php echo (int)$t['cantidad_disponible']; ?>
             </option>
           <?php endforeach; ?>
         <?php endforeach; ?>
       </select>
       <small class="muted">Se filtra al elegir evento.</small>
+    </div>
+    <div>
+      <label>Modalidad</label>
+      <select name="modo" required>
+        <option value="manual_transfer">Venta manual / transferencia</option>
+        <option value="courtesy">Cortesía</option>
+      </select>
+      <small class="muted">La transferencia registra el precio configurado. La cortesía registra $0.</small>
+    </div>
+    <div>
+      <label>Cantidad de promociones</label>
+      <input type="number" name="cantidad" min="1" max="20" value="1" required>
+      <small class="muted">Ejemplo: 1 Promo 3x4 emite 4 QR y descuenta 4 lugares.</small>
     </div>
     <div>
       <label>Email destino</label>
@@ -332,7 +219,7 @@ include __DIR__.'/inc/layout_top.php';
     </div>
     <?php endif; ?>
     <div style="grid-column:1 / -1;">
-      <button class="btn" type="submit">Crear y enviar</button>
+      <button class="btn" type="submit">Emitir y enviar todos los QR</button>
     </div>
   </form>
 </div>
@@ -379,8 +266,8 @@ include __DIR__.'/inc/layout_top.php';
       echo '<div class="flash ok">Tickex eliminado.</div>';
     }
 
-    // Buscar últimos tickex enviados por este formulario (código CORT-...)
-    $where = "WHERE codigo LIKE 'CORT-%'";
+    // Buscar últimos Tickex emitidos manualmente mediante una orden auditable.
+    $where = "WHERE tc_order_request_id LIKE 'manual-%'";
     $params = array();
     if (isset($_GET['buscar']) && trim($_GET['buscar']) !== '') {
       $q = '%'.trim($_GET['buscar']).'%';

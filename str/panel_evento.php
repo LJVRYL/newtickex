@@ -747,7 +747,7 @@ include __DIR__.'/inc/layout_top.php';
         <select name="estado">
           <option value="">Todos</option>
           <option value="checkin_ok" <?php if($fEstado==='checkin_ok') echo 'selected'; ?>>Checkeados</option>
-          <option value="pendiente"  <?php if($fEstado==='pendiente')  echo 'selected'; ?>>Pendientes</option>
+          <option value="pendiente"  <?php if($fEstado==='pendiente')  echo 'selected'; ?>>Sin ingresar</option>
         </select>
       </div>
 
@@ -758,7 +758,7 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 
   <div style="margin-top:12px;color:var(--muted);">
-    Total: <?php echo $total; ?> — Check-ins: <?php echo $checkins; ?> — Pendientes: <?php echo $faltan; ?>
+    Total: <?php echo $total; ?> — Ingresaron: <?php echo $checkins; ?> — Sin ingresar: <?php echo $faltan; ?>
   </div>
 
   <?php if (!$rows): ?>
@@ -778,7 +778,7 @@ include __DIR__.'/inc/layout_top.php';
         <th>Precio</th>
         <th>Código/Ref</th>
         <th>Pago</th>
-        <th>Estado</th>
+        <th>Ingreso</th>
         <th>Acciones</th>
       </tr>
 
@@ -821,7 +821,7 @@ include __DIR__.'/inc/layout_top.php';
           <?php if($r['is_checked_in']): ?>
             <span style="color:var(--ok);font-weight:700;">OK</span>
           <?php else: ?>
-            <span style="color:var(--warn);font-weight:700;">Pendiente</span>
+            <span style="color:var(--warn);font-weight:700;">Sin ingresar</span>
           <?php endif; ?>
         </td>
         <td style="display:flex;gap:8px;align-items:center;">
