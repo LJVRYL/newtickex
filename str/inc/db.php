@@ -1,6 +1,7 @@
 <?php
 // inc/db.php (PHP5-safe)
 require_once __DIR__ . '/communication_delivery_feedback.php';
+require_once __DIR__ . '/communication_tracking.php';
 function db(){
     static $pdo = null;
     if ($pdo) return $pdo;
@@ -413,6 +414,7 @@ SQL;
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_to ON email_logs(to_email)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_email_logs_context ON email_logs(context)");
             communication_delivery_feedback_ensure_schema($pdo);
+            communication_tracking_ensure_schema($pdo);
 
                         // email_templates: plantillas editables para envíos del sistema
                         $pdo->exec("CREATE TABLE IF NOT EXISTS email_templates (
@@ -712,6 +714,7 @@ SQL;
                         if (!$hasProcessedAt) {
                             $pdo->exec("ALTER TABLE tc_orders ADD COLUMN processed_at TEXT");
                         }
+                        communication_tracking_ensure_order_columns($pdo);
 
                         $pdo->exec("CREATE TABLE IF NOT EXISTS order_events (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,

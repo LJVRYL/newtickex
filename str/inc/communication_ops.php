@@ -368,6 +368,7 @@ if (!function_exists('communication_ops_fetch_run_history')) {
             $sent = isset($row['accepted_count']) ? (int)$row['accepted_count'] : 0;
             $failed = (isset($row['rejected_count']) ? (int)$row['rejected_count'] : 0) + (isset($row['transient_error_count']) ? (int)$row['transient_error_count'] : 0) + (isset($row['permanent_error_count']) ? (int)$row['permanent_error_count'] : 0);
             $pending = max(0, $resolved - (isset($row['processed_count']) ? (int)$row['processed_count'] : 0));
+            $engagement = communication_tracking_run_metrics($pdo, (int)$row['id']);
 
             $runs[] = array(
                 'id' => (int)$row['id'],
@@ -382,6 +383,12 @@ if (!function_exists('communication_ops_fetch_run_history')) {
                 'failed_count' => $failed,
                 'pending_count' => $pending,
                 'processed_count' => isset($row['processed_count']) ? (int)$row['processed_count'] : 0,
+                'unique_opens' => (int)$engagement['unique_opens'],
+                'total_opens' => (int)$engagement['total_opens'],
+                'unique_clicks' => (int)$engagement['unique_clicks'],
+                'total_clicks' => (int)$engagement['total_clicks'],
+                'confirmed_orders' => (int)$engagement['confirmed_orders'],
+                'revenue' => (float)$engagement['revenue'],
             );
         }
 
@@ -394,7 +401,7 @@ if (!function_exists('communication_ops_fetch_run_detail')) {
     {
         $run = communication_ops_validate_run_scope($pdo, $runId, $organizationId, $adminId, $isSuper);
         if (!$run) {
-            return array('run' => null, 'recipients' => array(), 'total' => 0);
+            return array('run' => null, 'recipients' => array(), 'total' => 0, 'metrics' => communication_tracking_run_metrics($pdo, 0));
         }
 
         $limit = (int)$limit;
@@ -417,7 +424,7 @@ if (!function_exists('communication_ops_fetch_run_detail')) {
         $st->execute();
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        return array('run' => $run, 'recipients' => $rows, 'total' => $total);
+        return array('run' => $run, 'recipients' => $rows, 'total' => $total, 'metrics' => communication_tracking_run_metrics($pdo, (int)$runId));
     }
 }
 

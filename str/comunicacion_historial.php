@@ -111,7 +111,7 @@ if ($runId <= 0 && !empty($history['runs'])) {
     $runId = (int)$history['runs'][0]['id'];
 }
 
-$runDetail = array('run' => null, 'recipients' => array(), 'total' => 0);
+$runDetail = array('run' => null, 'recipients' => array(), 'total' => 0, 'metrics' => array());
 if ($runId > 0) {
     $runDetail = communication_ops_fetch_run_detail($pdo, $organizationId, $adminId, $isSuper, $runId, $perPage, $offset);
 }
@@ -180,12 +180,16 @@ include __DIR__ . '/inc/layout_top.php';
         <th>Enviados</th>
         <th>Fallidos</th>
         <th>Pendientes</th>
+        <th>Aperturas*</th>
+        <th>Clics</th>
+        <th>Compras</th>
+        <th>Ingresos</th>
         <th>Acciones</th>
       </tr>
     </thead>
     <tbody>
       <?php if (empty($history['runs'])): ?>
-        <tr><td colspan="10" class="muted">No hay runs para esta campana.</td></tr>
+        <tr><td colspan="14" class="muted">No hay runs para esta campana.</td></tr>
       <?php else: ?>
         <?php foreach ($history['runs'] as $r): ?>
           <tr>
@@ -206,6 +210,10 @@ include __DIR__ . '/inc/layout_top.php';
             <td><?php echo (int)$r['sent_count']; ?></td>
             <td><?php echo (int)$r['failed_count']; ?></td>
             <td><?php echo (int)$r['pending_count']; ?></td>
+            <td><?php echo (int)$r['unique_opens']; ?> <span class="muted">(<?php echo $r['sent_count'] > 0 ? e(number_format(100 * $r['unique_opens'] / $r['sent_count'], 1, ',', '.')) : '0,0'; ?>%)</span></td>
+            <td><?php echo (int)$r['unique_clicks']; ?> <span class="muted">(<?php echo $r['sent_count'] > 0 ? e(number_format(100 * $r['unique_clicks'] / $r['sent_count'], 1, ',', '.')) : '0,0'; ?>%)</span></td>
+            <td><?php echo (int)$r['confirmed_orders']; ?></td>
+            <td>$<?php echo e(number_format((float)$r['revenue'], 0, ',', '.')); ?></td>
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <form method="post" style="display:inline;">
@@ -241,6 +249,24 @@ include __DIR__ . '/inc/layout_top.php';
     </div>
   <?php endif; ?>
 </div>
+
+<?php if ($runId > 0 && !empty($runDetail['run'])): ?>
+  <?php $metrics = isset($runDetail['metrics']) && is_array($runDetail['metrics']) ? $runDetail['metrics'] : array(); ?>
+  <?php $acceptedForRates = isset($runDetail['run']['accepted_count']) ? (int)$runDetail['run']['accepted_count'] : 0; ?>
+  <?php $uniqueOpens = isset($metrics['unique_opens']) ? (int)$metrics['unique_opens'] : 0; ?>
+  <?php $uniqueClicks = isset($metrics['unique_clicks']) ? (int)$metrics['unique_clicks'] : 0; ?>
+  <?php $confirmedOrders = isset($metrics['confirmed_orders']) ? (int)$metrics['confirmed_orders'] : 0; ?>
+  <div class="card">
+    <h3 style="margin-top:0;">Resultados del run #<?php echo (int)$runId; ?></h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+      <div><div class="muted">Aperturas únicas*</div><strong style="font-size:24px;"><?php echo $uniqueOpens; ?></strong><div class="muted"><?php echo $acceptedForRates > 0 ? e(number_format(100 * $uniqueOpens / $acceptedForRates, 1, ',', '.')) : '0,0'; ?>% de enviados</div></div>
+      <div><div class="muted">Clics únicos</div><strong style="font-size:24px;"><?php echo $uniqueClicks; ?></strong><div class="muted"><?php echo $acceptedForRates > 0 ? e(number_format(100 * $uniqueClicks / $acceptedForRates, 1, ',', '.')) : '0,0'; ?>% de enviados</div></div>
+      <div><div class="muted">Compras confirmadas</div><strong style="font-size:24px;"><?php echo $confirmedOrders; ?></strong><div class="muted"><?php echo $uniqueClicks > 0 ? e(number_format(100 * $confirmedOrders / $uniqueClicks, 1, ',', '.')) : '0,0'; ?>% de clics</div></div>
+      <div><div class="muted">Ingresos atribuidos</div><strong style="font-size:24px;">$<?php echo e(number_format((float)(isset($metrics['revenue']) ? $metrics['revenue'] : 0), 0, ',', '.')); ?></strong></div>
+    </div>
+    <p class="muted" style="margin-bottom:0;font-size:12px;">* Las aperturas son aproximadas: algunos proveedores de correo cargan imágenes automáticamente. Los clics y las compras confirmadas son señales más confiables.</p>
+  </div>
+<?php endif; ?>
 
 <div class="card" style="overflow:auto;">
   <h3 style="margin-top:0;">Detalle del run <?php echo ($runId > 0 ? '#' . (int)$runId : ''); ?></h3>

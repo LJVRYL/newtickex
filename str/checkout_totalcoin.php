@@ -9,6 +9,7 @@ require_once __DIR__ . '/inc/free_checkout.php';
 require_once __DIR__ . '/inc/totalcoin_callback_auth.php';
 require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
 require_once __DIR__ . '/inc/ticket_packages.php';
+require_once __DIR__ . '/inc/communication_tracking.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -27,6 +28,9 @@ $lastDebugId = '';
 $redirectFallback = array('auto' => false, 'reason' => '', 'hs_file' => '', 'hs_line' => 0);
 $tcGo = isset($_GET['tc_go']) ? (int)$_GET['tc_go'] : 0;
 $tcRid = isset($_GET['rid']) ? trim((string)$_GET['rid']) : '';
+$communicationTrackingToken = isset($_POST['ct']) ? (string)$_POST['ct'] : (isset($_GET['ct']) ? (string)$_GET['ct'] : '');
+$communicationTrackingToken = preg_replace('/[^a-f0-9]/i', '', $communicationTrackingToken);
+if (strlen($communicationTrackingToken) < 32 || strlen($communicationTrackingToken) > 96) $communicationTrackingToken = '';
 $preview = array(
   'selected' => array(),
   'total' => 0,
@@ -900,10 +904,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($requestId !== '') {
               try {
                 $pdoSave = db();
+                communication_tracking_ensure_order_columns($pdoSave);
+                $communicationAttribution = communication_tracking_attribution_for_event($pdoSave, $communicationTrackingToken, $eventId);
                 $ip = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
                 $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string)$_SERVER['HTTP_USER_AGENT'] : '';
-                $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, updated_at)
-                  VALUES (:rid, :st, :eid, :ref, :c, :am, :dni, :bl, :bf, :be, :rev, :tj, :pu, :ip, :ua, datetime('now'))");
+                $stIns = $pdoSave->prepare("INSERT OR IGNORE INTO tc_orders (request_id, state, evento_id, ref, concept, amount, buyer_dni, buyer_last, buyer_first, buyer_email, revendedor_id, selected_tickets_json, payment_url, ip, user_agent, communication_campaign_id, communication_run_id, communication_recipient_fingerprint, communication_tracking_token, updated_at)
+                  VALUES (:rid, :st, :eid, :ref, :c, :am, :dni, :bl, :bf, :be, :rev, :tj, :pu, :ip, :ua, :ccid, :crid, :crfp, :ctok, datetime('now'))");
                 $stIns->execute(array(
                   ':rid' => $requestId,
                   ':st'  => 'created',
@@ -920,10 +926,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   ':pu'  => $paymentUrl,
                   ':ip'  => $ip,
                   ':ua'  => $ua,
+                  ':ccid' => $communicationAttribution ? (int)$communicationAttribution['campaign_id'] : null,
+                  ':crid' => $communicationAttribution ? (int)$communicationAttribution['run_id'] : null,
+                  ':crfp' => $communicationAttribution ? (string)$communicationAttribution['recipient_fingerprint'] : null,
+                  ':ctok' => $communicationAttribution ? (string)$communicationAttribution['tracking_token'] : null,
                 ));
 
                 // si ya existía, actualizar los campos de atribución
-              $stUp = $pdoSave->prepare("UPDATE tc_orders SET evento_id=:eid, ref=:ref, concept=:c, amount=:am, buyer_dni=:dni, buyer_last=:bl, buyer_first=:bf, buyer_email=:be, revendedor_id=:rev, selected_tickets_json=:tj, payment_url=:pu, updated_at=datetime('now') WHERE request_id=:rid");
+              $stUp = $pdoSave->prepare("UPDATE tc_orders SET evento_id=:eid, ref=:ref, concept=:c, amount=:am, buyer_dni=:dni, buyer_last=:bl, buyer_first=:bf, buyer_email=:be, revendedor_id=:rev, selected_tickets_json=:tj, payment_url=:pu, communication_campaign_id=COALESCE(communication_campaign_id,:ccid), communication_run_id=COALESCE(communication_run_id,:crid), communication_recipient_fingerprint=COALESCE(communication_recipient_fingerprint,:crfp), communication_tracking_token=COALESCE(communication_tracking_token,:ctok), updated_at=datetime('now') WHERE request_id=:rid");
               $stUp->execute(array(
                 ':rid' => $requestId,
                 ':eid' => $eventId,
@@ -937,6 +947,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':rev' => ($revendedorId > 0 ? $revendedorId : null),
                 ':tj'  => $ticketsJson,
                 ':pu'  => $paymentUrl,
+                ':ccid' => $communicationAttribution ? (int)$communicationAttribution['campaign_id'] : null,
+                ':crid' => $communicationAttribution ? (int)$communicationAttribution['run_id'] : null,
+                ':crfp' => $communicationAttribution ? (string)$communicationAttribution['recipient_fingerprint'] : null,
+                ':ctok' => $communicationAttribution ? (string)$communicationAttribution['tracking_token'] : null,
               ));
               try {
                 $evPdo = db();
@@ -1181,6 +1195,7 @@ include __DIR__.'/inc/layout_top.php';
           <input type="hidden" name="action" value="pay">
           <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId))); ?>">
           <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
+          <?php if ($communicationTrackingToken !== ''): ?><input type="hidden" name="ct" value="<?php echo e($communicationTrackingToken); ?>"><?php endif; ?>
 
           <?php foreach ((isset($preview['selected']) ? $preview['selected'] : array()) as $ln): ?>
             <input type="hidden" name="selected_id[]" value="<?php echo e((string)$ln['id']); ?>">
@@ -1232,6 +1247,7 @@ include __DIR__.'/inc/layout_top.php';
     <input type="hidden" name="action" value="pay">
     <input type="hidden" name="ref" value="<?php echo e($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId)); ?>">
     <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
+    <?php if ($communicationTrackingToken !== ''): ?><input type="hidden" name="ct" value="<?php echo e($communicationTrackingToken); ?>"><?php endif; ?>
 
     <div class="card" style="background:var(--panel-2);border-color:var(--line);margin:0 0 12px 0;">
       <h3 style="margin:0 0 8px;">Elige tus entradas</h3>

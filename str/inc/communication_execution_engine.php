@@ -4,6 +4,7 @@ require_once __DIR__ . '/communication_campaigns.php';
 require_once __DIR__ . '/communication_template_renderer.php';
 require_once __DIR__ . '/communication_transport.php';
 require_once __DIR__ . '/communication_suppressions.php';
+require_once __DIR__ . '/communication_tracking.php';
 
 if (!function_exists('communication_execution_now')) {
     function communication_execution_now()
@@ -660,6 +661,17 @@ if (!function_exists('communication_execution_process_run_recipients')) {
             $footerBodies = communication_suppressions_append_footer($bodyHtml, $bodyText, $unsubscribeUrl);
             $bodyHtml = $footerBodies['body_html'];
             $bodyText = $footerBodies['body_text'];
+
+            $trackedBodies = communication_tracking_instrument_message($pdo, array(
+                'organization_id' => (int)$organizationId,
+                'admin_id' => isset($scope['admin_id']) ? (int)$scope['admin_id'] : 0,
+                'campaign_id' => $campaignId,
+                'run_id' => $runId,
+                'recipient_id' => $recipientId,
+                'recipient_fingerprint' => $fingerprint,
+            ), $bodyHtml, $bodyText);
+            $bodyHtml = $trackedBodies['body_html'];
+            $bodyText = $trackedBodies['body_text'];
 
             $transport = communication_transport_send($pdo, (int)$organizationId, array(
                 'channel' => 'email',
