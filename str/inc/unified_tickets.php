@@ -948,6 +948,12 @@ function get_economic_stats($pdo, $evento_id) {
         'bridge_gross' => 0,
         'bridge_fee_3pct' => 0,
         'bridge_net' => 0,
+        'totalcoin_checkout_gross' => 0,
+        'totalcoin_checkout_fee_3pct' => 0,
+        'totalcoin_gross' => 0,
+        'totalcoin_fee_3pct' => 0,
+        'payment_processing_cost' => 0,
+        'service_fee_charged' => 0,
         'por_tipo' => array(), // array( tipo => array('cantidad' => X, 'monto' => Y), ... )
         'manual_income' => 0,
         'manual_income_ingresos' => 0,
@@ -1113,6 +1119,48 @@ function get_economic_stats($pdo, $evento_id) {
         } catch (Exception $e) {
             // Ignorar error bridge
         }
+
+        // ==== Costos reales del proveedor en órdenes del checkout moderno ====
+        // TotalCoin cobra 3% y ese costo lo absorbe la organización: no se suma
+        // al importe que paga el comprador. Las órdenes históricas sin proveedor
+        // explícito se consideran TotalCoin; las sincronizadas por bridge se
+        // excluyen porque su 3% ya fue calculado arriba.
+        try {
+            if (has_table($pdo, 'tc_orders')) {
+                $orderCols = detect_table_columns($pdo, 'tc_orders');
+                if (isset($orderCols['evento_id']) && isset($orderCols['amount'])) {
+                    $confirmedWhere = isset($orderCols['payment_status'])
+                        ? "LOWER(COALESCE(payment_status,'')) = 'confirmed'"
+                        : "UPPER(COALESCE(state,'')) IN ('SUCCESS','APROBADO','APPROVED','COMPLETED','PAID')";
+                    $providerWhere = isset($orderCols['payment_provider'])
+                        ? "LOWER(COALESCE(NULLIF(payment_provider,''),'totalcoin')) = 'totalcoin'"
+                        : "1 = 1";
+                    $bridgeWhere = isset($orderCols['request_id'])
+                        ? "COALESCE(request_id,'') NOT LIKE 'bridge-%'"
+                        : "1 = 1";
+
+                    $stTcCost = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM tc_orders WHERE evento_id = :eid AND $confirmedWhere AND $providerWhere AND $bridgeWhere");
+                    $stTcCost->execute(array(':eid' => $evento_id));
+                    $checkoutGross = max(0, (float)$stTcCost->fetchColumn());
+                    $checkoutFee = round($checkoutGross * 0.03, 2);
+                    $stats['totalcoin_checkout_gross'] = $checkoutGross;
+                    $stats['totalcoin_checkout_fee_3pct'] = $checkoutFee;
+                    $stats['total_recaudado'] -= $checkoutFee;
+
+                    if (isset($orderCols['service_fee_amount'])) {
+                        $stService = $pdo->prepare("SELECT COALESCE(SUM(service_fee_amount),0) FROM tc_orders WHERE evento_id = :eid AND $confirmedWhere");
+                        $stService->execute(array(':eid' => $evento_id));
+                        $stats['service_fee_charged'] = max(0, (float)$stService->fetchColumn());
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Mantener disponible el panel aunque una instalación antigua no tenga tc_orders completo.
+        }
+
+        $stats['totalcoin_gross'] = (float)$stats['bridge_gross'] + (float)$stats['totalcoin_checkout_gross'];
+        $stats['totalcoin_fee_3pct'] = (float)$stats['bridge_fee_3pct'] + (float)$stats['totalcoin_checkout_fee_3pct'];
+        $stats['payment_processing_cost'] = $stats['totalcoin_fee_3pct'];
         
         // ==== Ingresos/Egresos manuales (otros/varios) ====
         try {

@@ -561,10 +561,19 @@ include __DIR__.'/inc/layout_top.php';
     </div>
 
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Costo servicio bridge (3%)</div>
+      <div class="muted" style="font-size:12px;">Costo TotalCoin / Bridge (3%)</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
-        $<?php echo number_format((float)($ecoStats['bridge_fee_3pct'] ?? 0), 2); ?>
+        $<?php echo number_format((float)($ecoStats['totalcoin_fee_3pct'] ?? 0), 2); ?>
       </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Costo absorbido; no se cobra al comprador.</div>
+    </div>
+
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Costo de servicio cobrado</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--info);">
+        $<?php echo number_format((float)($ecoStats['service_fee_charged'] ?? 0), 2); ?>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Por ejemplo, el 10% de checkout de clientes.</div>
     </div>
 
     <div class="card" style="margin:0;background:var(--panel-2);">
@@ -603,7 +612,7 @@ include __DIR__.'/inc/layout_top.php';
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($resultadoNeto >= 0 ? 'var(--ok)' : 'var(--warn)'); ?>;">
         $<?php echo number_format($resultadoNeto, 2); ?>
       </div>
-      <div class="muted" style="font-size:11px;margin-top:4px;">Recaudado - staff - artística - venue</div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Recaudado neto de TotalCoin/Bridge - staff - artística - venue</div>
     </div>
   </div>
   
