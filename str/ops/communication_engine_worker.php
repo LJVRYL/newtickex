@@ -41,6 +41,12 @@ if (isset($input['max'])) {
 if ($max <= 0) $max = 5;
 if ($max > 100) $max = 100;
 
+$safeMaxCommands = getenv('TICKEX_CAMPAIGN_MAX_COMMANDS_PER_WORKER');
+$safeMaxCommands = ($safeMaxCommands === false || trim((string)$safeMaxCommands) === '') ? 1 : (int)$safeMaxCommands;
+if ($safeMaxCommands <= 0) $safeMaxCommands = 1;
+if ($safeMaxCommands > 100) $safeMaxCommands = 100;
+if ($max > $safeMaxCommands) $max = $safeMaxCommands;
+
 $batchSize = 200;
 if (isset($input['batch_size'])) {
     $batchSize = (int)$input['batch_size'];
@@ -49,6 +55,12 @@ if (isset($input['batch_size'])) {
 }
 if ($batchSize <= 0) $batchSize = 200;
 if ($batchSize > 500) $batchSize = 500;
+
+$safeBatchSize = getenv('TICKEX_CAMPAIGN_MAX_BATCH_SIZE');
+$safeBatchSize = ($safeBatchSize === false || trim((string)$safeBatchSize) === '') ? 3 : (int)$safeBatchSize;
+if ($safeBatchSize <= 0) $safeBatchSize = 3;
+if ($safeBatchSize > 500) $safeBatchSize = 500;
+if ($batchSize > $safeBatchSize) $batchSize = $safeBatchSize;
 
 $workerId = isset($input['worker']) ? trim((string)$input['worker']) : '';
 if ($workerId === '') {

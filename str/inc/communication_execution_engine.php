@@ -27,6 +27,50 @@ if (!function_exists('communication_execution_make_request_key')) {
     }
 }
 
+if (!function_exists('communication_execution_delivery_cooldown_seconds')) {
+    function communication_execution_delivery_cooldown_seconds()
+    {
+        $transport = strtolower(trim((string)getenv('TICKEX_MAIL_TRANSPORT')));
+        if ($transport === 'fake') return 0;
+
+        $configured = getenv('TICKEX_CAMPAIGN_COOLDOWN_SECONDS');
+        if ($configured !== false && trim((string)$configured) !== '') {
+            $seconds = (int)$configured;
+            if ($seconds < 0) $seconds = 0;
+            if ($seconds > 86400) $seconds = 86400;
+            return $seconds;
+        }
+
+        // El Exim actual limita al usuario web por una ventana de 15 minutos.
+        return 900;
+    }
+}
+
+if (!function_exists('communication_execution_safe_worker_limits')) {
+    function communication_execution_safe_worker_limits($maxCommands, $batchSize)
+    {
+        $maxCommands = max(1, (int)$maxCommands);
+        $batchSize = max(1, (int)$batchSize);
+        $transport = strtolower(trim((string)getenv('TICKEX_MAIL_TRANSPORT')));
+        if ($transport === 'fake') {
+            return array('max_commands' => $maxCommands, 'batch_size' => $batchSize);
+        }
+
+        $configuredCommands = getenv('TICKEX_CAMPAIGN_MAX_COMMANDS_PER_WORKER');
+        $safeCommands = ($configuredCommands === false || trim((string)$configuredCommands) === '') ? 1 : (int)$configuredCommands;
+        if ($safeCommands <= 0) $safeCommands = 1;
+
+        $configuredBatch = getenv('TICKEX_CAMPAIGN_MAX_BATCH_SIZE');
+        $safeBatch = ($configuredBatch === false || trim((string)$configuredBatch) === '') ? 3 : (int)$configuredBatch;
+        if ($safeBatch <= 0) $safeBatch = 3;
+
+        return array(
+            'max_commands' => min($maxCommands, $safeCommands),
+            'batch_size' => min($batchSize, $safeBatch),
+        );
+    }
+}
+
 if (!function_exists('communication_execution_ensure_schema')) {
     function communication_execution_ensure_schema($pdo)
     {
@@ -163,7 +207,39 @@ if (!function_exists('communication_execution_enqueue_campaign')) {
             'requested_at' => communication_execution_now(),
         );
 
+        $ownsTransaction = !$pdo->inTransaction();
+        $immediateTransactionStarted = false;
         try {
+            if ($ownsTransaction) {
+                // SQLite serializa esta comprobacion para impedir que dos clics
+                // simultaneos creen comandos activos para la misma campana.
+                $pdo->exec('BEGIN IMMEDIATE');
+                $immediateTransactionStarted = true;
+            }
+
+            $stExisting = $pdo->prepare("SELECT id, request_key, status
+                FROM communication_execution_commands
+                WHERE organization_id = :org
+                  AND campaign_id = :cid
+                  AND status IN ('queued','processing')
+                ORDER BY id ASC
+                LIMIT 1");
+            $stExisting->execute(array(':org' => $organizationId, ':cid' => $campaignId));
+            $existing = $stExisting->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                if ($immediateTransactionStarted) {
+                    $pdo->exec('COMMIT');
+                    $immediateTransactionStarted = false;
+                }
+                return array(
+                    'ok' => true,
+                    'command_id' => (int)$existing['id'],
+                    'request_key' => (string)$existing['request_key'],
+                    'reused' => true,
+                    'status' => (string)$existing['status'],
+                );
+            }
+
             $stIns = $pdo->prepare('INSERT INTO communication_execution_commands (organization_id, campaign_id, command_type, request_key, status, payload_json, scheduled_for, created_by_admin_id, created_at, updated_at) VALUES (:org, :cid, :ct, :rk, :st, :pj, :sf, :aid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)');
             $stIns->execute(array(
                 ':org' => $organizationId,
@@ -177,6 +253,11 @@ if (!function_exists('communication_execution_enqueue_campaign')) {
             ));
             $commandId = (int)$pdo->lastInsertId();
 
+            if ($immediateTransactionStarted) {
+                $pdo->exec('COMMIT');
+                $immediateTransactionStarted = false;
+            }
+
             if (function_exists('communication_ops_log')) {
                 communication_ops_log($pdo, $organizationId, 'engine', 'command.enqueued', 'info', 'Campana encolada para ejecucion.', array(
                     'campaign_id' => $campaignId,
@@ -185,8 +266,11 @@ if (!function_exists('communication_execution_enqueue_campaign')) {
                 ), 'command.enqueued|' . (int)$commandId);
             }
 
-            return array('ok' => true, 'command_id' => $commandId, 'request_key' => $requestKey);
+            return array('ok' => true, 'command_id' => $commandId, 'request_key' => $requestKey, 'reused' => false, 'status' => 'queued');
         } catch (Exception $e) {
+            if ($immediateTransactionStarted) {
+                try { $pdo->exec('ROLLBACK'); } catch (Exception $ignored) {}
+            }
             return array('ok' => false, 'error' => 'No se pudo encolar la ejecucion: ' . $e->getMessage());
         }
     }
@@ -278,6 +362,30 @@ if (!function_exists('communication_execution_update_command')) {
         }
 
         return true;
+    }
+}
+
+if (!function_exists('communication_execution_requeue_command_after')) {
+    function communication_execution_requeue_command_after($pdo, $commandId, $resultJson, $seconds)
+    {
+        $seconds = max(0, (int)$seconds);
+        $scheduledFor = $seconds > 0 ? gmdate('Y-m-d H:i:s', time() + $seconds) : null;
+        $st = $pdo->prepare('UPDATE communication_execution_commands
+            SET status = :st,
+                result_json = :rj,
+                error_text = NULL,
+                locked_by = NULL,
+                lock_expires_at = NULL,
+                scheduled_for = :sf,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id');
+        $st->execute(array(
+            ':st' => 'queued',
+            ':rj' => $resultJson,
+            ':sf' => $scheduledFor,
+            ':id' => (int)$commandId,
+        ));
+        return $scheduledFor;
     }
 }
 
@@ -755,8 +863,20 @@ if (!function_exists('communication_execution_process_single_command')) {
             }
 
             if (empty($result['complete'])) {
-                communication_execution_update_command($pdo, $commandId, 'queued', json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), null);
-                return array('processed' => true, 'status' => 'queued', 'result' => $result);
+                $cooldownSeconds = communication_execution_delivery_cooldown_seconds();
+                $scheduledFor = communication_execution_requeue_command_after(
+                    $pdo,
+                    $commandId,
+                    json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    $cooldownSeconds
+                );
+                return array(
+                    'processed' => true,
+                    'status' => 'queued',
+                    'result' => $result,
+                    'scheduled_for' => $scheduledFor,
+                    'cooldown_seconds' => $cooldownSeconds,
+                );
             }
 
             communication_execution_update_command($pdo, $commandId, 'done', json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), null);
@@ -792,6 +912,10 @@ if (!function_exists('communication_execution_process_queue')) {
 
         $maxCommands = (int)$maxCommands;
         if ($maxCommands <= 0) $maxCommands = 5;
+
+        $limits = communication_execution_safe_worker_limits($maxCommands, $batchSize);
+        $maxCommands = (int)$limits['max_commands'];
+        $batchSize = (int)$limits['batch_size'];
 
         $workerId = trim((string)$workerId);
         if ($workerId === '') {

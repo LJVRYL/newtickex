@@ -69,6 +69,11 @@ $campaignId = (int)$pdo->lastInsertId();
 $enqueue = communication_execution_enqueue_campaign($pdo, 1, $campaignId, 7, false, array('request_key' => 'delivery-engine-501'));
 communication_delivery_test_assert(!empty($enqueue['ok']), 'campaign is enqueued');
 
+$duplicateEnqueue = communication_execution_enqueue_campaign($pdo, 1, $campaignId, 7, false, array('request_key' => 'delivery-engine-duplicate-click'));
+communication_delivery_test_assert(!empty($duplicateEnqueue['ok']) && !empty($duplicateEnqueue['reused']), 'duplicate enqueue reuses pending command');
+communication_delivery_test_assert((int)$duplicateEnqueue['command_id'] === (int)$enqueue['command_id'], 'duplicate enqueue keeps the original command id');
+communication_delivery_test_assert((int)$pdo->query("SELECT COUNT(*) FROM communication_execution_commands WHERE campaign_id=" . (int)$campaignId . " AND status IN ('queued','processing')")->fetchColumn() === 1, 'only one active command exists per campaign');
+
 $result = communication_execution_process_queue($pdo, 10, 'test-worker', 200);
 communication_delivery_test_assert((int)$result['picked'] === 3, 'large campaign continues across three batches');
 communication_delivery_test_assert((int)$result['done'] === 1, 'campaign command completes only after the final batch');
@@ -89,5 +94,12 @@ communication_delivery_test_assert(strpos($firstBody, 'unsubscribe.php?token=') 
 $secondPass = communication_execution_process_queue($pdo, 10, 'test-worker-second-pass', 200);
 communication_delivery_test_assert((int)$secondPass['picked'] === 0, 'completed campaign is not picked again');
 communication_delivery_test_assert((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE context='communication_campaign' AND mail_ok=1")->fetchColumn() === 501, 'reprocessing does not duplicate accepted emails');
+
+putenv('TICKEX_MAIL_TRANSPORT=legacy_mail_php');
+$safeLimits = communication_execution_safe_worker_limits(100, 200);
+communication_delivery_test_assert((int)$safeLimits['max_commands'] === 1, 'live worker processes one campaign command per invocation');
+communication_delivery_test_assert((int)$safeLimits['batch_size'] === 3, 'live worker caps each Exim batch to three recipients');
+communication_delivery_test_assert(communication_execution_delivery_cooldown_seconds() === 900, 'live campaign batches wait fifteen minutes');
+putenv('TICKEX_MAIL_TRANSPORT=fake');
 
 echo 'ALL COMMUNICATION DELIVERY TESTS PASSED' . PHP_EOL;

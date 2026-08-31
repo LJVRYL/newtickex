@@ -49,7 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $runIdPost = isset($_POST['run_id']) ? (int)$_POST['run_id'] : 0;
             $res = communication_ops_action_retry_run($pdo, $organizationId, $adminId, $isSuper, $runIdPost, 'historial');
             if (!empty($res['ok'])) {
-                $flashOk = 'Reintento solicitado. Comando #' . (int)$res['command_id'];
+                $flashOk = !empty($res['reused'])
+                    ? 'Ya existe un reintento pendiente. Se mantiene el comando #' . (int)$res['command_id']
+                    : 'Reintento solicitado. Comando #' . (int)$res['command_id'];
                 $runId = $runIdPost;
             } else {
                 $flashErr = isset($res['error']) ? (string)$res['error'] : 'No se pudo solicitar reintento.';
@@ -60,7 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $runIdPost = isset($_POST['run_id']) ? (int)$_POST['run_id'] : 0;
             $res = communication_ops_action_resume_run($pdo, $organizationId, $adminId, $isSuper, $runIdPost, 'historial');
             if (!empty($res['ok'])) {
-                $flashOk = 'Reanudacion solicitada. Comando #' . (int)$res['command_id'];
+                $flashOk = !empty($res['reused'])
+                    ? 'Ya existe una reanudacion pendiente. Se mantiene el comando #' . (int)$res['command_id']
+                    : 'Reanudacion solicitada. Comando #' . (int)$res['command_id'];
                 $runId = $runIdPost;
             } else {
                 $flashErr = isset($res['error']) ? (string)$res['error'] : 'No se pudo reanudar run.';
@@ -82,7 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $campaignIdPost = isset($_POST['campaign_id']) ? (int)$_POST['campaign_id'] : 0;
             $res = communication_ops_action_requeue_campaign($pdo, $organizationId, $adminId, $isSuper, $campaignIdPost, 'historial');
             if (!empty($res['ok'])) {
-                $flashOk = 'Campana reencolada. Comando #' . (int)$res['command_id'];
+                $flashOk = !empty($res['reused'])
+                    ? 'La campana ya tenia un comando pendiente. Se mantiene el comando #' . (int)$res['command_id']
+                    : 'Campana reencolada. Comando #' . (int)$res['command_id'];
                 $campaignId = $campaignIdPost;
             } else {
                 $flashErr = isset($res['error']) ? (string)$res['error'] : 'No se pudo reencolar campana.';
