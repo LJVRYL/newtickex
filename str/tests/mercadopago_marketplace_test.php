@@ -10,6 +10,16 @@ function mp_test_assert($condition, $message)
     echo 'PASS: ' . $message . PHP_EOL;
 }
 
+function mp_test_column_count($pdo, $table, array $wanted)
+{
+    $count = 0;
+    $rows = $pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $row) {
+        if (in_array((string)$row['name'], $wanted, true)) $count++;
+    }
+    return $count;
+}
+
 putenv('TICKEX_MP_CLIENT_ID=test-client');
 putenv('TICKEX_MP_CLIENT_SECRET=test-secret');
 putenv('TICKEX_MP_ENCRYPTION_KEY=test-encryption-key-with-enough-entropy');
@@ -28,8 +38,8 @@ $pdo->exec("INSERT INTO eventos(id,nombre,creado_por_admin_id) VALUES(16,'Evento
 tickex_mp_ensure_schema($pdo);
 
 mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('mercadopago_marketplace_accounts','mercadopago_event_configs','mercadopago_oauth_states','mercadopago_webhook_events')")->fetchColumn() === 4, 'marketplace schema is created');
-mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM pragma_table_info('tc_orders') WHERE name IN ('payment_provider','provider_payment_id','provider_preference_id','marketplace_fee','seller_admin_id')")->fetchColumn() === 5, 'payment attribution columns are created');
-mp_test_assert((int)$pdo->query("SELECT COUNT(*) FROM pragma_table_info('tc_orders') WHERE name IN ('ticket_subtotal','service_fee_amount','service_fee_percent','mp_cost_estimate_percent')")->fetchColumn() === 4, 'service cost audit columns are created');
+mp_test_assert(mp_test_column_count($pdo, 'tc_orders', array('payment_provider','provider_payment_id','provider_preference_id','marketplace_fee','seller_admin_id')) === 5, 'payment attribution columns are created');
+mp_test_assert(mp_test_column_count($pdo, 'tc_orders', array('ticket_subtotal','service_fee_amount','service_fee_percent','mp_cost_estimate_percent')) === 4, 'service cost audit columns are created');
 
 $encrypted = tickex_mp_encrypt('APP_USR-secret-value');
 mp_test_assert(strpos($encrypted, 'APP_USR-secret-value') === false, 'access token is never stored as plain text');
