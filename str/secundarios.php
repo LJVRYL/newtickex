@@ -843,7 +843,8 @@ include __DIR__.'/inc/layout_top.php';
     <a class="btn" href="secundarios.php" style="background:var(--ok);color:#04150a;">+ Agregar staff</a>
   <?php endif; ?>
   <?php if ($prefEventoId <= 0): ?>
-    <a class="btn secondary" href="/roles_staff.php">Roles staff</a>
+    <a class="btn secondary" href="<?php echo _tickex_is_super($tipoGlobal) ? 'superadmin_revendedores.php' : 'admin_revendedores.php'; ?>">Revendedores</a>
+    <a class="btn secondary" href="roles_staff.php">Roles staff</a>
   <?php endif; ?>
   <span style="flex:1 1 auto;"></span>
   <a class="btn danger" href="login.php?logout=1">Salir</a>
@@ -852,7 +853,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card">
   <h2>Mi staff</h2>
   <div style="color:var(--muted);font-size:14px;">
-    Staff ahora se maneja por invitación (con aceptación obligatoria) sobre cuentas de cliente.
+    Administrá desde acá tu equipo, sus roles y los revendedores. El staff se maneja por invitación (con aceptación obligatoria) sobre cuentas de cliente.
   </div>
 </div>
 
@@ -1086,7 +1087,10 @@ if ($prefEventoId > 0) {
 <div class="card" style="max-width:900px;">
   <h3>Roles del staff</h3>
   <div class="muted" style="margin-bottom:8px;">Gestioná roles y permisos desde la pantalla dedicada.</div>
-  <a class="btn" href="/roles_staff.php">Abrir Roles de Staff</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn" href="roles_staff.php">Abrir Roles de Staff</a>
+    <a class="btn secondary" href="<?php echo _tickex_is_super($tipoGlobal) ? 'superadmin_revendedores.php' : 'admin_revendedores.php'; ?>">Administrar revendedores</a>
+  </div>
 </div>
 <?php endif; ?>
 

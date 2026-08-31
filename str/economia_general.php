@@ -709,6 +709,10 @@ include __DIR__.'/inc/layout_top.php';
       <div class="pill">Eventos: <?php echo count($eventIds); ?></div>
     </div>
   </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+    <a class="btn" href="economia_general.php">Resumen económico</a>
+    <a class="btn secondary" href="produccion.php">Producción y costos</a>
+  </div>
 </div>
 
 <div class="card" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
