@@ -23,6 +23,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="superadmin_email_templates.php">Plantillas Emails</a>
     <a href="superadmin_economia_general.php">Economía</a>
     <a href="facturacion_admin.php">Facturación</a>
+    <a href="mercadopago_config.php">Mercado Pago</a>
     <a href="roles_staff.php">Roles Staff</a>
     <a href="access_links.php">Checkout free</a>
   <?php elseif (in_array($tg, array('admin_evento'), true)): ?>
@@ -45,6 +46,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="admin_revendedores.php">Revendedores</a>
     <a href="economia_general.php">Economía</a>
     <a href="facturacion_admin.php">Facturación</a>
+    <a href="mercadopago_config.php">Mercado Pago</a>
     <a href="inventario.php">Inventario</a>
     <a href="produccion.php">Producción</a>
     <a href="secundarios.php">Staff</a>

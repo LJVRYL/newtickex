@@ -10,16 +10,21 @@ require_once __DIR__ . '/inc/totalcoin_callback_auth.php';
 require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
 require_once __DIR__ . '/inc/ticket_packages.php';
 require_once __DIR__ . '/inc/communication_tracking.php';
+require_once __DIR__ . '/inc/mercadopago_marketplace.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
-$title = 'Checkout TotalCoin (Tickex)';
+$title = 'Checkout Tickex';
 $errors = array();
 $paymentUrl = null;
 $freeSuccess = false;
 $revendedorId = 0;
 $revendedorName = '';
 $eventOwnerAdminId = 0;
+$paymentProvider = 'totalcoin';
+$paymentProviderPreferenceId = '';
+$paymentProviderFee = null;
+$gatewayRequestId = '';
 $step = 'select';
 $csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $isPrivDebug = false;
@@ -290,6 +295,12 @@ if ($eventId > 0) {
     if ($evRow) {
       if ($creatorCol && isset($evRow[$creatorCol]) && (int)$evRow[$creatorCol] > 0) {
         $eventOwnerAdminId = (int)$evRow[$creatorCol];
+      }
+      try {
+        $eventPaymentConfig = tickex_mp_event_config($pdoLocal, $eventId);
+        $paymentProvider = isset($eventPaymentConfig['provider']) && $eventPaymentConfig['provider'] === 'mercadopago' ? 'mercadopago' : 'totalcoin';
+      } catch (Exception $_mpConfigError) {
+        $paymentProvider = 'totalcoin';
       }
       if (isset($evRow['nombre']) && $evRow['nombre'] !== null) $eventName = $evRow['nombre'];
       if (isset($evRow['fecha_desde']) && $evRow['fecha_desde'] !== null) $eventDate = $evRow['fecha_desde'];
@@ -865,9 +876,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           // SenForms crea un PaymentToken antes del checkout. En Tickex usamos
           // la referencia firmada para que CS/CP/CF siempre identifiquen la orden.
           if ($claimOwned) {
-            $tcCfg = tc_config();
-            $tcCallbacks = tickex_totalcoin_build_callbacks($tcCfg['callback_base'], $ref);
-            $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email, null, $tcCallbacks);
+            if ($paymentProvider === 'mercadopago') {
+              $eventPaymentConfig = tickex_mp_event_config($claimPdo, $eventId);
+              if ($eventOwnerAdminId <= 0) throw new Exception('El evento no tiene un organizador asociado.');
+              $mpCheckout = tickex_mp_create_preference($claimPdo, $eventOwnerAdminId, array(
+                'amount' => $total,
+                'concept' => $concept,
+                'dni' => $dni,
+                'reference' => $ref,
+                'last_name' => $last,
+                'first_name' => $first,
+                'email' => $email,
+                'event_id' => $eventId,
+                'fee_percent' => isset($eventPaymentConfig['marketplace_fee_percent']) ? (float)$eventPaymentConfig['marketplace_fee_percent'] : 0,
+              ));
+              $paymentUrl = (string)$mpCheckout['payment_url'];
+              $gatewayRequestId = (string)$mpCheckout['request_id'];
+              $paymentProviderPreferenceId = (string)$mpCheckout['preference_id'];
+              $paymentProviderFee = (float)$mpCheckout['marketplace_fee'];
+            } else {
+              $tcCfg = tc_config();
+              $tcCallbacks = tickex_totalcoin_build_callbacks($tcCfg['callback_base'], $ref);
+              $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email, null, $tcCallbacks);
+            }
           }
 
           try {
@@ -880,7 +911,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
           // Persistir orden (requestId) para auditoría/atribución (revendedor)
           if ($paymentUrl) {
-            $requestId = '';
+            $requestId = (string)$gatewayRequestId;
             try {
               $u = @parse_url($paymentUrl);
               if (is_array($u) && isset($u['query'])) {
@@ -951,6 +982,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':crid' => $communicationAttribution ? (int)$communicationAttribution['run_id'] : null,
                 ':crfp' => $communicationAttribution ? (string)$communicationAttribution['recipient_fingerprint'] : null,
                 ':ctok' => $communicationAttribution ? (string)$communicationAttribution['tracking_token'] : null,
+              ));
+              tickex_mp_ensure_order_columns($pdoSave);
+              $stProvider = $pdoSave->prepare("UPDATE tc_orders SET payment_provider=:provider, provider_preference_id=COALESCE(provider_preference_id,:preference), marketplace_fee=COALESCE(marketplace_fee,:fee), seller_admin_id=COALESCE(seller_admin_id,:seller), updated_at=CURRENT_TIMESTAMP WHERE request_id=:rid");
+              $stProvider->execute(array(
+                ':provider' => $paymentProvider,
+                ':preference' => $paymentProvider === 'mercadopago' ? ($paymentProviderPreferenceId !== '' ? $paymentProviderPreferenceId : preg_replace('/^mp-/', '', $requestId)) : null,
+                ':fee' => $paymentProvider === 'mercadopago' ? $paymentProviderFee : null,
+                ':seller' => $eventOwnerAdminId > 0 ? $eventOwnerAdminId : null,
+                ':rid' => $requestId,
               ));
               try {
                 $evPdo = db();
@@ -1038,7 +1078,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público
           try {
-            error_log('[TotalCoin] ' . $debugId . ' checkout error: ' . $e->getMessage());
+            error_log('[Payment] ' . $debugId . ' checkout error: ' . $e->getMessage());
           } catch (Exception $_e) {
           }
           try {
