@@ -13,7 +13,8 @@ function repair_test_ok($condition, $message)
 require_once __DIR__ . '/../inc/legacy_package_repair.php';
 require_once __DIR__ . '/../inc/manual_income.php';
 require_once __DIR__ . '/../inc/unified_tickets.php';
-$pdo = new PDO('sqlite::memory:');
+$fixtureDb = sys_get_temp_dir() . '/tickex-repair-fixture-' . uniqid('', true) . '.sqlite';
+$pdo = new PDO('sqlite:' . $fixtureDb);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec("CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY,evento_id INTEGER,nombre TEXT,precio REAL,cantidad_total INTEGER,cantidad_disponible INTEGER,qr_quantity INTEGER)");
 $pdo->exec("CREATE TABLE entradas (id INTEGER PRIMARY KEY AUTOINCREMENT,evento_id INTEGER,nombre TEXT,email TEXT,fecha_registro TEXT,codigo TEXT UNIQUE,checked_in INTEGER,checked_in_at TEXT,tipo TEXT,monto_pagado REAL,tc_order_request_id TEXT,issuance_key TEXT UNIQUE,oculto INTEGER DEFAULT 0)");
@@ -57,9 +58,7 @@ $again = tickex_repair_event15_ticket_packages($pdo, true);
 repair_test_ok(!empty($again['already_applied']) && $again['summary']['issued'] === 22, 'repair is idempotent');
 repair_test_ok((string)$pdo->query('PRAGMA integrity_check')->fetchColumn() === 'ok', 'database remains consistent');
 
-$mailDb = sys_get_temp_dir() . '/tickex-repair-mail-' . uniqid('', true) . '.sqlite';
-$quotedMailDb = str_replace("'", "''", $mailDb);
-$pdo->exec("VACUUM INTO '" . $quotedMailDb . "'");
+$mailDb = $fixtureDb;
 putenv('TICKEX_DB_FILE=' . $mailDb);
 putenv('TICKEX_MAIL_TRANSPORT=fake');
 putenv('TICKEX_SITE_URL=https://local.test');
