@@ -37,19 +37,21 @@ repair_test_ok(!empty($preview['dry_run']) && $preview['summary']['issued'] === 
 $result = tickex_repair_event15_ticket_packages($pdo, true);
 repair_test_ok(!empty($result['applied']), 'repair is applied');
 repair_test_ok($result['summary']['issued'] === 22, 'repair creates the ten missing QR entries');
-repair_test_ok($result['summary']['paid_qr'] === 10 && $result['summary']['free_qr'] === 12, 'paid and courtesy QR counts are correct');
-repair_test_ok(abs($result['summary']['revenue'] - 105000.0) < 0.001, 'repair preserves exactly the collected revenue');
+repair_test_ok($result['summary']['paid_qr'] === 14 && $result['summary']['free_qr'] === 8, 'paid and courtesy QR counts are correct');
+repair_test_ok(abs($result['summary']['revenue'] - 145000.0) < 0.001, 'repair includes the collected manual transfer');
 repair_test_ok($result['summary']['stock_total'] === 260 && $result['summary']['available'] === 238, 'stock total and availability are reconciled');
 repair_test_ok((int)$pdo->query('SELECT qr_quantity FROM tipos_entrada WHERE id=41')->fetchColumn() === 2, 'future 2x1 sales issue two QR entries');
 repair_test_ok((int)$pdo->query('SELECT qr_quantity FROM tipos_entrada WHERE id=42')->fetchColumn() === 4, 'future 3x4 sales issue four QR entries');
 repair_test_ok((string)$pdo->query('SELECT payment_status FROM tc_orders WHERE id=75')->fetchColumn() === 'confirmed', 'historical paid 2x1 order is marked confirmed');
+$manualOrder = $pdo->query("SELECT amount,payment_provider FROM tc_orders WHERE request_id='manual-repair-event15-entry893'")->fetch(PDO::FETCH_ASSOC);
+repair_test_ok(abs((float)$manualOrder['amount'] - 40000.0) < 0.001 && $manualOrder['payment_provider'] === 'manual_transfer', 'historical manual transfer is registered as paid income');
 
 $stats = get_unified_stats($pdo, 15);
-repair_test_ok($stats['total'] === 22 && $stats['paid'] === 10 && $stats['pendiente'] === 22, 'panel counts physical issued QR entries');
+repair_test_ok($stats['total'] === 22 && $stats['paid'] === 14 && $stats['pendiente'] === 22, 'panel counts physical issued QR entries');
 repair_test_ok($stats['stock_total'] === 260 && $stats['disponibles'] === 238, 'panel no longer adds issued QR entries to total stock');
 $economic = get_economic_stats($pdo, 15);
-repair_test_ok($economic['entradas_vendidas'] === 3, 'economy keeps three sold packages');
-repair_test_ok(abs($economic['total_recaudado'] - 101850.0) < 0.001, 'economy preserves gross revenue and absorbs three percent TotalCoin cost');
+repair_test_ok($economic['entradas_vendidas'] === 4, 'economy counts the three checkout packages and the manual transfer');
+repair_test_ok(abs($economic['total_recaudado'] - 141850.0) < 0.001, 'economy includes the transfer and absorbs three percent only on TotalCoin revenue');
 
 $again = tickex_repair_event15_ticket_packages($pdo, true);
 repair_test_ok(!empty($again['already_applied']) && $again['summary']['issued'] === 22, 'repair is idempotent');

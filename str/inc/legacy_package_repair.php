@@ -115,13 +115,13 @@ if (!function_exists('tickex_repair_event15_ticket_packages')) {
             $stUpdateEntry->execute(array(':amount' => 10000, ':request' => $requestFour, ':issuance' => $requestFour . ':42:1', ':id' => 883));
             for ($i = 2; $i < 8; $i++) tickex_repair_clone_entry($pdo, $entries[882], 10000, $requestFour, $requestFour . ':42:' . $i);
 
-            $ticketsManual = json_encode(array(array('id' => 42, 'name' => 'Promo 3x4', 'qty' => 1, 'price' => 0, 'qr_quantity' => 4)));
+            $ticketsManual = json_encode(array(array('id' => 42, 'name' => 'Promo 3x4', 'qty' => 1, 'price' => 40000, 'qr_quantity' => 4)));
             $stManual = $pdo->prepare("INSERT INTO tc_orders
                 (request_id,state,evento_id,ref,concept,amount,buyer_first,buyer_last,buyer_email,selected_tickets_json,created_at,updated_at,processed_at,payment_status,payment_confirmed_at,processing_status,email_status,payment_provider)
-                VALUES (:request,'manual_confirmed',15,:request,'Reparación emisión manual Promo 3x4',0,:name,'',:email,:tickets,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'confirmed',CURRENT_TIMESTAMP,'issued','pending','courtesy')");
+                VALUES (:request,'manual_confirmed',15,:request,'Venta manual / transferencia Promo 3x4',40000,:name,'',:email,:tickets,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'confirmed',CURRENT_TIMESTAMP,'issued','pending','manual_transfer')");
             $stManual->execute(array(':request' => $requestManual, ':name' => $entries[893]['nombre'], ':email' => $entries[893]['email'], ':tickets' => $ticketsManual));
-            $stUpdateEntry->execute(array(':amount' => 0, ':request' => $requestManual, ':issuance' => $requestManual . ':42:0', ':id' => 893));
-            for ($i = 1; $i < 4; $i++) tickex_repair_clone_entry($pdo, $entries[893], 0, $requestManual, $requestManual . ':42:' . $i);
+            $stUpdateEntry->execute(array(':amount' => 10000, ':request' => $requestManual, ':issuance' => $requestManual . ':42:0', ':id' => 893));
+            for ($i = 1; $i < 4; $i++) tickex_repair_clone_entry($pdo, $entries[893], 10000, $requestManual, $requestManual . ':42:' . $i);
 
             $stCount = $pdo->prepare('SELECT COUNT(*) FROM entradas WHERE evento_id=15 AND tipo=:type');
             $stStock = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible=MAX(0,cantidad_total-:issued) WHERE id=:id AND evento_id=15');
@@ -131,7 +131,7 @@ if (!function_exists('tickex_repair_event15_ticket_packages')) {
             }
 
             $summary = tickex_event15_package_repair_summary($pdo);
-            if ($summary['issued'] !== 22 || $summary['paid_qr'] !== 10 || abs($summary['revenue'] - 105000.0) > 0.001 || $summary['stock_total'] !== 260 || $summary['available'] !== 238) {
+            if ($summary['issued'] !== 22 || $summary['paid_qr'] !== 14 || abs($summary['revenue'] - 145000.0) > 0.001 || $summary['stock_total'] !== 260 || $summary['available'] !== 238) {
                 throw new RuntimeException('Los totales finales no coinciden con la reparación esperada.');
             }
             $stMigration = $pdo->prepare('INSERT INTO maintenance_migrations (name,details_json) VALUES (:name,:details)');
