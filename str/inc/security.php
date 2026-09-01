@@ -24,7 +24,7 @@ if (!function_exists('tickex_send_security_headers')) {
         // El alta OAuth comienza con un POST local y termina con un redirect 303
         // hacia Mercado Pago. Los navegadores aplican form-action a toda esa
         // cadena de redirecciones, por lo que autorizamos solo su host OAuth.
-        header("Content-Security-Policy: base-uri 'self'; frame-ancestors 'self'; form-action 'self' https://auth.mercadopago.com.ar");
+        header("Content-Security-Policy: base-uri 'self'; frame-ancestors 'self'; form-action 'self' https://auth.mercadopago.com https://auth.mercadopago.com.ar");
         header('X-Permitted-Cross-Domain-Policies: none');
 
         if (tickex_is_https()) {

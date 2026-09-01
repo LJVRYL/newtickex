@@ -282,7 +282,7 @@ if (!function_exists('tickex_mp_begin_oauth')) {
         $pdo->prepare("DELETE FROM mercadopago_oauth_states WHERE expires_at < CURRENT_TIMESTAMP OR admin_id = :admin")->execute(array(':admin' => (int)$adminId));
         $st = $pdo->prepare("INSERT INTO mercadopago_oauth_states (state_hash, admin_id, expires_at) VALUES (:hash, :admin, datetime('now', '+15 minutes'))");
         $st->execute(array(':hash' => $hash, ':admin' => (int)$adminId));
-        return 'https://auth.mercadopago.com.ar/authorization?' . http_build_query(array(
+        return 'https://auth.mercadopago.com/authorization?' . http_build_query(array(
             'client_id' => (string)$config['client_id'],
             'response_type' => 'code',
             'platform_id' => 'mp',

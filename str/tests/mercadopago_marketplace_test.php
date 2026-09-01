@@ -128,7 +128,8 @@ $stateUrl = tickex_mp_begin_oauth($pdo, 7);
 parse_str(parse_url($stateUrl, PHP_URL_QUERY), $stateQuery);
 mp_test_assert(!empty($stateQuery['state']) && !empty($stateQuery['client_id']), 'OAuth authorization uses state and marketplace client id');
 $securitySource = file_get_contents(__DIR__ . '/../inc/security.php');
-mp_test_assert(strpos($securitySource, "form-action 'self' https://auth.mercadopago.com.ar") !== false, 'content security policy allows the Mercado Pago OAuth redirect');
+mp_test_assert(parse_url($stateUrl, PHP_URL_HOST) === 'auth.mercadopago.com', 'OAuth uses the canonical Mercado Pago authorization host');
+mp_test_assert(strpos($securitySource, "form-action 'self' https://auth.mercadopago.com https://auth.mercadopago.com.ar") !== false, 'content security policy allows Mercado Pago OAuth redirects');
 mp_test_assert(tickex_mp_consume_oauth_state($pdo, $stateQuery['state']) === 7, 'OAuth state resolves the correct administrator');
 mp_test_assert(tickex_mp_consume_oauth_state($pdo, $stateQuery['state']) === 0, 'OAuth state can be used only once');
 
