@@ -357,7 +357,9 @@ if (!function_exists('tickex_mp_event_config')) {
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) $row = array('event_id' => (int)$eventId, 'admin_id' => $ownerId, 'provider' => 'totalcoin', 'enabled' => 1);
         $provider = isset($row['provider']) && $row['provider'] === 'mercadopago' ? 'mercadopago' : 'totalcoin';
-        if (!empty($settings['enforcement_enabled']) && $policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
+        // Los organizadores cliente nunca pueden heredar TotalCoin. La bandera
+        // global habilita o pausa las ventas, pero no cambia su proveedor.
+        if ($policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
         $row['provider'] = $provider;
         $row['service_charge_percent'] = tickex_mp_effective_service_charge_percent($settings, $policy);
         $row['marketplace_fee_percent'] = tickex_mp_effective_platform_fee_percent($settings, $policy);
@@ -378,7 +380,7 @@ if (!function_exists('tickex_mp_save_event_config')) {
         $settings = tickex_mp_platform_settings($pdo);
         $policy = tickex_mp_admin_policy($pdo, $adminId);
         $provider = $provider === 'mercadopago' ? 'mercadopago' : 'totalcoin';
-        if (!empty($settings['enforcement_enabled']) && $policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
+        if ($policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
         $feePercent = tickex_mp_effective_platform_fee_percent($settings, $policy);
         if ($provider === 'mercadopago') {
             $account = tickex_mp_account($pdo, $adminId, false);

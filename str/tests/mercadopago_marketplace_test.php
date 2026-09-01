@@ -67,13 +67,16 @@ tickex_mp_save_account_tokens($pdo, 8, array(
     'expires_in' => 15552000,
 ));
 
-$default = tickex_mp_event_config($pdo, 15);
-mp_test_assert($default['provider'] === 'totalcoin', 'existing events remain on TotalCoin by default');
+$clientBeforeLaunch = tickex_mp_event_config($pdo, 16);
+mp_test_assert($clientBeforeLaunch['provider'] === 'mercadopago', 'client events never fall back to TotalCoin before launch');
+mp_test_assert((int)$clientBeforeLaunch['enforcement_enabled'] === 0, 'client Mercado Pago sales remain paused before launch');
 $missingEstimateRejected = false;
 try { tickex_mp_save_platform_settings($pdo, 10, 0, true, 1); } catch (Exception $e) { $missingEstimateRejected = true; }
 mp_test_assert($missingEstimateRejected, 'commercial policy cannot be enabled without a Mercado Pago cost estimate');
 tickex_mp_save_platform_settings($pdo, 10, 7.99, true, 1);
 tickex_mp_save_admin_policy($pdo, 7, 'str_owner', '', 1);
+$default = tickex_mp_event_config($pdo, 15);
+mp_test_assert($default['provider'] === 'totalcoin', 'STR events remain on TotalCoin after marking the internal account');
 $saved = tickex_mp_save_event_config($pdo, 15, 7, 'totalcoin', 0);
 mp_test_assert($saved['provider'] === 'totalcoin', 'SAVE THE RAVE keeps TotalCoin');
 $clientConfig = tickex_mp_event_config($pdo, 16);

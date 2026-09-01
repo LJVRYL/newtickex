@@ -27,6 +27,7 @@ $paymentProviderFee = null;
 $checkoutServicePercent = 0;
 $checkoutMpCostPercent = 0;
 $checkoutBreakdown = null;
+$marketplaceSalesEnabled = true;
 $gatewayRequestId = '';
 $step = 'select';
 $csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
@@ -308,9 +309,13 @@ if ($eventId > 0) {
         if ($paymentProvider === 'mercadopago') {
           $checkoutServicePercent = isset($eventPaymentConfig['service_charge_percent']) ? (float)$eventPaymentConfig['service_charge_percent'] : 0;
           $checkoutMpCostPercent = isset($eventPaymentConfig['mp_cost_estimate_percent']) ? (float)$eventPaymentConfig['mp_cost_estimate_percent'] : 0;
+          $marketplaceSalesEnabled = !empty($eventPaymentConfig['enforcement_enabled']);
         }
       } catch (Exception $_mpConfigError) {
-        $paymentProvider = 'totalcoin';
+        // Fallar cerrado: un problema de configuracion nunca debe mandar una
+        // venta de un cliente a la cuenta TotalCoin de STR.
+        $paymentProvider = 'unavailable';
+        $marketplaceSalesEnabled = false;
       }
       if (isset($evRow['nombre']) && $evRow['nombre'] !== null) $eventName = $evRow['nombre'];
       if (isset($evRow['fecha_desde']) && $evRow['fecha_desde'] !== null) $eventDate = $evRow['fecha_desde'];
@@ -705,6 +710,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $checkoutBreakdown = tickex_mp_checkout_breakdown($ticketSubtotal, $checkoutServicePercent, $checkoutMpCostPercent);
     $serviceFeeAmount = (float)$checkoutBreakdown['service_fee'];
     $total = (float)$checkoutBreakdown['checkout_total'];
+    if (!$marketplaceSalesEnabled) {
+      $errors[] = 'Las ventas de este organizador todavia no estan habilitadas. Conecta Mercado Pago o consulta con Tickex.';
+    }
+  } elseif ($paymentProvider === 'unavailable' && $ticketSubtotal > 0) {
+    $errors[] = 'El medio de pago de este evento no esta disponible. No se genero ningun cobro.';
   }
 
   if ($total <= 0 && empty($selectedTickets)) {

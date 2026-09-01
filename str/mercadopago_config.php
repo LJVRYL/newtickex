@@ -71,8 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['disconnect'])) {
     } else {
         $st = $pdo->prepare("UPDATE mercadopago_marketplace_accounts SET status='disconnected', access_token_enc=NULL, refresh_token_enc=NULL, updated_at=CURRENT_TIMESTAMP WHERE admin_id=:admin");
         $st->execute(array(':admin' => $adminId));
-        $pdo->prepare("UPDATE mercadopago_event_configs SET provider='totalcoin', updated_at=CURRENT_TIMESTAMP WHERE admin_id=:admin AND provider='mercadopago'")->execute(array(':admin' => $adminId));
-        $ok = 'Cuenta desconectada. Las ventas Mercado Pago quedaron pausadas.';
+        $ok = 'Cuenta desconectada. Las ventas Mercado Pago quedaron pausadas y no pasaran a TotalCoin.';
     }
 }
 
@@ -140,7 +139,7 @@ include __DIR__ . '/inc/layout_top.php';
       <label>Costo estimado Mercado Pago (%)<input type="number" name="mp_cost_estimate_percent" min="0" max="100" step="0.01" value="<?php echo e($settings['mp_cost_estimate_percent']); ?>"></label>
       <div><strong>Fee resultante Tickex:</strong><br><?php echo e(number_format((float)tickex_mp_effective_platform_fee_percent($settings, array('platform_fee_override_percent' => null)), 2, ',', '.')); ?>%</div>
     </div>
-    <label style="display:block;margin:12px 0;"><input type="checkbox" name="enforcement_enabled" value="1"<?php echo !empty($settings['enforcement_enabled']) ? ' checked' : ''; ?>> Activar politica: clientes obligados a usar Mercado Pago</label>
+    <label style="display:block;margin:12px 0;"><input type="checkbox" name="enforcement_enabled" value="1"<?php echo !empty($settings['enforcement_enabled']) ? ' checked' : ''; ?>> Habilitar ventas Mercado Pago para organizadores cliente</label>
     <button class="btn" type="submit" name="save_platform" value="1">Guardar politica general</button>
   </form>
 </div>
