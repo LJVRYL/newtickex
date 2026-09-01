@@ -21,6 +21,7 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
     include __DIR__.'/inc/layout_bottom.php';
     exit;
 }
+tickex_require_event_access($pdo, $eventoId, $cu);
 
 // Obtener evento
 $stmtEv = $pdo->prepare("SELECT * FROM eventos WHERE id = ?");

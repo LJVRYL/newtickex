@@ -931,7 +931,7 @@ document.querySelectorAll('.btn-delete-entry').forEach(btn => {
     if (!id) return;
     if (!confirm('¿Eliminar esta entrada?')) return;
     const eid = '<?php echo (int)$eventoId; ?>';
-    const target = 'delete.php?id=' + encodeURIComponent(id) + '&evento_id=' + encodeURIComponent(eid);
+    const target = 'delete.php?id=' + encodeURIComponent(id) + '&evento_id=' + encodeURIComponent(eid) + '&csrf=<?php echo rawurlencode($csrf); ?>';
     window.location.href = target;
   });
 });

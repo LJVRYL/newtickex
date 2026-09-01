@@ -1,9 +1,8 @@
 <?php
-$dbFile = __DIR__ . '/save_the_rave.sqlite';
-
-if (!file_exists($dbFile)) {
-    die('Base de datos no encontrada.');
-}
+require_once __DIR__ . '/inc/bootstrap.php';
+require_login();
+$cu = current_user();
+$pdo = db();
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) {
@@ -12,21 +11,19 @@ if ($id <= 0) {
     exit;
 }
 
-try {
-    $pdo = new PDO('sqlite:' . $dbFile);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (Exception $e) {
-    http_response_code(500);
-    echo 'Error al conectar a la base: ' . htmlspecialchars($e->getMessage());
-    exit;
-}
+$csrf = isset($_GET['csrf']) ? (string)$_GET['csrf'] : '';
+if (!tickex_csrf_verify($csrf)) { http_response_code(403); exit('Accion bloqueada'); }
+$stEntry = $pdo->prepare('SELECT evento_id FROM entradas WHERE id=:id LIMIT 1');
+$stEntry->execute(array(':id'=>$id));
+$entryEventId = (int)$stEntry->fetchColumn();
+tickex_require_event_access($pdo, $entryEventId, $cu);
 
 // Borramos sólo esa fila
 $stmt = $pdo->prepare("DELETE FROM entradas WHERE id = :id");
 $stmt->execute([':id' => $id]);
 
 // Volvemos al panel del evento si se proporcionó
-$eventoId = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+$eventoId = $entryEventId;
 $msg = urlencode('Entrada eliminada (ID ' . $id . ')');
 if ($eventoId > 0) {
     header('Location: panel_evento.php?evento_id=' . $eventoId . '&msg=' . $msg);

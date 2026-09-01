@@ -7,6 +7,7 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 require_once __DIR__.'/db.php';
 require_once __DIR__.'/auth.php';
+require_once __DIR__.'/event_access.php';
 require_once __DIR__.'/flash.php';
 
 // helper escape (solo si no existe)

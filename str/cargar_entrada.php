@@ -44,6 +44,7 @@ $eventoId = 0;
 if (isset($_GET['evento_id'])) $eventoId = (int)$_GET['evento_id'];
 if (isset($_POST['evento_id'])) $eventoId = (int)$_POST['evento_id'];
 if ($eventoId <= 0) { http_response_code(400); echo "Falta evento_id"; exit; }
+tickex_require_event_access($pdo, $eventoId, isset($cu) ? $cu : null);
 $isEmbed = false;
 if (isset($_GET['embed'])) {
   $isEmbed = $_GET['embed'] !== '0' && $_GET['embed'] !== 'false';

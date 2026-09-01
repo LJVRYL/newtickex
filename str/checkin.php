@@ -29,6 +29,7 @@ if ($codigo === '' && !empty($_GET['t'])) {
   }
 }
 $eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+$eventoId = $eventoIdGet;
 
 // Si está logueado, saco rol
 $isLogged = !empty($_SESSION['usuario']);
@@ -274,6 +275,15 @@ if ($ticket) {
         }
       }
     }
+  }
+}
+
+// Un administrador de evento no puede validar entradas de otro organizador.
+if ($ticket && $isLogged && $tipoGlobal === 'admin_evento') {
+  $ticketEventId = (int)(isset($ticket['evento_id']) ? $ticket['evento_id'] : 0);
+  if ($ticketEventId <= 0 || !tickex_can_access_event($pdo, $ticketEventId, current_user())) {
+    $puedeCheckin = false;
+    $eventoOk = false;
   }
 }
 

@@ -13,6 +13,8 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 }
 
 $pdo = db();
+$adminId = tickex_admin_id($cu);
+$isSuper = tickex_is_super_admin($cu);
 
 // ------------------------------------------------------------------
 // Setup tablas
@@ -26,6 +28,7 @@ function ensure_inv_tables($pdo) {
             descripcion TEXT,
             dueno TEXT,
             estado TEXT DEFAULT 'OK',
+            owner_admin_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
         $pdo->exec("CREATE TABLE IF NOT EXISTS inv_logs (
@@ -38,6 +41,11 @@ function ensure_inv_tables($pdo) {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_inv_logs_item ON inv_logs(item_id)");
+        $cols = $pdo->query('PRAGMA table_info(inv_items)')->fetchAll(PDO::FETCH_ASSOC);
+        $hasOwner = false;
+        foreach ($cols as $col) if (isset($col['name']) && $col['name'] === 'owner_admin_id') $hasOwner = true;
+        if (!$hasOwner) $pdo->exec('ALTER TABLE inv_items ADD COLUMN owner_admin_id INTEGER');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_inv_items_owner ON inv_items(owner_admin_id)');
     } catch (Exception $e) {
         // silent
     }
@@ -87,13 +95,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = 'El nombre es obligatorio';
         } else {
             $code = inv_generate_code();
-            $stmt = $pdo->prepare("INSERT INTO inv_items (codigo, nombre, descripcion, dueno, estado) VALUES (:c,:n,:d,:o,:e)");
+            $stmt = $pdo->prepare("INSERT INTO inv_items (codigo,nombre,descripcion,dueno,estado,owner_admin_id) VALUES (:c,:n,:d,:o,:e,:owner)");
             $stmt->execute(array(
                 ':c' => $code,
                 ':n' => $nombre,
                 ':d' => $desc,
                 ':o' => $dueno,
                 ':e' => $estado,
+                ':owner' => $adminId,
             ));
             $flash = 'Item creado';
         }
@@ -103,6 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $estado = isset($_POST['estado']) ? trim($_POST['estado']) : '';
         $foto   = inv_upload_photo(isset($_FILES['foto']) ? $_FILES['foto'] : null);
         if ($itemId > 0) {
+            $stOwn = $pdo->prepare('SELECT 1 FROM inv_items WHERE id=:id' . ($isSuper ? '' : ' AND owner_admin_id=:owner'));
+            $ownParams = array(':id'=>$itemId);
+            if (!$isSuper) $ownParams[':owner'] = $adminId;
+            $stOwn->execute($ownParams);
+            if (!$stOwn->fetchColumn()) { http_response_code(404); exit('Item no encontrado'); }
             $stmt = $pdo->prepare("INSERT INTO inv_logs (item_id, nota, foto_path, estado, created_by) VALUES (:i,:n,:f,:e,:u)");
             $stmt->execute(array(
                 ':i' => $itemId,
@@ -132,9 +146,11 @@ $printMode = isset($_GET['print']) && $_GET['print'] == '1';
 // Obtener item a ver
 $viewItem = null; $logs = array();
 if ($viewId > 0 || $viewCode !== '') {
-    $where = $viewId > 0 ? 'id = :id' : 'codigo = :c';
+    $where = ($viewId > 0 ? 'id = :id' : 'codigo = :c') . ($isSuper ? '' : ' AND owner_admin_id = :owner');
     $st = $pdo->prepare("SELECT * FROM inv_items WHERE $where LIMIT 1");
-    $st->execute($viewId > 0 ? array(':id'=>$viewId) : array(':c'=>$viewCode));
+    $viewParams = $viewId > 0 ? array(':id'=>$viewId) : array(':c'=>$viewCode);
+    if (!$isSuper) $viewParams[':owner'] = $adminId;
+    $st->execute($viewParams);
     $viewItem = $st->fetch(PDO::FETCH_ASSOC);
     if ($viewItem) {
         $stl = $pdo->prepare("SELECT * FROM inv_logs WHERE item_id = :id ORDER BY created_at DESC, id DESC");
@@ -148,6 +164,10 @@ $items = array();
 try {
     $where = array();
     $params = array();
+    if (!$isSuper) {
+        $where[] = 'owner_admin_id = :owner';
+        $params[':owner'] = $adminId;
+    }
     if ($q !== '') {
         $where[] = "(nombre LIKE :q OR descripcion LIKE :q OR dueno LIKE :q OR codigo LIKE :q)";
         $params[':q'] = '%'.$q.'%';

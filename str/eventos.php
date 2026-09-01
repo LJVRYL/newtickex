@@ -33,13 +33,8 @@ if (!$user || !in_array($user['tipo_global'], ['super_admin', 'admin_evento'], t
     exit;
 }
 
-// Listar eventos
-$stmtEv = $pdo->query("
-    SELECT id, nombre, slug, flyer_filename, fecha_desde, fecha_hasta
-    FROM eventos
-    ORDER BY id ASC
-");
-$eventos = $stmtEv->fetchAll(PDO::FETCH_ASSOC);
+// Listar solamente los eventos del organizador actual.
+$eventos = tickex_visible_events($pdo, $user);
 
 function e($s) {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');

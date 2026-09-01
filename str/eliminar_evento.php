@@ -41,6 +41,7 @@ try {
     echo "Error DB: " . e($e->getMessage());
     exit;
 }
+tickex_require_event_access($pdo, $id, $cu);
 
 $mensaje = '';
 $ok = false;

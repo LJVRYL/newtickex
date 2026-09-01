@@ -17,6 +17,46 @@ $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $flashOk = '';
 $flashErr = '';
 
+function tickex_superadmin_registered_candidates($pdo) {
+    $rows = array();
+    foreach (array(
+        "SELECT email,COALESCE(nombre,'') nombre,COALESCE(apellido,'') apellido FROM usuarios WHERE email IS NOT NULL",
+        "SELECT email,COALESCE(nombre,'') nombre,COALESCE(apellido,'') apellido FROM registro_pendientes WHERE email IS NOT NULL"
+    ) as $sql) {
+        try {
+            foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $email = strtolower(trim((string)$row['email']));
+                if ($email !== '') $rows[$email] = $row;
+            }
+        } catch (Exception $e) {}
+    }
+    ksort($rows);
+    return $rows;
+}
+
+function tickex_superadmin_promote_registered($pdo, $email) {
+    $email = strtolower(trim((string)$email));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('Email invalido.');
+    $stSource = $pdo->prepare("SELECT password_hash FROM registro_pendientes WHERE lower(email)=lower(:email) AND password_hash IS NOT NULL AND password_hash<>'' ORDER BY id DESC LIMIT 1");
+    $stSource->execute(array(':email'=>$email));
+    $secureHash = (string)$stSource->fetchColumn();
+    if ($secureHash === '' || strpos($secureHash, '$2') !== 0) throw new RuntimeException('El usuario debe completar o restablecer su contrasena antes de ser administrador.');
+
+    $stExisting = $pdo->prepare('SELECT id FROM usuarios_admin WHERE lower(email)=lower(:email) OR lower(username)=lower(:email) LIMIT 1');
+    $stExisting->execute(array(':email'=>$email));
+    $existingId = (int)$stExisting->fetchColumn();
+    if ($existingId > 0) {
+        $st = $pdo->prepare("UPDATE usuarios_admin SET username=:email,email=:email,password=:password,rol='admin',tipo_global='admin_evento',rol_evento=NULL,evento_id=NULL,creado_por_admin_id=NULL,activo=1 WHERE id=:id");
+        $st->execute(array(':email'=>$email, ':password'=>$secureHash, ':id'=>$existingId));
+        return $existingId;
+    }
+    $st = $pdo->prepare("INSERT INTO usuarios_admin (username,email,password,rol,tipo_global,rol_evento,evento_id,creado_por_admin_id,activo) VALUES (:email,:email,:password,'admin','admin_evento',NULL,NULL,NULL,1)");
+    $st->execute(array(':email'=>$email, ':password'=>$secureHash));
+    return (int)$pdo->lastInsertId();
+}
+
+$registeredCandidates = tickex_superadmin_registered_candidates($pdo);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
     if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
@@ -26,7 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $accion = isset($_POST['accion']) ? (string)$_POST['accion'] : '';
 
         try {
-            if ($accion === 'cambiar_rol' && $usuarioId > 0) {
+            if ($accion === 'promover_admin') {
+                $adminEmail = isset($_POST['admin_email']) ? (string)$_POST['admin_email'] : '';
+                $newAdminId = tickex_superadmin_promote_registered($pdo, $adminEmail);
+                $flashOk = 'Administrador independiente creado/actualizado. ID: ' . $newAdminId;
+            } elseif ($accion === 'cambiar_rol' && $usuarioId > 0) {
                 $nuevoRol = (isset($_POST['nuevo_rol']) && $_POST['nuevo_rol'] === 'admin') ? 'admin' : 'cliente';
                 $stmt = $pdo->prepare('UPDATE usuarios_admin SET rol = :rol WHERE id = :id');
                 $stmt->execute(array(':rol' => $nuevoRol, ':id' => $usuarioId));
@@ -114,6 +158,21 @@ include __DIR__ . '/inc/layout_top.php';
     <?php if ($q !== ''): ?>
       <a class="btn secondary" href="superadmin_usuarios.php">Limpiar</a>
     <?php endif; ?>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Crear administrador independiente</h3>
+  <p class="muted">La lista combina todos los usuarios registrados y registros completados. El nuevo administrador tendra sus propios eventos, clientes e inventario.</p>
+  <form method="post" action="superadmin_usuarios.php" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
+    <select name="admin_email" required style="min-width:320px;">
+      <option value="">Seleccionar usuario registrado</option>
+      <?php foreach ($registeredCandidates as $email=>$candidate): ?>
+        <option value="<?php echo e($email); ?>"><?php echo e(trim($candidate['nombre'].' '.$candidate['apellido']).' — '.$email); ?></option>
+      <?php endforeach; ?>
+    </select>
+    <button class="btn" type="submit" name="accion" value="promover_admin">Convertir en administrador cliente</button>
   </form>
 </div>
 

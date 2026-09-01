@@ -44,8 +44,7 @@ $eventNames = array();
 $eventSlugs = array();
 $eventIds   = array();
 try {
-    $resEv = $pdo->query("SELECT id, nombre, slug FROM eventos ORDER BY id ASC");
-    $evRows = $resEv ? $resEv->fetchAll(PDO::FETCH_ASSOC) : array();
+    $evRows = tickex_visible_events($pdo, $cu);
     foreach ($evRows as $ev) {
         $id = isset($ev['id']) ? (int)$ev['id'] : 0;
         if ($id > 0) {
@@ -58,23 +57,6 @@ try {
     }
 } catch (Exception $e) {
     // no bloquear si tabla eventos no existe
-}
-
-// Asegurar que recorremos también eventos que existan en entradas aunque no estén en tabla eventos
-try {
-    $resEid = $pdo->query("SELECT DISTINCT evento_id FROM entradas WHERE evento_id IS NOT NULL");
-    $eidRows = $resEid ? $resEid->fetchAll(PDO::FETCH_ASSOC) : array();
-    foreach ($eidRows as $r) {
-        $id = isset($r['evento_id']) ? (int)$r['evento_id'] : 0;
-        if (!in_array($id, $eventIds, true)) {
-            $eventIds[] = $id;
-            if (!isset($eventNames[$id])) {
-                $eventNames[$id] = $id ? ('Evento ' . $id) : 'Sin evento';
-            }
-        }
-    }
-} catch (Exception $e) {
-    // seguir
 }
 
 $eventIds = array_values(array_unique($eventIds));

@@ -49,8 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stored = (string)$admin['password'];
                     $okPass = false;
 
-                    // Compatibilidad con sistema viejo: password plano o md5
-                    if ($stored === $password) {
+                    // Preferir hashes seguros y mantener compatibilidad con cuentas legacy.
+                    if (function_exists('password_verify') && password_verify($password, $stored)) {
+                        $okPass = true;
+                    } elseif ($stored === $password) {
                         $okPass = true;
                     } elseif ($stored === md5($password)) {
                         $okPass = true;

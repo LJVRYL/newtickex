@@ -85,36 +85,18 @@ $summaryLabel = 'Todos los eventos';
 // Búsqueda
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
 
-// IDs por búsqueda en eventos
-$eventIds = array();
+// Obtener primero el universo autorizado y aplicar la búsqueda dentro de él.
+$eventos = tickex_visible_events($pdo, $cu);
 if ($q !== '') {
-    $stmtEv = $pdo->prepare("SELECT id FROM eventos WHERE borrado_en IS NULL AND (nombre LIKE :q OR slug LIKE :q)");
-    $stmtEv->execute(array(':q' => '%'.$q.'%'));
-    $eventIds = $stmtEv->fetchAll(PDO::FETCH_COLUMN);
-
-    // IDs por búsqueda en entradas (nombre/email)
-    $stmtEn = $pdo->prepare("SELECT DISTINCT evento_id FROM entradas WHERE nombre LIKE :q OR email LIKE :q");
-    $stmtEn->execute(array(':q' => '%'.$q.'%'));
-    $idsEn = $stmtEn->fetchAll(PDO::FETCH_COLUMN);
-    if ($idsEn) {
-        $eventIds = array_merge($eventIds, $idsEn);
-    }
-    $eventIds = array_values(array_unique(array_map('intval', $eventIds)));
-}
-
-// Obtener eventos
-if ($q !== '' && !$eventIds) {
-    $eventos = array();
-} else {
-    if ($q === '') {
-        $stmtList = $pdo->query("SELECT * FROM eventos WHERE borrado_en IS NULL ORDER BY id DESC");
-        $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $in = implode(',', array_fill(0, count($eventIds), '?'));
-        $stmtList = $pdo->prepare("SELECT * FROM eventos WHERE borrado_en IS NULL AND id IN ($in) ORDER BY id DESC");
-        $stmtList->execute($eventIds);
-        $eventos = $stmtList->fetchAll(PDO::FETCH_ASSOC);
-    }
+    $needle = function_exists('mb_strtolower') ? mb_strtolower($q, 'UTF-8') : strtolower($q);
+    $eventos = array_values(array_filter($eventos, function ($ev) use ($pdo, $needle) {
+        $haystack = (isset($ev['nombre']) ? $ev['nombre'] : '') . ' ' . (isset($ev['slug']) ? $ev['slug'] : '');
+        $haystack = function_exists('mb_strtolower') ? mb_strtolower($haystack, 'UTF-8') : strtolower($haystack);
+        if (strpos($haystack, $needle) !== false) return true;
+        $st = $pdo->prepare('SELECT 1 FROM entradas WHERE evento_id=:event AND (nombre LIKE :q OR email LIKE :q) LIMIT 1');
+        $st->execute(array(':event'=>(int)$ev['id'], ':q'=>'%'.$needle.'%'));
+        return (bool)$st->fetchColumn();
+    }));
 }
 
 // Recalcular contadores globales con stats unificados (STR + Tickex)

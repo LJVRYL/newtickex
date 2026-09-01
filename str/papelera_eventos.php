@@ -25,14 +25,15 @@ try {
 tickex_event_trash_ensure_schema($pdo);
 
 // Traer eventos borrados en los últimos 30 días
-$stmt = $pdo->prepare("
-    SELECT *
-    FROM eventos
-    WHERE borrado_en IS NOT NULL
-      AND borrado_en >= datetime('now','-30 days')
-    ORDER BY borrado_en DESC
-");
-$stmt->execute();
+$sqlTrash = "SELECT * FROM eventos WHERE borrado_en IS NOT NULL AND borrado_en >= datetime('now','-30 days')";
+$trashParams = array();
+if (!tickex_is_super_admin($cu)) {
+    $sqlTrash .= ' AND creado_por_admin_id=:admin';
+    $trashParams[':admin'] = tickex_admin_id($cu);
+}
+$sqlTrash .= ' ORDER BY borrado_en DESC';
+$stmt = $pdo->prepare($sqlTrash);
+$stmt->execute($trashParams);
 $eventos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 include __DIR__.'/inc/layout_top.php';

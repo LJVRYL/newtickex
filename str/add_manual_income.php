@@ -40,6 +40,11 @@ if (!in_array(strtolower($tipo), array('ingreso','egreso'), true)) {
 
 $pdo = db();
 $adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id'])?(int)$cu['id']:0);
+if (!tickex_can_access_event($pdo, $evento_id, $cu)) {
+    http_response_code(404);
+    echo json_encode(array('error' => 'Evento no encontrado'));
+    exit;
+}
 
 // Verificar que el evento existe y el usuario tiene permiso
 $stmtEv = $pdo->prepare("SELECT id FROM eventos WHERE id=:id");

@@ -1,25 +1,9 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
-$pdo = db();
-$eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
-// Actualizar cantidad_disponible
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_disponible') {
-  $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
-  $cant = isset($_POST['cantidad_disponible']) ? (int)$_POST['cantidad_disponible'] : 0;
-  $qrQuantity = isset($_POST['qr_quantity']) ? max(1, min(10, (int)$_POST['qr_quantity'])) : 1;
-  if ($teId > 0 && $cant >= 0 && $eventoId > 0) {
-    $upd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible = :cant, qr_quantity = :qr_quantity WHERE id = :id AND evento_id = :eid");
-    $upd->execute(array(':cant' => $cant, ':qr_quantity' => $qrQuantity, ':id' => $teId, ':eid' => $eventoId));
-    $okMsg = "Disponibilidad y cantidad de QR actualizadas.";
-  } else {
-    $error = "Datos inválidos.";
-  }
-
-
-}
 $title = "Configurar entradas del evento";
 require_login();
+$pdo = db();
+$eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global'])
     ? $_SESSION['tipo_global'] : (isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : ''));
@@ -30,6 +14,21 @@ $error = '';
 $okMsg = '';
 
 $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
+tickex_require_event_access($pdo, $eventoId, $cu);
+
+// Actualizar cantidad_disponible solamente después de autenticar y validar propiedad.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_disponible') {
+  $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+  $cant = isset($_POST['cantidad_disponible']) ? (int)$_POST['cantidad_disponible'] : 0;
+  $qrQuantity = isset($_POST['qr_quantity']) ? max(1, min(10, (int)$_POST['qr_quantity'])) : 1;
+  if ($teId > 0 && $cant >= 0) {
+    $upd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible=:cant,qr_quantity=:qr_quantity WHERE id=:id AND evento_id=:eid");
+    $upd->execute(array(':cant'=>$cant, ':qr_quantity'=>$qrQuantity, ':id'=>$teId, ':eid'=>$eventoId));
+    $okMsg = "Disponibilidad y cantidad de QR actualizadas.";
+  } else {
+    $error = "Datos inválidos.";
+  }
+}
 
 function ensure_plantillas_entrada_schema($pdo) {
   try {
