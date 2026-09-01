@@ -21,7 +21,10 @@ if (!function_exists('tickex_send_security_headers')) {
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: strict-origin-when-cross-origin');
         header("Permissions-Policy: geolocation=(), microphone=(), camera=(self)");
-        header("Content-Security-Policy: base-uri 'self'; frame-ancestors 'self'; form-action 'self'");
+        // El alta OAuth comienza con un POST local y termina con un redirect 303
+        // hacia Mercado Pago. Los navegadores aplican form-action a toda esa
+        // cadena de redirecciones, por lo que autorizamos solo su host OAuth.
+        header("Content-Security-Policy: base-uri 'self'; frame-ancestors 'self'; form-action 'self' https://auth.mercadopago.com.ar");
         header('X-Permitted-Cross-Domain-Policies: none');
 
         if (tickex_is_https()) {
