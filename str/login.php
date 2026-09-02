@@ -3,6 +3,7 @@ require_once __DIR__ . '/inc/security.php';
 require_once __DIR__ . '/inc/turnstile.php';
 tickex_send_security_headers();
 tickex_session_start();
+require_once __DIR__ . '/inc/auth.php';
 
 // Conexión directa a la misma base que usamos en registro_usuario.php
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
@@ -221,12 +222,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       @session_regenerate_id(true);
                     }
 
+					tickex_clear_identity_session();
+
                     // Reset rate limit
                     $_SESSION['_login_fail_count'] = 0;
                     $_SESSION['_login_fail_ts'] = time();
 
                     // Datos base del usuario (vista usuarios)
                     $_SESSION['usuario_id']     = (int)$u['id'];
+                    $_SESSION['auth_context']   = 'user';
                     $_SESSION['usuario_email']  = $u['email'];
                     $_SESSION['usuario_nombre'] = trim($u['nombre'] . ' ' . $u['apellido']);
                   $_SESSION['first_name']      = isset($u['nombre']) ? (string)$u['nombre'] : '';
@@ -262,6 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           $_SESSION['es_admin']    = true;
                           $_SESSION['admin_id']    = (int)$adminRow['id'];
                           $_SESSION['user_id']     = (int)$adminRow['id']; // muchos scripts usan user_id
+                          $_SESSION['auth_context'] = 'admin';
                           $_SESSION['usuario']     = $adminRow['username'];
                           $_SESSION['rol']         = $adminRow['rol'];
                           $_SESSION['tipo_global'] = $adminRow['tipo_global'];
@@ -370,7 +375,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
 
                 if ($cli && $okCli) {
+					tickex_clear_identity_session();
+					if (function_exists('session_regenerate_id')) {
+					  @session_regenerate_id(true);
+					}
                     $_SESSION['usuario_id']     = (int)$cli['id'];
+					$_SESSION['auth_context']   = 'user';
                     $_SESSION['usuario_email']  = $cli['email'];
                     $_SESSION['usuario_nombre'] = trim((isset($cli['nombre']) ? (string)$cli['nombre'] : '') . ' ' . (isset($cli['apellido']) ? (string)$cli['apellido'] : ''));
                   $_SESSION['first_name']      = isset($cli['nombre']) ? (string)$cli['nombre'] : '';

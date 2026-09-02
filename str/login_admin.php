@@ -65,8 +65,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             session_start();
                         }
 
+                        if (function_exists('session_regenerate_id')) {
+                            @session_regenerate_id(true);
+                        }
+                        tickex_clear_identity_session();
+
                         $_SESSION['usuario']     = $admin['username'];
+                        $_SESSION['username']    = $admin['username'];
+                        $_SESSION['usuario_email'] = $admin['email'];
+                        $_SESSION['email']       = $admin['email'];
+                        $_SESSION['admin_id']    = (int)$admin['id'];
                         $_SESSION['user_id']     = (int)$admin['id'];
+                        $_SESSION['es_admin']    = true;
+                        $_SESSION['is_admin']    = true;
+                        $_SESSION['auth_context'] = 'admin';
+                        $_SESSION['rol']         = (string)$admin['rol'];
                         $_SESSION['tipo_global'] = (string)$admin['tipo_global'];
 
                         // Staff de puerta
