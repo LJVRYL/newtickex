@@ -5,6 +5,7 @@ declare(strict_types=1);
 // URL: /comprar.php?id=12  (id = eventos.id de STR)
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
 
 // La redireccion contiene una referencia unica por intento. Evitar que el
 // navegador reutilice un 302 anterior y termine reenviando una compra vieja.

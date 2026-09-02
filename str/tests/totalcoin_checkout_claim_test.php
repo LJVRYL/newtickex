@@ -57,5 +57,6 @@ try {
 }
 
 $buySource = file_get_contents(__DIR__ . '/../comprar.php');
+claim_assert(strpos($buySource, "inc/totalcoin_checkout_claim.php") !== false, 'public checkout loads the reference generator');
 claim_assert(strpos($buySource, 'Cache-Control: no-store') !== false, 'public checkout redirect is never cached');
 claim_assert(strpos($buySource, 'tickex_totalcoin_new_reference') !== false, 'public checkout redirect creates a random reference');
