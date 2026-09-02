@@ -882,6 +882,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $claimPdo = null;
         $claimFingerprint = '';
         $claimOwned = false;
+        $orderPersisted = false;
         try {
           $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
           if ($ticketsJson === false || $ticketsJson === null) $ticketsJson = '';
@@ -963,10 +964,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
             } catch (Exception $_e) {}
 
-            if ($claimOwned && $claimPdo) {
-              tickex_totalcoin_checkout_claim_ready($claimPdo, $ref, $claimFingerprint, $requestId, $paymentUrl);
-            }
-
             if ($requestId !== '') {
               try {
                 $pdoSave = db();
@@ -1042,8 +1039,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   'buyer_email' => (string)$email,
                 ));
               } catch (Exception $_evEx) {}
+              if ($claimOwned && $claimPdo) {
+                tickex_totalcoin_checkout_claim_ready($claimPdo, $ref, $claimFingerprint, $requestId, $paymentUrl);
+              }
+              $orderPersisted = true;
             } catch (Exception $e) {
               try { error_log('[TotalCoin] failed to persist order: ' . $e->getMessage()); } catch (Exception $_e) {}
+              if ($claimOwned) throw $e;
             }
               try {
                 // Structured instrumentation for Phase 0: record checkout persistence
@@ -1111,8 +1113,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $redirectFallback = array('auto' => true, 'reason' => ($ridForGo !== '' ? 'prg_unavailable' : 'no_rid'), 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
         } catch (Exception $e) {
-          if ($claimOwned && $claimPdo && empty($paymentUrl)) {
+          if ($claimOwned && $claimPdo && !$orderPersisted) {
             try { tickex_totalcoin_checkout_claim_failed($claimPdo, $ref, $claimFingerprint, $e->getMessage()); } catch (Exception $_claimEx) {}
+          }
+          if ($claimOwned && !$orderPersisted) {
+            // Nunca ofrecer un enlace de pago que no tenga una orden local auditable.
+            $paymentUrl = '';
           }
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público

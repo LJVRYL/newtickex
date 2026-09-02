@@ -36,3 +36,22 @@ claim_assert($conflict['result'] === 'conflict', 'same reference cannot represen
 
 $count = (int)$pdo->query('SELECT COUNT(*) FROM totalcoin_checkout_claims')->fetchColumn();
 claim_assert($count === 1, 'exactly one gateway claim exists for the reference');
+
+$retryAttempts = 0;
+$retryResult = tickex_sqlite_write_with_retry(function () use (&$retryAttempts) {
+    $retryAttempts++;
+    if ($retryAttempts < 3) throw new PDOException('SQLSTATE[HY000]: General error: 5 database is locked');
+    return 'written';
+}, 5, 0);
+claim_assert($retryResult === 'written' && $retryAttempts === 3, 'temporary SQLite locks are retried');
+
+$nonLockAttempts = 0;
+try {
+    tickex_sqlite_write_with_retry(function () use (&$nonLockAttempts) {
+        $nonLockAttempts++;
+        throw new PDOException('SQLSTATE[HY000]: General error: 1 no such table');
+    }, 5, 0);
+    claim_assert(false, 'non-lock database errors are not retried');
+} catch (PDOException $e) {
+    claim_assert($nonLockAttempts === 1, 'non-lock database errors are not retried');
+}
