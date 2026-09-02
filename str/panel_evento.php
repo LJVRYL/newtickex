@@ -338,6 +338,7 @@ $filters = array(
     'estado' => $fEstado,
 );
 $rows = get_unified_entries($pdo, $eventoId, $filters);
+$bridgeAllowedForEvent = tickex_event_bridge_allowed($pdo, $eventoId);
 
 // Producción: asignaciones
 $produArtistas = get_produccion_artistas($pdo);
@@ -450,18 +451,20 @@ include __DIR__.'/inc/layout_top.php';
       <h2 style="margin:4px 0 8px;"><?php echo e($evento['nombre']); ?></h2>
       <?php
         // Mostrar mapping actual hacia bridge (si existe)
-        $currentMap = get_mapped_bridge_slugs($pdo, $eventoId);
+        $currentMap = $bridgeAllowedForEvent ? get_mapped_bridge_slugs($pdo, $eventoId) : array();
       ?>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
         <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;">Slug: <strong><?php echo e($evento['slug']); ?></strong></span>
-        <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;display:inline-flex;gap:6px;align-items:center;">
-          <span>Bridge:</span>
-          <?php if (!empty($currentMap)): ?>
-            <strong><?php echo e(implode(', ', $currentMap)); ?></strong>
-          <?php else: ?>
-            <span class="muted">(no mapeado)</span>
-          <?php endif; ?>
-        </span>
+        <?php if ($bridgeAllowedForEvent): ?>
+          <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;display:inline-flex;gap:6px;align-items:center;">
+            <span>Bridge:</span>
+            <?php if (!empty($currentMap)): ?>
+              <strong><?php echo e(implode(', ', $currentMap)); ?></strong>
+            <?php else: ?>
+              <span class="muted">(no mapeado)</span>
+            <?php endif; ?>
+          </span>
+        <?php endif; ?>
       </div>
     </div>
 

@@ -219,10 +219,30 @@ function ensure_bridge_event_map_table($pdo) {
 }
 
 /**
+ * El bridge histórico pertenece únicamente a cuentas internas. Si la
+ * instalación todavía no tiene políticas de Mercado Pago conservamos el
+ * comportamiento legacy; cuando existen, los organizadores cliente quedan
+ * aislados aunque haya mappings huérfanos con el mismo ID de evento.
+ */
+function tickex_event_bridge_allowed($pdo, $evento_id) {
+    $evento_id = (int)$evento_id;
+    if ($evento_id <= 0) return false;
+    try {
+        if (!has_table($pdo, 'mercadopago_admin_policies')) return true;
+        $st = $pdo->prepare("SELECT COALESCE(p.account_type,'client') FROM eventos e LEFT JOIN mercadopago_admin_policies p ON p.admin_id=e.creado_por_admin_id WHERE e.id=:eid LIMIT 1");
+        $st->execute(array(':eid'=>$evento_id));
+        return $st->fetchColumn() === 'str_owner';
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
  * Obtener slugs mapeados para un evento STR
  * @return array lista de slugs (strings) o array vacío
  */
 function get_mapped_bridge_slugs($pdo, $evento_id) {
+    if (!tickex_event_bridge_allowed($pdo, $evento_id)) return array();
     $table = get_bridge_mapping_table_name($pdo);
     if (!$table) {
         return array();
@@ -253,6 +273,7 @@ function get_mapped_bridge_slugs($pdo, $evento_id) {
  */
 function set_bridge_mapping($pdo, $evento_id, $bridge_slug) {
     if (empty($bridge_slug)) return false;
+    if (!tickex_event_bridge_allowed($pdo, $evento_id)) return false;
     ensure_bridge_event_map_table($pdo);
     try {
         // eliminar mappings previos para este evento y agregar nuevo
@@ -279,6 +300,7 @@ function set_bridge_mapping($pdo, $evento_id, $bridge_slug) {
 function get_unified_entries($pdo, $evento_id, $filters = array()) {
     $entries = array();
     $colCheck = get_checkin_column($pdo);
+    $bridgeAllowed = tickex_event_bridge_allowed($pdo, $evento_id);
     
     // ===== ENTRADAS STR =====
     $where = array("evento_id = :eid");
@@ -389,7 +411,7 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
         // error al obtener mapping
     }
     
-    if ($hasBridgeView || $hasBridgeTable) {
+    if ($bridgeAllowed && ($hasBridgeView || $hasBridgeTable)) {
         // Detectar columnas de cada candidato para elegir el mejor (prefiere tabla si trae selected_type_name)
         $bridgeColsView = array();
         $bridgeColsTable = array();
@@ -766,6 +788,7 @@ function get_unified_stats($pdo, $evento_id) {
     
     // ===== CONTAR TICKEX/BRIDGE =====
     try {
+        if (!tickex_event_bridge_allowed($pdo, $evento_id)) throw new Exception('Bridge deshabilitado para organizadores cliente');
         // Detectar bridge (view y tabla)
         $hasBridgeView = false;
         $hasBridgeTable = false;
@@ -1033,6 +1056,7 @@ function get_economic_stats($pdo, $evento_id) {
         
         // ==== TICKEX: entradas pagadas (is_paid = 1) con precio real del bridge ====
         try {
+            if (!tickex_event_bridge_allowed($pdo, $evento_id)) throw new Exception('Bridge deshabilitado para organizadores cliente');
             $bridgeGross = 0.0;
             // Detectar bridge (tabla o view)
             $candidates = array('v_senforms_bridge_status', 'senforms_bridge_tickets');

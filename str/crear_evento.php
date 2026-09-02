@@ -143,6 +143,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $eventoId = (int)$pdo->lastInsertId();
+
+            // Un ID puede haber pertenecido a un evento eliminado en esquemas
+            // SQLite antiguos. Un evento nuevo nunca debe heredar mappings del
+            // bridge ni referencias legacy de ese ID anterior.
+            $hasBridgeMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_event_map' LIMIT 1")->fetchColumn();
+            if ($hasBridgeMap) {
+                $clearBridge = $pdo->prepare('DELETE FROM bridge_event_map WHERE evento_id=:eid');
+                $clearBridge->execute(array(':eid'=>$eventoId));
+            }
+            $hasLegacyMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map' LIMIT 1")->fetchColumn();
+            if ($hasLegacyMap) {
+                $clearLegacy = $pdo->prepare('DELETE FROM tickex_event_map WHERE str_event_id=:eid');
+                $clearLegacy->execute(array(':eid'=>$eventoId));
+            }
             $pdo->commit();
 
             // Nuevo flujo: ir a configurar_entradas_evento.php

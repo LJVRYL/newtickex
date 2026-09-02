@@ -32,6 +32,18 @@ if (!$evento_id || $bridge_slug === '') {
 
 $pdo = db();
 
+if (!tickex_can_access_event($pdo, $evento_id, $cu)) {
+    http_response_code(403);
+    echo json_encode(array('error' => 'No autorizado para este evento'));
+    exit;
+}
+
+if (!tickex_event_bridge_allowed($pdo, $evento_id)) {
+    http_response_code(403);
+    echo json_encode(array('error' => 'Bridge solo está disponible para cuentas internas'));
+    exit;
+}
+
 $stmtEv = $pdo->prepare("SELECT id FROM eventos WHERE id=:id");
 $stmtEv->execute(array(':id'=>$evento_id));
 if (!$stmtEv->fetch()) {
