@@ -119,6 +119,8 @@ $checkout = tickex_mp_create_preference($pdo, 7, array(
     return array('id' => 'TEST-PREFERENCE-1', 'sandbox_init_point' => 'https://sandbox.mercadopago.test/checkout?pref_id=TEST-PREFERENCE-1');
 });
 mp_test_assert($checkout['request_id'] === 'mp-TEST-PREFERENCE-1', 'preference receives a provider-scoped request id');
+mp_test_assert($checkout['payment_url'] === 'https://sandbox.mercadopago.test/checkout?pref_id=TEST-PREFERENCE-1', 'Mercado Pago checkout URL remains untouched');
+mp_test_assert(strpos($checkout['payment_url'], 'requestId=') === false, 'internal request id is never appended to Mercado Pago');
 mp_test_assert(abs($capturedPayload['marketplace_fee'] - 121.10) < 0.001, 'Checkout Pro receives only the Tickex remainder');
 mp_test_assert(abs($capturedPayload['items'][0]['unit_price'] - 11000) < 0.001, 'Checkout Pro charges the buyer the ticket subtotal plus service cost');
 mp_test_assert($capturedPayload['external_reference'] === 'tickex-mp-test-ref', 'preference carries the internal Tickex reference');

@@ -6,6 +6,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
 
+// La redireccion contiene una referencia unica por intento. Evitar que el
+// navegador reutilice un 302 anterior y termine reenviando una compra vieja.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) {
   http_response_code(400);
@@ -39,7 +44,7 @@ try {
 
   // Redirigimos al checkout interno TotalCoin con datos precargados
   $concept = $eventSlug !== '' ? $eventSlug : ('Evento-' . $id);
-  $ref = 'str-' . ($eventSlug !== '' ? $eventSlug : $id) . '-' . time();
+  $ref = tickex_totalcoin_new_reference($eventSlug !== '' ? $eventSlug : (string)$id);
   $q = array(
     'event'   => $id,
     'concept' => $concept,

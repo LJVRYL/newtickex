@@ -563,7 +563,9 @@ if (!function_exists('tickex_mp_create_preference')) {
         if ($paymentUrl === '' && isset($response['init_point'])) $paymentUrl = (string)$response['init_point'];
         if ($preferenceId === '' || $paymentUrl === '') throw new RuntimeException('Mercado Pago no devolvio la preferencia de pago.');
         $requestId = 'mp-' . $preferenceId;
-        $paymentUrl .= (strpos($paymentUrl, '?') === false ? '?' : '&') . 'requestId=' . rawurlencode($requestId);
+        // No agregar parametros internos a init_point/sandbox_init_point.
+        // Mercado Pago usa "requestId" dentro de su propio flujo de Checkout Pro
+        // y reutilizar ese nombre puede provocar errores o bucles de redireccion.
         return array('payment_url' => $paymentUrl, 'request_id' => $requestId, 'preference_id' => $preferenceId, 'marketplace_fee' => $fee, 'payload' => $payload);
     }
 }

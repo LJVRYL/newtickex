@@ -55,3 +55,7 @@ try {
 } catch (PDOException $e) {
     claim_assert($nonLockAttempts === 1, 'non-lock database errors are not retried');
 }
+
+$buySource = file_get_contents(__DIR__ . '/../comprar.php');
+claim_assert(strpos($buySource, 'Cache-Control: no-store') !== false, 'public checkout redirect is never cached');
+claim_assert(strpos($buySource, 'tickex_totalcoin_new_reference') !== false, 'public checkout redirect creates a random reference');

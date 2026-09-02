@@ -892,6 +892,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $claimResult = isset($claim['result']) ? (string)$claim['result'] : 'pending';
           if ($claimResult === 'ready' && !empty($claim['payment_url'])) {
             $paymentUrl = (string)$claim['payment_url'];
+            $gatewayRequestId = isset($claim['request_id']) ? (string)$claim['request_id'] : '';
           } elseif ($claimResult === 'acquired') {
             $claimOwned = true;
           } elseif ($claimResult === 'conflict') {
@@ -1065,7 +1066,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           // UX: Post-Redirect-Get interno (evita depender de redirects externos).
           if ($paymentUrl) {
             // Intentar extraer requestId para construir una URL interna de continuación.
-            $ridForGo = '';
+            // Mercado Pago devuelve el identificador por separado y su URL debe
+            // permanecer intacta. TotalCoin todavía lo incluye en la query.
+            $ridForGo = (string)$gatewayRequestId;
             try {
               $uGo = @parse_url($paymentUrl);
               if (is_array($uGo) && isset($uGo['query'])) {
