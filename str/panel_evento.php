@@ -472,6 +472,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <div class="pe-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;justify-content:flex-start;">
     <button class="btn pe-action-primary" id="toggleQuickLoad">+ Cargar entrada</button>
+    <a class="btn pe-action-btn" href="puerta_lista.php?evento_id=<?php echo (int)$eventoId; ?>">Lista de puerta</a>
     <a class="btn pe-action-btn" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
     <a class="btn pe-action-btn" href="access_links.php?evento_id=<?php echo (int)$eventoId; ?>">Checkout free</a>
     <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>

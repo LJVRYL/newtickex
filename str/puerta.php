@@ -144,6 +144,8 @@ include __DIR__.'/inc/layout_top.php';
     + Nueva entrada
   </a>
 
+  <a class="btn" href="puerta_lista.php?evento_id=<?php echo (int)$eventoId; ?>">📋 Lista de puerta</a>
+
   <button class="btn" type="button" id="btnScan">📷 Escanear QR</button>
 
   <span style="flex:1 1 auto;"></span>
