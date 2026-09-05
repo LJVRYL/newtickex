@@ -1029,6 +1029,7 @@ function get_economic_stats($pdo, $evento_id) {
         'totalcoin_fee_3pct' => 0,
         'payment_processing_cost' => 0,
         'service_fee_charged' => 0,
+        'resultado_neto_base' => 0,
         'por_tipo' => array(), // array( tipo => array('cantidad' => X, 'monto' => Y), ... )
         'manual_income' => 0,
         'manual_income_ingresos' => 0,
@@ -1184,7 +1185,6 @@ function get_economic_stats($pdo, $evento_id) {
                 $stats['bridge_gross'] = $bridgeGross;
                 $stats['bridge_fee_3pct'] = $bridgeFee;
                 $stats['bridge_net'] = $bridgeGross - $bridgeFee;
-                $stats['total_recaudado'] -= $bridgeFee;
             }
         } catch (Exception $e) {
             // Ignorar error bridge
@@ -1215,7 +1215,6 @@ function get_economic_stats($pdo, $evento_id) {
                     $checkoutFee = round($checkoutGross * 0.03, 2);
                     $stats['totalcoin_checkout_gross'] = $checkoutGross;
                     $stats['totalcoin_checkout_fee_3pct'] = $checkoutFee;
-                    $stats['total_recaudado'] -= $checkoutFee;
 
                     if (isset($orderCols['service_fee_amount'])) {
                         $stService = $pdo->prepare("SELECT COALESCE(SUM(service_fee_amount),0) FROM tc_orders WHERE evento_id = :eid AND $confirmedWhere");
@@ -1261,10 +1260,16 @@ function get_economic_stats($pdo, $evento_id) {
                 $stats['manual_income'] = get_total_manual_income($pdo, $evento_id);
             }
 
-            $stats['total_recaudado'] += $stats['manual_income'];
+            // Total recaudado representa dinero ingresado bruto. Los egresos
+            // manuales se muestran y descuentan solamente del resultado neto.
+            $stats['total_recaudado'] += $stats['manual_income_ingresos'];
         } catch (Exception $e) {
             // Ignorar error ingresos manuales
         }
+
+        $stats['resultado_neto_base'] = (float)$stats['total_recaudado']
+            - (float)$stats['payment_processing_cost']
+            + (float)$stats['manual_income_egresos'];
         
     } catch (Exception $e) {
         // Log o ignore

@@ -52,6 +52,20 @@ include __DIR__.'/inc/layout_top.php';
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
       </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Importe bruto, sin descontar costos.</div>
+    </div>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Procesamiento de pagos</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
+        $<?php echo number_format((float)($ecoStats['payment_processing_cost'] ?? 0), 2); ?>
+      </div>
+    </div>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Resultado neto base</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ((float)($ecoStats['resultado_neto_base'] ?? 0) >= 0 ? 'var(--ok)' : 'var(--warn)'); ?>;">
+        $<?php echo number_format((float)($ecoStats['resultado_neto_base'] ?? 0), 2); ?>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Recaudado menos procesamiento y egresos manuales.</div>
     </div>
     <?php if ($ecoStats['manual_income'] != 0): ?>
     <div class="card" style="margin:0;background:var(--panel-2);">

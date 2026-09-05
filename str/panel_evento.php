@@ -610,13 +610,13 @@ include __DIR__.'/inc/layout_top.php';
     </div>
     <?php endif; ?>
 
-    <?php $resultadoNeto = (float)$ecoStats['total_recaudado'] - (float)$staffCostEvent - (float)$artistCostEvent - (float)$venueCostEvent; ?>
+    <?php $resultadoNeto = (float)($ecoStats['resultado_neto_base'] ?? $ecoStats['total_recaudado']) - (float)$staffCostEvent - (float)$artistCostEvent - (float)$venueCostEvent; ?>
     <div class="card" style="margin:0;background:var(--panel-2);">
       <div class="muted" style="font-size:12px;">Resultado neto</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($resultadoNeto >= 0 ? 'var(--ok)' : 'var(--warn)'); ?>;">
         $<?php echo number_format($resultadoNeto, 2); ?>
       </div>
-      <div class="muted" style="font-size:11px;margin-top:4px;">Recaudado neto de TotalCoin/Bridge - staff - artística - venue</div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Total recaudado - procesamiento de pagos - egresos manuales - staff - artística - venue</div>
     </div>
   </div>
   

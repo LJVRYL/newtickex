@@ -52,7 +52,8 @@ repair_test_ok($stats['total'] === 22 && $stats['paid'] === 14 && $stats['pendie
 repair_test_ok($stats['stock_total'] === 260 && $stats['disponibles'] === 238, 'panel no longer adds issued QR entries to total stock');
 $economic = get_economic_stats($pdo, 15);
 repair_test_ok($economic['entradas_vendidas'] === 4, 'economy counts the three checkout packages and the manual transfer');
-repair_test_ok(abs($economic['total_recaudado'] - 141850.0) < 0.001, 'economy includes the transfer and absorbs three percent only on TotalCoin revenue');
+repair_test_ok(abs($economic['total_recaudado'] - 145000.0) < 0.001, 'gross collected total includes the transfer without subtracting costs');
+repair_test_ok(abs($economic['resultado_neto_base'] - 141850.0) < 0.001, 'net result absorbs three percent only on TotalCoin revenue');
 
 $again = tickex_repair_event15_ticket_packages($pdo, true);
 repair_test_ok(!empty($again['already_applied']) && $again['summary']['issued'] === 22, 'repair is idempotent');

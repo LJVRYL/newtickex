@@ -267,6 +267,8 @@ foreach ($movimientos as $m) {
 // ------------------------------------------------------------------
 $ingresosTotales = 0;
 $ingresosManual  = 0;
+$egresosManual = 0;
+$costosProcesamiento = 0;
 $entradasVendidas = 0;
 $totalesPorEvento = array();
 $ventasCheckout = 0.0; // Tickex/SenForms (checkout)
@@ -286,6 +288,8 @@ foreach ($eventIds as $eid) {
     $stats = get_economic_stats($pdo, $eid);
     $ingresosTotales += $stats['total_recaudado'];
     $ingresosManual  += $stats['manual_income'];
+    $egresosManual += abs((float)($stats['manual_income_egresos'] ?? 0));
+    $costosProcesamiento += (float)($stats['payment_processing_cost'] ?? 0);
     $entradasVendidas += $stats['entradas_vendidas'];
 
     // Desglose ventas por origen (para aplicar cargo de servicio SOLO al checkout)
@@ -311,7 +315,7 @@ $staffCost = 0;
 $artistCostTotal = 0;
 // En esta vista (admin), evitamos sumar costos globales.
 // La vista global del superadmin sí los contempla.
-$saldoProyecto = ($ingresosTotales + $totalPresu) - ($totalGastos + $totalInv + $staffCost + $artistCostTotal);
+$saldoProyecto = ($ingresosTotales + $totalPresu) - ($costosProcesamiento + $egresosManual + $totalGastos + $totalInv + $staffCost + $artistCostTotal);
 
 // ------------------------------------------------------------------
 // Cargo de servicio (solo ventas por checkout)
@@ -719,11 +723,15 @@ include __DIR__.'/inc/layout_top.php';
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Ingresos totales</div>
     <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">$<?php echo number_format($ingresosTotales,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">Incluye ventas + manuales (neto)</div>
+    <div style="font-size:12px;color:var(--muted);">Incluye ventas + ingresos manuales, sin descontar costos</div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
     <div style="font-size:24px;font-weight:700;margin-top:4px;color:<?php echo ($ingresosManual >= 0 ? 'var(--info)' : 'var(--warn)'); ?>;">$<?php echo number_format($ingresosManual,2); ?></div>
+  </div>
+  <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="muted" style="font-size:12px;">Procesamiento de pagos</div>
+    <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">$<?php echo number_format($costosProcesamiento,2); ?></div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Gastos registrados</div>
