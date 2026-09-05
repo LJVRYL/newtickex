@@ -25,7 +25,7 @@ try {
         throw new RuntimeException('Newsletter no publicado.');
     }
 
-    $newsletter['cta_label'] = 'Sacar entrada gratis';
+    $newsletter['cta_label'] = 'Canje QR Free';
     $newsletter['checkout_url'] = event_newsletters_absolute_url(
         'acceso.php?slug=' . rawurlencode((string)$event['slug'])
     );
