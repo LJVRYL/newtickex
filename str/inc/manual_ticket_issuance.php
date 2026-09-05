@@ -46,6 +46,8 @@ if (!function_exists('tickex_manual_issue_package')) {
         $ticketTypeId = isset($data['tipo_id']) ? (int)$data['tipo_id'] : 0;
         $packageQuantity = max(1, min(20, isset($data['cantidad']) ? (int)$data['cantidad'] : 1));
         $mode = isset($data['modo']) ? (string)$data['modo'] : 'courtesy';
+        $customTotalRaw = array_key_exists('monto_total', $data) ? trim((string)$data['monto_total']) : '';
+        $hasCustomTotal = $customTotalRaw !== '';
         $email = trim(isset($data['email']) ? (string)$data['email'] : '');
         $name = trim(isset($data['nombre']) ? (string)$data['nombre'] : '');
         $adminId = isset($data['admin_id']) ? (int)$data['admin_id'] : 0;
@@ -54,6 +56,10 @@ if (!function_exists('tickex_manual_issue_package')) {
 
         if ($eventId <= 0 || $ticketTypeId <= 0) throw new InvalidArgumentException('Evento o tipo de entrada inválido.');
         if (!in_array($mode, array('courtesy', 'manual_transfer'), true)) throw new InvalidArgumentException('Modalidad de emisión inválida.');
+        if ($hasCustomTotal && $mode !== 'manual_transfer') throw new InvalidArgumentException('El monto libre solo puede usarse en una venta manual.');
+        if ($hasCustomTotal && (!is_numeric($customTotalRaw) || (float)$customTotalRaw <= 0 || (float)$customTotalRaw > 999999999.99)) {
+            throw new InvalidArgumentException('El monto total cobrado debe ser mayor a cero.');
+        }
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('El email del destinatario no es válido.');
         if ($name === '') $name = $email;
 
@@ -78,8 +84,14 @@ if (!function_exists('tickex_manual_issue_package')) {
             throw new RuntimeException('Stock insuficiente: se necesitan ' . $issuedQuantity . ' lugares y quedan ' . $available . '.');
         }
 
-        $packagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
-        $total = round($packagePrice * $packageQuantity, 2);
+        $configuredPackagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
+        $total = $hasCustomTotal
+            ? round((float)$customTotalRaw, 2)
+            : round($configuredPackagePrice * $packageQuantity, 2);
+        // El procesador distribuye el precio del paquete entre sus QR. Para un
+        // monto libre calculamos el valor por paquete para que el ingreso total
+        // se registre una sola vez, independientemente de la cantidad de QR.
+        $packagePrice = $packageQuantity > 0 ? $total / $packageQuantity : 0.0;
         $requestId = tickex_manual_request_id();
         $selected = json_encode(array(array(
             'id' => (int)$ticketType['id'],

@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
     $mode     = isset($_POST['modo']) ? (string)$_POST['modo'] : 'courtesy';
     $quantity = isset($_POST['cantidad']) ? (int)$_POST['cantidad'] : 1;
+    $customTotal = isset($_POST['monto_total']) ? trim((string)$_POST['monto_total']) : '';
     $hidden   = (isset($_POST['oculto']) && in_array($rol, array('super_admin','superadmin'), true)) ? 1 : 0;
 
     if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
@@ -68,6 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
     if (!in_array($mode, array('courtesy','manual_transfer'), true)) $errors[] = 'Seleccioná una modalidad válida.';
     if ($quantity < 1 || $quantity > 20) $errors[] = 'La cantidad de promociones debe estar entre 1 y 20.';
+    if ($customTotal !== '' && $mode !== 'manual_transfer') $errors[] = 'El monto libre solo corresponde a una venta manual.';
+    if ($customTotal !== '' && (!is_numeric($customTotal) || (float)$customTotal <= 0 || (float)$customTotal > 999999999.99)) {
+        $errors[] = 'Ingresá un monto total cobrado válido y mayor a cero.';
+    }
 
     // Resolver email por Tickex ID (apodo) si no viene email
     if ($email === '' && $tickexId !== '') {
@@ -113,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'tipo_id' => $tipoId,
                 'cantidad' => $quantity,
                 'modo' => $mode,
+                'monto_total' => $customTotal,
                 'email' => $email,
                 'nombre' => $nombreIns,
                 'admin_id' => (int)$cu['id'],
@@ -191,12 +197,17 @@ include __DIR__.'/inc/layout_top.php';
         <option value="manual_transfer">Venta manual / transferencia</option>
         <option value="courtesy">Cortesía</option>
       </select>
-      <small class="muted">La transferencia registra el precio configurado. La cortesía registra $0.</small>
+      <small class="muted">La venta usa el precio configurado, salvo que indiques un monto total diferente. La cortesía registra $0.</small>
     </div>
     <div>
-      <label>Cantidad de promociones</label>
+      <label>Cantidad de paquetes / entradas</label>
       <input type="number" name="cantidad" min="1" max="20" value="1" required>
-      <small class="muted">Ejemplo: 1 Promo 3x4 emite 4 QR y descuenta 4 lugares.</small>
+      <small class="muted">Una entrada simple emite 1 QR por unidad. Una promoción emite los QR configurados.</small>
+    </div>
+    <div id="monto-total-wrap">
+      <label>Monto total cobrado (opcional)</label>
+      <input type="number" name="monto_total" min="0.01" max="999999999.99" step="0.01" inputmode="decimal" placeholder="Ej: 20000" value="<?php echo isset($_POST['monto_total']) ? e($_POST['monto_total']) : ''; ?>">
+      <small class="muted">Es el total de toda la operación. Si lo dejás vacío, se calcula con el precio configurado.</small>
     </div>
     <div>
       <label>Email destino</label>
@@ -231,6 +242,9 @@ include __DIR__.'/inc/layout_top.php';
   (function(){
     const evSelect = document.querySelector('select[name="evento_id"]');
     const tipoSelect = document.querySelector('select[name="tipo_id"]');
+    const modeSelect = document.querySelector('select[name="modo"]');
+    const customTotalWrap = document.getElementById('monto-total-wrap');
+    const customTotalInput = document.querySelector('input[name="monto_total"]');
     function filterTipos(){
       const ev = evSelect.value;
       Array.from(tipoSelect.options).forEach(opt => {
@@ -246,6 +260,17 @@ include __DIR__.'/inc/layout_top.php';
     if (evSelect && tipoSelect) {
       evSelect.addEventListener('change', filterTipos);
       filterTipos();
+    }
+    function syncCustomTotal(){
+      if (!modeSelect || !customTotalWrap || !customTotalInput) return;
+      const isSale = modeSelect.value === 'manual_transfer';
+      customTotalWrap.hidden = !isSale;
+      customTotalInput.disabled = !isSale;
+      if (!isSale) customTotalInput.value = '';
+    }
+    if (modeSelect) {
+      modeSelect.addEventListener('change', syncCustomTotal);
+      syncCustomTotal();
     }
   })();
 </script>
