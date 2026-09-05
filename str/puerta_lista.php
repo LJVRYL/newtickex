@@ -10,6 +10,7 @@ $role = tickex_admin_role($user);
 $eventRole = isset($user['rol_evento']) ? (string)$user['rol_evento'] : '';
 $isManager = tickex_is_super_admin($user) || $role === 'admin_evento';
 $isDoorStaff = $role === 'staff_evento' && $eventRole === 'puerta';
+$hideNav = $isDoorStaff;
 if (!$isManager && !$isDoorStaff) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -110,10 +111,11 @@ include __DIR__ . '/inc/layout_top.php';
 @media(max-width:760px){.door-kpis{grid-template-columns:1fr 1fr}.door-grid{grid-template-columns:1fr}.door-person{grid-template-columns:1fr}.door-person form .btn{width:100%}}
 </style>
 
-<div class="card">
+<main class="tx-door-shell tx-door-reservations">
+<div class="card tx-door-list-hero">
   <div class="door-actions">
     <a class="btn secondary" href="<?php echo $isDoorStaff ? 'puerta.php?evento_id='.(int)$eventId : 'panel_evento.php?evento_id='.(int)$eventId; ?>">← Volver</a>
-    <div><div class="muted">Puerta · <?php echo e($event['nombre']); ?></div><h2 style="margin:2px 0;">Lista de reservas</h2></div>
+    <div><div class="tx-kicker"><i></i> Puerta · <?php echo e($event['nombre']); ?></div><h1>Lista de reservas</h1><p>Cobrá y registrá el ingreso con una sola confirmación.</p></div>
   </div>
 </div>
 
@@ -135,7 +137,7 @@ include __DIR__ . '/inc/layout_top.php';
 <?php endif; ?>
 
 <?php if ($list): ?>
-<div class="card door-kpis">
+<div class="card door-kpis tx-door-reservation-kpis">
   <div class="door-kpi"><span class="muted">En lista</span><strong><?php echo (int)$summary['reserved'] + (int)$summary['paid_checked_in']; ?></strong></div>
   <div class="door-kpi"><span class="muted">Pendientes</span><strong><?php echo (int)$summary['reserved']; ?></strong></div>
   <div class="door-kpi"><span class="muted">Pagaron e ingresaron</span><strong><?php echo (int)$summary['paid_checked_in']; ?></strong></div>
@@ -143,7 +145,7 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <?php if ($isManager): ?>
-<div class="card">
+<div class="card tx-door-search-card">
   <h3>Cargar nombres</h3><p class="muted">Pegá un nombre por línea. Los nombres repetidos se omiten.</p>
   <form method="post"><input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="evento_id" value="<?php echo (int)$eventId; ?>"><input type="hidden" name="action" value="import_guests"><textarea name="nombres" rows="8" required placeholder="Juan Pérez&#10;María Gómez"></textarea><button class="btn" type="submit" style="margin-top:10px;">Agregar a la lista</button></form>
 </div>
@@ -154,7 +156,7 @@ include __DIR__ . '/inc/layout_top.php';
   <form method="get" class="door-actions"><input type="hidden" name="evento_id" value="<?php echo (int)$eventId; ?>"><input name="q" value="<?php echo e($query); ?>" placeholder="Nombre…" autofocus style="flex:1 1 240px;"><select name="estado"><option value="">Todos</option><option value="reserved"<?php echo $statusFilter==='reserved'?' selected':''; ?>>Pendientes</option><option value="paid_checked_in"<?php echo $statusFilter==='paid_checked_in'?' selected':''; ?>>Ya ingresaron</option></select><button class="btn secondary">Buscar</button></form>
 </div>
 
-<div class="card"><h3>Personas</h3><div class="door-list">
+<div class="card tx-door-people-card"><div class="tx-door-list-head"><h2>Personas</h2><strong><?php echo count($rows); ?> resultados</strong></div><div class="door-list">
 <?php if (!$rows): ?><p class="muted">No hay personas para mostrar.</p><?php endif; ?>
 <?php foreach ($rows as $row): ?><div class="door-person">
   <div><strong><?php echo e($row['guest_name']); ?></strong><div class="muted">$<?php echo e(number_format((float)$row['price'],0,',','.')); ?> · <?php echo $row['status']==='paid_checked_in' ? 'Cobrado ' . e($row['paid_at']) : 'Todavía no pagó'; ?></div></div>
@@ -165,5 +167,6 @@ include __DIR__ . '/inc/layout_top.php';
 <?php elseif (!$isManager): ?>
 <div class="card error"><h3>La lista todavía no está configurada</h3><p>Pedile al administrador del evento que la habilite.</p></div>
 <?php endif; ?>
+</main>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

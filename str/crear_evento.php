@@ -179,22 +179,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include __DIR__.'/inc/layout_top.php';
 ?>
 <?php if (!empty($flashes)): ?>
-    <div class="card" style="max-width:640px;margin:0 auto 12px auto;">
+    <div class="card tx-create-flashes">
         <?php foreach ($flashes as $f): ?>
             <div class="flash <?php echo e($f['type']); ?>"><?php echo e($f['msg']); ?></div>
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
-<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+<div class="card tx-create-nav">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
   <?php if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin'): ?>
     <a class="btn secondary" href="superadmin.php">SuperAdmin</a>
   <?php endif; ?>
 </div>
 
-<div class="card">
+<div class="card tx-create-hero">
+  <span class="tx-kicker"><i></i>Nuevo evento</span>
   <h2>Crear nuevo evento</h2>
-  <div style="color:var(--muted);font-size:14px;">
+  <div class="tx-create-intro">
     Usuario: <strong><?php echo e(isset($_SESSION['usuario']) ? $_SESSION['usuario'] : ''); ?></strong>
     (<?php echo e($tipoGlobal); ?>)<br>
     Esta pantalla crea el evento. Después vas a configurar las entradas
@@ -202,9 +203,9 @@ include __DIR__.'/inc/layout_top.php';
   </div>
 </div>
 
-<form method="post" enctype="multipart/form-data" style="padding-bottom:calc(24px + constant(safe-area-inset-bottom));padding-bottom:calc(24px + env(safe-area-inset-bottom));">
+<form class="tx-create-form" method="post" enctype="multipart/form-data">
 
-  <div class="card">
+  <div class="card tx-create-card">
     <h3>Datos del evento</h3>
 
     <label for="nombre">Nombre del evento</label>
@@ -219,12 +220,12 @@ include __DIR__.'/inc/layout_top.php';
               placeholder="Texto descriptivo del evento..."><?php echo e($descripcion); ?></textarea>
 
     <label>Fechas del evento (desde / hasta)</label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <div style="flex:1 1 140px;">
+    <div class="tx-create-date-grid">
+      <div>
         <label for="fecha_desde">Desde</label>
         <input type="date" id="fecha_desde" name="fecha_desde" value="<?php echo e($fechaDesde); ?>">
       </div>
-      <div style="flex:1 1 140px;">
+      <div>
         <label for="fecha_hasta">Hasta</label>
         <input type="date" id="fecha_hasta" name="fecha_hasta" value="<?php echo e($fechaHasta); ?>">
       </div>
@@ -234,7 +235,7 @@ include __DIR__.'/inc/layout_top.php';
     <input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg">
   </div>
 
-    <button class="btn" type="submit" style="margin-bottom:16px;">Crear evento y configurar entradas</button>
+    <button class="btn tx-create-submit" type="submit">Crear evento y configurar entradas</button>
 </form>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>

@@ -7,6 +7,7 @@ require_login();
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
 $rolEvento  = isset($_SESSION['rol_evento']) ? $_SESSION['rol_evento'] : (isset($cu['rol_evento'])?$cu['rol_evento']:'');
+$hideNav = ($tipoGlobal === 'staff_evento');
 
 // Permitidos: staff puerta (principal). También dejamos super/admin por si querés usarlo.
 $permitido = false;
@@ -130,13 +131,8 @@ $tipos = $tiposStmt->fetchAll(PDO::FETCH_COLUMN);
 include __DIR__.'/inc/layout_top.php';
 ?>
 
-<style>
-  /* Ajustes visuales puerta */
-  .table th, .table td { padding: 12px 12px; }
-  .actions, .ticketcol { white-space: nowrap; }
-</style>
-
-<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+<main class="tx-door-shell">
+<div class="card tx-door-toolbar">
   <a class="btn secondary" href="panel_admin.php">⬅ Panel</a>
 
   <a class="btn" href="nueva_entrada.php?evento_id=<?php echo $eventoId; ?>"
@@ -146,44 +142,45 @@ include __DIR__.'/inc/layout_top.php';
 
   <a class="btn" href="puerta_lista.php?evento_id=<?php echo (int)$eventoId; ?>">📋 Lista de puerta</a>
 
-  <button class="btn" type="button" id="btnScan">📷 Escanear QR</button>
+  <button class="btn tx-door-scan" type="button" id="btnScan">Escanear QR</button>
 
   <span style="flex:1 1 auto;"></span>
   <a class="btn danger" href="login.php?logout=1">Salir</a>
 </div>
 
-<div class="card">
-  <h2>Puerta – Check-in</h2>
-  <div style="color:var(--muted);font-size:14px;margin-top:4px;">
-    Evento: <strong><?php echo e($eventoNombre); ?></strong>
-    <?php if($eventoSlug!==''): ?> (<?php echo e($eventoSlug); ?>)<?php endif; ?><br>
-    Usuario: <strong><?php echo e($_SESSION['usuario']); ?></strong>
+<div class="card tx-door-hero">
+  <div class="tx-kicker"><i></i> Operación en vivo</div>
+  <h1>Puerta y check-in</h1>
+  <div class="tx-door-context">
+    <strong><?php echo e($eventoNombre); ?></strong>
+    <?php if($eventoSlug!==''): ?><span><?php echo e($eventoSlug); ?></span><?php endif; ?>
+    <small>Operador: <?php echo e($_SESSION['usuario']); ?></small>
   </div>
 
-  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
-    <div class="card" style="min-width:160px;background:var(--panel-2);">
-      <div style="font-size:12px;color:var(--muted);">Entradas (filtros)</div>
-      <div style="font-size:22px;font-weight:800;margin-top:4px;"><?php echo $total; ?></div>
+  <div class="tx-door-kpis">
+    <div class="card tx-door-kpi is-total">
+      <div>Entradas visibles</div>
+      <strong><?php echo $total; ?></strong>
     </div>
-    <div class="card" style="min-width:160px;background:var(--panel-2);">
-      <div style="font-size:12px;color:var(--muted);">Check-ins</div>
-      <div style="font-size:22px;font-weight:800;margin-top:4px;"><?php echo $checkins; ?></div>
+    <div class="card tx-door-kpi is-done">
+      <div>Ya ingresaron</div>
+      <strong><?php echo $checkins; ?></strong>
     </div>
-    <div class="card" style="min-width:160px;background:var(--panel-2);">
-      <div style="font-size:12px;color:var(--muted);">Faltan</div>
-      <div style="font-size:22px;font-weight:800;margin-top:4px;"><?php echo $faltan; ?></div>
+    <div class="card tx-door-kpi is-pending">
+      <div>Faltan ingresar</div>
+      <strong><?php echo $faltan; ?></strong>
     </div>
   </div>
 </div>
 
-<div class="card">
-  <h3>Filtros</h3>
+<div class="card tx-door-filter">
+  <div><div class="tx-kicker"><i></i> Búsqueda rápida</div><h2>Encontrar entrada</h2></div>
   <form method="get" style="margin-top:8px;">
     <input type="hidden" name="evento_id" value="<?php echo $eventoId; ?>">
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;">
+    <div class="tx-door-filter-grid">
       <div>
         <label>Buscar (nombre o código)</label>
-        <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Buscar...">
+        <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Nombre o código" inputmode="search">
       </div>
       <div>
         <label>Tipo</label>
@@ -211,14 +208,14 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 </div>
 
-<div class="card">
-  <h3>Lista del evento</h3>
+<div class="card tx-door-list-card">
+  <div class="tx-door-list-head"><div><div class="tx-kicker"><i></i> Control de acceso</div><h2>Lista del evento</h2></div><strong><?php echo (int)$total; ?> personas</strong></div>
 
   <?php if(!$rows): ?>
     <div style="color:var(--muted);font-size:14px;">No hay entradas para mostrar.</div>
   <?php else: ?>
     <div style="overflow:auto;margin-top:8px;">
-      <table class="table" style="min-width:720px;">
+      <table class="table tx-door-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -236,10 +233,10 @@ include __DIR__.'/inc/layout_top.php';
             $codigo = isset($r['codigo']) ? trim($r['codigo']) : '';
           ?>
           <tr>
-            <td><?php echo (int)$r['id']; ?></td>
-            <td><?php echo e($r['nombre']); ?></td>
-            <td><?php echo e($r['tipo']); ?></td>
-            <td>
+            <td data-label="ID"><?php echo (int)$r['id']; ?></td>
+            <td data-label="Nombre"><?php echo e($r['nombre']); ?></td>
+            <td data-label="Tipo"><?php echo e($r['tipo']); ?></td>
+            <td data-label="Estado">
               <?php if($estadoOk): ?>
                 <span style="color:var(--ok);font-weight:700;">Check-in OK</span>
               <?php else: ?>
@@ -248,12 +245,12 @@ include __DIR__.'/inc/layout_top.php';
             </td>
 
             <!-- ACCION SOLO CHECK-IN -->
-            <td class="actions">
+            <td class="actions" data-label="Acción">
               <?php if(!$estadoOk && $codigo!==''): ?>
                 <a class="btn"
                    style="background:var(--ok);color:#04150a;padding:6px 12px;font-size:12px;"
                    href="checkin.php?c=<?php echo urlencode($codigo); ?>&evento_id=<?php echo $eventoId; ?>">
-                  CHECK-IN
+                  Confirmar ingreso
                 </a>
               <?php else: ?>
                 <span style="color:var(--muted);font-size:13px;">—</span>
@@ -261,7 +258,7 @@ include __DIR__.'/inc/layout_top.php';
             </td>
 
             <!-- VER TICKET CON OJO -->
-            <td class="ticketcol">
+            <td class="ticketcol" data-label="Ticket">
               <?php if($codigo!==''): ?>
                 <a class="btn secondary"
                    style="padding:6px 10px;font-size:14px;"
@@ -281,10 +278,11 @@ include __DIR__.'/inc/layout_top.php';
     </div>
   <?php endif; ?>
 </div>
+</main>
 
 <!-- Modal simple para cámara -->
-<div id="scanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;padding:16px;">
-  <div class="card" style="max-width:520px;width:100%;position:relative;">
+<div id="scanModal" class="tx-door-modal">
+  <div class="card tx-door-modal-card">
     <h3>Escanear QR</h3>
     <div id="scanMsg" style="color:var(--muted);font-size:14px;margin-bottom:8px;"></div>
     <video id="scanVideo" style="width:100%;border-radius:12px;background:#000;" playsinline></video>

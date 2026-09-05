@@ -17,8 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Email/usuario y contraseña son obligatorios.';
     } else {
         try {
-            $pdo = new PDO('sqlite:' . __DIR__ . '/save_the_rave.sqlite');
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            // Usar la conexión central: configura busy_timeout/WAL y evita que el
+            // login compita con otra conexión SQLite durante la inicialización.
+            $pdo = db();
 
             // Si contiene @ asumimos que es un email, si no username
             if (strpos($loginId, '@') !== false) {
@@ -85,8 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Staff de puerta
                         if ($admin['tipo_global'] === 'staff_evento') {
                             // buscar asignaciones múltiples
-                            $pdoMap = new PDO('sqlite:' . __DIR__ . '/save_the_rave.sqlite');
-                            $pdoMap->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                            $pdoMap = $pdo;
                             $stmtEvStaff = $pdoMap->prepare("SELECT evento_id FROM staff_eventos WHERE staff_id = :sid");
                             $stmtEvStaff->execute(array(':sid'=>(int)$admin['id']));
                             $evList = $stmtEvStaff->fetchAll(PDO::FETCH_COLUMN);
@@ -124,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } catch (Exception $e) {
+            error_log('Tickex admin login database error: ' . $e->getMessage());
             $errors[] = 'Error interno al conectar con la base de datos.';
         }
     }
@@ -131,14 +132,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="container" style="max-width:480px;margin:40px auto;">
+<main class="tx-login-shell tx-admin-login-shell">
+  <section class="tx-login-story">
+    <div class="tx-login-brand">TICKEX <span>BACKSTAGE</span></div>
+    <div class="tx-login-story-copy">
+      <div class="tx-kicker"><i></i> Centro de operaciones</div>
+      <h1>Tu evento bajo control, desde cualquier lugar.</h1>
+      <p>Ventas, puerta, equipo, comunicación y economía organizados en una sola plataforma.</p>
+    </div>
+    <div class="tx-login-proof">
+      <div><strong>Ventas</strong><span>Seguimiento claro</span></div>
+      <div><strong>Puerta</strong><span>Accesos en vivo</span></div>
+      <div><strong>Equipo</strong><span>Roles separados</span></div>
+    </div>
+  </section>
+  <section class="tx-login-form-column">
+  <div class="container tx-admin-login-card">
+    <div class="tx-kicker"><i></i> Acceso privado</div>
     <h1 class="mb-4">Ingreso de administradores</h1>
+    <p class="tx-login-intro">Ingresá para administrar tus eventos y operaciones.</p>
 
     <?php if ($errors): ?>
         <div class="alert alert-danger">
             <ul style="margin:0;padding-left:20px;">
                 <?php foreach ($errors as $e): ?>
-                    
+                    <li><?php echo htmlspecialchars($e, ENT_QUOTES, 'UTF-8'); ?></li>
                 <?php endforeach; ?>
             </ul>
         </div>
@@ -179,6 +197,8 @@ include __DIR__ . '/inc/layout_top.php';
         Este acceso es sólo para organizadores, productores y personal de puerta.
         Si sos público general, usá el ingreso desde la página principal de Tickex.
     </p>
-</div>
+  </div>
+  </section>
+</main>
 <?php
 include __DIR__ . '/inc/layout_bottom.php';

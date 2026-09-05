@@ -129,6 +129,7 @@ str/.secrets/
 !str/tickex-logo.svg
 !str/tickex-logo_sobre_claro.svg
 !str/tickex-logo_sobre_oscuro.svg
+!str/tickex-isotipo.svg
 uploads/
 str.bak_*/
 testdir/

@@ -444,46 +444,70 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="pe-wrap">
 
-<div class="card">
-  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;">
-    <div style="flex:1 1 320px;min-width:260px;">
-      <div class="muted" style="letter-spacing:0.06em;font-size:12px;text-transform:uppercase;">Evento</div>
-      <h2 style="margin:4px 0 8px;"><?php echo e($evento['nombre']); ?></h2>
+<div class="card tx-event-hero">
+  <div class="tx-event-header">
+    <div class="tx-event-identity">
+      <span class="tx-kicker"><i></i>Panel del evento</span>
+      <h2><?php echo e($evento['nombre']); ?></h2>
       <?php
         // Mostrar mapping actual hacia bridge (si existe)
         $currentMap = $bridgeAllowedForEvent ? get_mapped_bridge_slugs($pdo, $eventoId) : array();
       ?>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-        <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;">Slug: <strong><?php echo e($evento['slug']); ?></strong></span>
+      <div class="tx-event-meta-row">
+        <span class="tx-meta-chip"><span>Evento</span><strong>#<?php echo (int)$eventoId; ?></strong></span>
+        <span class="tx-meta-chip"><span>Slug</span><strong><?php echo e($evento['slug']); ?></strong></span>
         <?php if ($bridgeAllowedForEvent): ?>
-          <span style="padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12px;display:inline-flex;gap:6px;align-items:center;">
+          <span class="tx-meta-chip">
             <span>Bridge:</span>
             <?php if (!empty($currentMap)): ?>
               <strong><?php echo e(implode(', ', $currentMap)); ?></strong>
             <?php else: ?>
-              <span class="muted">(no mapeado)</span>
+              <strong class="tx-meta-empty">No mapeado</strong>
             <?php endif; ?>
           </span>
         <?php endif; ?>
       </div>
     </div>
-
+    <a class="btn pe-action-btn tx-event-back" href="panel_evento.php" title="Volver">⬅ Volver</a>
   </div>
 
-  <div class="pe-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;justify-content:flex-start;">
-    <button class="btn pe-action-primary" id="toggleQuickLoad">+ Cargar entrada</button>
-    <a class="btn pe-action-btn" href="puerta_lista.php?evento_id=<?php echo (int)$eventoId; ?>">Lista de puerta</a>
-    <a class="btn pe-action-btn" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
-    <a class="btn pe-action-btn" href="access_links.php?evento_id=<?php echo (int)$eventoId; ?>">Checkout free</a>
-    <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
-    <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
-    <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
-    <a class="btn pe-action-btn" href="comunicacion_newsletter.php?event_id=<?php echo (int)$eventoId; ?>">Ir al newsletter</a>
-    <a class="btn pe-action-btn" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
-    <a class="btn danger" href="eliminar_evento.php?id=<?php echo (int)$eventoId; ?>&csrf=<?php echo urlencode($csrf); ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Eliminar</a>
-    <a class="btn pe-action-btn" href="panel_evento.php" title="Volver">
-      ⬅ Volver
-    </a>
+  <div class="tx-event-action-groups">
+    <div class="tx-event-action-group tx-action-operation">
+      <div class="tx-action-group-heading">
+        <span class="tx-action-group-icon">01</span>
+        <div><strong>Operación</strong><small>Entradas y accesos</small></div>
+      </div>
+      <div class="tx-action-group-links tx-action-operation-links">
+        <button class="btn pe-action-primary" id="toggleQuickLoad">+ Cargar entrada</button>
+        <a class="btn pe-action-btn" href="puerta_lista.php?evento_id=<?php echo (int)$eventoId; ?>">Lista de puerta</a>
+        <a class="btn pe-action-btn" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
+        <a class="btn pe-action-btn" href="access_links.php?evento_id=<?php echo (int)$eventoId; ?>">Checkout free</a>
+      </div>
+    </div>
+
+    <div class="tx-event-action-group tx-action-team">
+      <div class="tx-action-group-heading">
+        <span class="tx-action-group-icon">02</span>
+        <div><strong>Equipo y producción</strong><small>Personas y recursos</small></div>
+      </div>
+      <div class="tx-action-group-links">
+        <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
+        <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
+        <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
+      </div>
+    </div>
+
+    <div class="tx-event-action-group tx-action-management">
+      <div class="tx-action-group-heading">
+        <span class="tx-action-group-icon">03</span>
+        <div><strong>Gestión</strong><small>Difusión y ajustes</small></div>
+      </div>
+      <div class="tx-action-group-links">
+        <a class="btn pe-action-btn" href="comunicacion_newsletter.php?event_id=<?php echo (int)$eventoId; ?>">Ir al newsletter</a>
+        <a class="btn pe-action-btn" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">Editar evento</a>
+        <a class="btn danger" href="eliminar_evento.php?id=<?php echo (int)$eventoId; ?>&csrf=<?php echo urlencode($csrf); ?>" onclick="return confirm('¿Seguro que querés eliminar este evento?');">🗑 Eliminar</a>
+      </div>
+    </div>
   </div>
 
   <div id="quickLoadPanel" style="display:none;margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2);">
@@ -496,43 +520,43 @@ include __DIR__.'/inc/layout_top.php';
 </div>
 
 <div class="card pe-kpis" style="display:flex;gap:12px;flex-wrap:wrap;">
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-issued" data-icon="QR">
     <div class="muted">Emitidas</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo (int)$stEvento['total']; ?>
     </div>
   </div>
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-paid" data-icon="$">
     <div class="muted">Pagadas</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo (int)$stEvento['paid']; ?>
     </div>
   </div>
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-free" data-icon="FREE">
     <div class="muted">Gratis</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo $gratis; ?>
     </div>
   </div>
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-available" data-icon="OK">
     <div class="muted">Disponibles</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo ($stEvento['disponibles'] !== null ? (int)$stEvento['disponibles'] : '-'); ?>
     </div>
   </div>
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-pending" data-icon="•">
     <div class="muted">Sin escanear</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo (int)$stEvento['pendiente']; ?>
     </div>
   </div>
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-checkin" data-icon="IN">
     <div class="muted">Check-ins</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo (int)$stEvento['checkins']; ?>
     </div>
   </div>
-  <div class="card" style="flex:1 1 180px;min-width:180px;">
+  <div class="card tx-kpi-card tx-kpi-stock" data-icon="Σ">
     <div class="muted">Stock Total</div>
     <div style="font-size:22px;font-weight:700;">
       <?php echo ($stEvento['stock_total'] !== null ? (int)$stEvento['stock_total'] : '-'); ?>
@@ -541,7 +565,7 @@ include __DIR__.'/inc/layout_top.php';
 </div>
 
 <!-- === ESTADÍSTICAS ECONÓMICAS === -->
-<div class="card">
+<div class="card tx-event-economy">
   <h3>Economía del evento</h3>
   
   <?php 
@@ -550,21 +574,21 @@ include __DIR__.'/inc/layout_top.php';
   ?>
   
   <div class="pe-econ-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-sales" data-icon="TKT">
       <div class="muted" style="font-size:12px;">Paquetes vendidos</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;">
         <?php echo (int)$ecoStats['entradas_vendidas']; ?>
       </div>
     </div>
     
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-revenue tx-econ-featured" data-icon="$">
       <div class="muted" style="font-size:12px;">Total recaudado</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
       </div>
     </div>
 
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-cost" data-icon="3%">
       <div class="muted" style="font-size:12px;">Costo TotalCoin / Bridge (3%)</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
         $<?php echo number_format((float)($ecoStats['totalcoin_fee_3pct'] ?? 0), 2); ?>
@@ -572,7 +596,7 @@ include __DIR__.'/inc/layout_top.php';
       <div class="muted" style="font-size:11px;margin-top:4px;">Costo absorbido; no se cobra al comprador.</div>
     </div>
 
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-service" data-icon="+">
       <div class="muted" style="font-size:12px;">Costo de servicio cobrado</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--info);">
         $<?php echo number_format((float)($ecoStats['service_fee_charged'] ?? 0), 2); ?>
@@ -580,21 +604,21 @@ include __DIR__.'/inc/layout_top.php';
       <div class="muted" style="font-size:11px;margin-top:4px;">Por ejemplo, el 10% de checkout de clientes.</div>
     </div>
 
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-staff" data-icon="STF">
       <div class="muted" style="font-size:12px;">Costo staff asignado</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
         $<?php echo number_format($staffCostEvent, 2); ?>
       </div>
     </div>
 
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-art" data-icon="ART">
       <div class="muted" style="font-size:12px;">Costo artística</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
         $<?php echo number_format($artistCostEvent, 2); ?>
       </div>
     </div>
 
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-venue" data-icon="VNU">
       <div class="muted" style="font-size:12px;">Costo venue</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
         $<?php echo number_format($venueCostEvent, 2); ?>
@@ -602,7 +626,7 @@ include __DIR__.'/inc/layout_top.php';
     </div>
 
     <?php if ($ecoStats['manual_income'] != 0): ?>
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-manual" data-icon="MAN">
       <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($ecoStats['manual_income'] >= 0 ? 'var(--info)' : 'var(--warn)'); ?>;">
         $<?php echo number_format($ecoStats['manual_income'], 2); ?>
@@ -611,7 +635,7 @@ include __DIR__.'/inc/layout_top.php';
     <?php endif; ?>
 
     <?php $resultadoNeto = (float)($ecoStats['resultado_neto_base'] ?? $ecoStats['total_recaudado']) - (float)$staffCostEvent - (float)$artistCostEvent - (float)$venueCostEvent; ?>
-    <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="card tx-econ-card tx-econ-result tx-econ-featured<?php echo ($ecoStats['manual_income'] != 0 ? ' tx-econ-result-with-manual' : ''); ?>" data-icon="NET">
       <div class="muted" style="font-size:12px;">Resultado neto</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo ($resultadoNeto >= 0 ? 'var(--ok)' : 'var(--warn)'); ?>;">
         $<?php echo number_format($resultadoNeto, 2); ?>
@@ -629,7 +653,7 @@ include __DIR__.'/inc/layout_top.php';
 <!-- Se removió el bloque de artística en esta vista; se gestiona desde el botón "Asignar artística" -->
 
 <!-- === INGRESOS / EGRESOS MANUALES === -->
-<div class="card" id="ingresos-egresos">
+<div class="card tx-event-manual" id="ingresos-egresos">
   <h3>Ingresos/Egresos manuales (Otros/Varios)</h3>
   <p class="muted" style="font-size:13px;margin-bottom:12px;">Registra ventas puerta, consumos, ajustes u otros movimientos. Pueden ser ingresos o egresos.</p>
 
@@ -688,17 +712,17 @@ include __DIR__.'/inc/layout_top.php';
         <?php foreach ($incomes as $inc): ?>
         <?php $isEgreso = (isset($inc['tipo']) && $inc['tipo'] === 'egreso') || (isset($inc['monto']) && (float)$inc['monto'] < 0); ?>
         <tr>
-          <td><?php echo e($inc['concepto']); ?></td>
+          <td class="tx-ledger-concept"><?php echo e($inc['concepto']); ?></td>
           <td>
-            <span class="pill" style="background:<?php echo $isEgreso ? 'var(--panel-3)' : 'var(--panel-2)'; ?>;color:<?php echo $isEgreso ? 'var(--warn)' : 'var(--ok)'; ?>;font-weight:700;font-size:11px;">
+            <span class="pill tx-ledger-kind" style="background:<?php echo $isEgreso ? 'var(--panel-3)' : 'var(--panel-2)'; ?>;color:<?php echo $isEgreso ? 'var(--warn)' : 'var(--ok)'; ?>;">
               <?php echo $isEgreso ? 'Egreso' : 'Ingreso'; ?>
             </span>
           </td>
-          <td><?php echo e($inc['descripcion']); ?></td>
-          <td style="text-align:right;font-weight:700;color:<?php echo $isEgreso ? 'var(--warn)' : 'var(--ok)'; ?>;">
+          <td class="tx-ledger-description"><?php echo e($inc['descripcion']); ?></td>
+          <td class="tx-money" style="text-align:right;color:<?php echo $isEgreso ? 'var(--warn)' : 'var(--ok)'; ?>;">
             $<?php echo number_format((float)$inc['monto'], 2); ?>
           </td>
-          <td style="font-size:12px;" class="muted">
+          <td class="muted tx-ledger-date">
             <?php 
               $ts = strtotime($inc['created_at']);
               echo $ts ? date('d/m/Y H:i', $ts) : $inc['created_at'];
@@ -717,7 +741,7 @@ include __DIR__.'/inc/layout_top.php';
       $totalEgresos = $manualBreakdown['egresos']['total'];
       $neto = $manualBreakdown['neto'];
     ?>
-    <div style="margin-top:12px;padding:10px;background:var(--panel-2);border-radius:4px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;align-items:center;">
+    <div class="tx-ledger-summary">
       <div><strong>Ingresos manuales:</strong> $<?php echo number_format($totalIngresos, 2); ?></div>
       <div><strong>Egresos manuales:</strong> $<?php echo number_format(abs($totalEgresos), 2); ?></div>
       <div><strong>Balance neto:</strong> <span style="color:<?php echo $neto >= 0 ? 'var(--ok)' : 'var(--warn)'; ?>;">$<?php echo number_format($neto, 2); ?></span></div>
@@ -730,7 +754,7 @@ include __DIR__.'/inc/layout_top.php';
 </div>
 <!-- bloque ingresos movido arriba -->
 
-<div class="card">
+<div class="card tx-event-entries">
   <h3>Entradas del evento</h3>
   <form method="get" style="margin-top:10px;">
     <input type="hidden" name="id" value="<?php echo $eventoId; ?>">

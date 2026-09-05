@@ -63,6 +63,7 @@ if ($isLogged) {
   }
 }
 $bodyClass = trim($themeClass . ($isLogged ? '' : ' no-nav'));
+$bodyClass = !empty($hideNav) ? ($bodyClass . ' no-nav') : $bodyClass;
 $role = isset($_SESSION['rol']) ? $_SESSION['rol'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
 $isClient = ($role === 'cliente');
 $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
@@ -81,6 +82,27 @@ $page = basename(isset($_SERVER['SCRIPT_NAME']) ? (string)$_SERVER['SCRIPT_NAME'
 if ($page === 'login.php') {
   $bodyClass .= ' page-login';
 }
+if ($page === 'login_admin.php') {
+  $bodyClass .= ' page-login page-login-admin';
+}
+if ($page === 'panel_admin.php') {
+  $bodyClass .= ' page-panel-admin';
+}
+if ($page === 'panel_evento.php') {
+  $bodyClass .= ' page-panel-evento';
+}
+if ($page === 'configurar_entradas_evento.php') {
+  $bodyClass .= ' page-ticket-config';
+}
+if ($page === 'crear_evento.php') {
+  $bodyClass .= ' page-create-event';
+}
+if ($page === 'enviar_tickex.php') {
+  $bodyClass .= ' page-send-ticket';
+}
+if ($page === 'puerta.php' || $page === 'puerta_lista.php') {
+  $bodyClass .= ' page-door';
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -90,9 +112,10 @@ if ($page === 'login.php') {
     <title><?php echo htmlspecialchars($title ?? 'Tickex', ENT_QUOTES, 'UTF-8'); ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/str.css?v=20260219_2">
     <link rel="stylesheet" href="assets/str-theme.css?v=20260828_1">
+    <link rel="stylesheet" href="assets/tickex-v2.css?v=20260905_21">
 </head>
 <body class="<?php echo htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8'); ?>">
 <div class="topbar">
@@ -115,23 +138,38 @@ if ($page === 'login.php') {
                       <a href="logout_usuario.php">Salir</a>
                     <?php endif; ?>
                   <?php else: ?>
-                    <a href="panel_admin.php">Panel</a>
-                    <a href="crear_evento.php">Crear evento</a>
+                    <span class="tx-page-context"><?php echo e($title); ?></span>
+                    <a class="tx-top-create" href="crear_evento.php">+ Crear evento</a>
                   <?php endif; ?>
                 </div>
-                <?php include __DIR__ . '/nav.php'; ?>
             <?php endif; ?>
         <?php endif; ?>
         <div class="userchip">
             <?php if (!empty($_SESSION['usuario'])): ?>
-              <div style="position:relative;display:inline-block;margin-right:10px;vertical-align:middle;">
-                <button id="btnNotif" type="button" aria-label="Notificaciones" title="Notificaciones" style="background:none;border:none;cursor:pointer;color:inherit;font-size:18px;line-height:1;position:relative;padding:2px 4px;">
-                  🔔
+              <?php
+              $userMail = (string)$_SESSION['usuario'];
+              if (strpos($userMail, '@') !== false) {
+                list($userName, $userDomain) = explode('@', $userMail, 2);
+                $n = ($isApp ? 2 : 3);
+                $shortUser = mb_substr($userName, 0, $n) . '...@' . $userDomain;
+              } else {
+                $userName = $userMail;
+                $n = ($isApp ? 2 : 3);
+                $shortUser = mb_substr($userMail, 0, $n) . '...';
+              }
+              $avatarLetter = mb_strtoupper(mb_substr(trim($userName), 0, 1));
+              if ($avatarLetter === '') $avatarLetter = 'T';
+              ?>
+              <div class="tx-notification-wrap">
+                <button class="tx-notification-btn" id="btnNotif" type="button" aria-label="Notificaciones" title="Notificaciones">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
                   <?php if ($unreadCount > 0): ?>
-                    <span style="position:absolute;top:-6px;right:-8px;min-width:16px;height:16px;padding:0 4px;border-radius:10px;background:#d22;color:#fff;font-size:10px;line-height:16px;text-align:center;"><?php echo (int)$unreadCount; ?></span>
+                    <span class="tx-notification-badge"><?php echo (int)$unreadCount; ?></span>
                   <?php endif; ?>
                 </button>
-                <div id="notifMenu" style="display:none;position:absolute;right:0;top:30px;width:340px;max-width:90vw;max-height:60vh;overflow:auto;background:#0f1720;border:1px solid rgba(255,255,255,.15);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:1100;">
+                <div class="tx-notification-menu" id="notifMenu">
                   <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.12);font-weight:600;">Notificaciones</div>
                   <?php if (!empty($notifs)): ?>
                     <?php foreach ($notifs as $n): ?>
@@ -148,27 +186,27 @@ if ($page === 'login.php') {
               <?php if ($isApp && $isClient): ?>
                 <?php // En modo app cliente, el logout se muestra arriba en quick-links ?>
               <?php else: ?>
-              <?php
-              $userMail = $_SESSION['usuario'];
-              // Mostrar solo primeras letras del email (ej: jua...@dominio.com)
-              if (strpos($userMail, '@') !== false) {
-                list($userName, $userDomain) = explode('@', $userMail, 2);
-                $n = ($isApp ? 2 : 3);
-                $shortUser = mb_substr($userName, 0, $n) . '...@' . $userDomain;
-              } else {
-                $n = ($isApp ? 2 : 3);
-                $shortUser = mb_substr($userMail, 0, $n) . '...';
-              }
-              ?>
-              <?php if (!$isApp): ?>
-                <span title="<?php echo e($userMail); ?>"><?php echo e($shortUser); ?></span>
-              <?php endif; ?>
-              <a class="link" href="logout_usuario.php">Salir</a>
+                <div class="tx-account-info">
+                  <span class="tx-account-avatar"><?php echo e($avatarLetter); ?></span>
+                  <?php if (!$isApp): ?>
+                    <span class="tx-account-copy">
+                      <small>Cuenta</small>
+                      <strong title="<?php echo e($userMail); ?>"><?php echo e($shortUser); ?></strong>
+                    </span>
+                  <?php endif; ?>
+                </div>
+                <a class="tx-logout" href="logout_usuario.php" title="Cerrar sesión">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 17l5-5-5-5M15 12H3M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>Salir</span>
+                </a>
               <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
 </div>
+<?php if (empty($hideNav) && $isLogged && !$isClient): ?>
+  <?php include __DIR__ . '/nav.php'; ?>
+<?php endif; ?>
 <?php if (empty($hideNav) && $isLogged && !$isClient): ?>
 <div id="navOverlay" class="nav-overlay"></div>
 <?php endif; ?>

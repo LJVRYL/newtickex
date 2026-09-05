@@ -136,10 +136,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $title = 'Enviar Tickex';
 include __DIR__.'/inc/layout_top.php';
 ?>
-<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+<div class="card tx-send-hero">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver</a>
-  <h2 style="margin:0;">Enviar Tickex</h2>
-  <span class="muted">Registrá una transferencia o emití cortesías respetando paquetes, QR y stock.</span>
+  <div>
+    <span class="tx-kicker"><i></i>Emisión manual</span>
+    <h2>Enviar Tickex</h2>
+    <span class="muted">Registrá una transferencia o emití cortesías respetando paquetes, QR y stock.</span>
+  </div>
 </div>
 
 <?php if (!empty($errors)): ?>
@@ -156,8 +159,8 @@ include __DIR__.'/inc/layout_top.php';
   <div class="flash ok"><?php echo $success; ?></div>
 <?php endif; ?>
 
-<div class="card" style="max-width:900px;">
-  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+<div class="card tx-send-form-card">
+  <form class="tx-send-form" method="post">
     <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <div>
       <label>Evento</label>
@@ -218,7 +221,7 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </div>
     <?php endif; ?>
-    <div style="grid-column:1 / -1;">
+    <div class="tx-send-submit">
       <button class="btn" type="submit">Emitir y enviar todos los QR</button>
     </div>
   </form>
@@ -248,9 +251,9 @@ include __DIR__.'/inc/layout_top.php';
 </script>
 
 
-<div class="card" style="margin-top:32px;max-width:900px;overflow:auto;">
+<div class="card tx-send-history">
   <h3>Últimos Tickex enviados</h3>
-  <form method="get" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <form class="tx-send-search" method="get">
     <input type="text" name="buscar" placeholder="Buscar por email, nombre, código..." value="<?php echo isset($_GET['buscar']) ? e($_GET['buscar']) : ''; ?>" style="flex:1 1 200px;">
     <button class="btn" type="submit">Buscar</button>
     <?php if (isset($_GET['buscar']) && $_GET['buscar'] !== ''): ?>
@@ -282,7 +285,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php if (empty($ultimos)): ?>
     <div class="muted">No hay tickex enviados recientemente.</div>
   <?php else: ?>
-    <table class="table" style="font-size:14px;min-width:860px;table-layout:fixed;width:100%;">
+    <table class="table tx-send-table">
       <thead>
         <tr>
           <th>ID</th>
@@ -298,14 +301,14 @@ include __DIR__.'/inc/layout_top.php';
       <tbody>
         <?php foreach ($ultimos as $u): ?>
           <tr>
-            <td><?php echo (int)$u['id']; ?></td>
-            <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['nombre']); ?></td>
-            <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
-            <td><?php echo e($u['codigo']); ?></td>
-            <td><?php echo e($u['tipo']); ?></td>
-            <td><?php echo (int)$u['evento_id']; ?></td>
-            <td><?php echo e($u['fecha_registro']); ?></td>
-            <td style="white-space:nowrap;">
+            <td data-label="ID"><?php echo (int)$u['id']; ?></td>
+            <td data-label="Nombre" style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['nombre']); ?></td>
+            <td data-label="Email" style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
+            <td data-label="Código"><?php echo e($u['codigo']); ?></td>
+            <td data-label="Tipo"><?php echo e($u['tipo']); ?></td>
+            <td data-label="Evento"><?php echo (int)$u['evento_id']; ?></td>
+            <td data-label="Fecha"><?php echo e($u['fecha_registro']); ?></td>
+            <td data-label="Acciones" style="white-space:nowrap;">
               <a class="btn secondary" style="padding:6px 10px;" href="ticket.php?c=<?php echo urlencode((string)$u['codigo']); ?>" target="_blank" rel="noopener" title="Ver ticket" aria-label="Ver ticket">👁</a>
               <a class="btn danger" style="padding:6px 10px;" href="enviar_tickex.php?del_tickex=<?php echo (int)$u['id']; ?>" onclick="return confirm('¿Eliminar este tickex?');" title="Eliminar" aria-label="Eliminar">🗑</a>
             </td>

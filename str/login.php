@@ -412,20 +412,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---------------------------------------------------------------------
 include __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="card" style="max-width:480px;margin:0 auto 16px auto;text-align:center;">
-  <div style="margin-bottom:16px;">
+<main class="tx-login-shell">
+<section class="tx-login-story">
+  <div class="tx-login-brand">TICKEX <span>EVENT PLATFORM</span></div>
+  <div class="tx-login-story-copy">
+    <div class="tx-kicker"><i></i> Todo tu evento, en un mismo lugar</div>
+    <h1>Entradas, accesos y resultados en tiempo real.</h1>
+    <p>Una plataforma simple para comprar entradas, administrar eventos y llegar más rápido a lo que importa.</p>
+  </div>
+  <div class="tx-login-proof">
+    <div><strong>Seguro</strong><span>Acceso protegido</span></div>
+    <div><strong>Ágil</strong><span>Todo desde el celular</span></div>
+    <div><strong>Claro</strong><span>Información en vivo</span></div>
+  </div>
+</section>
+
+<section class="tx-login-form-column">
+<div class="card tx-login-heading">
+  <div class="tx-login-logo-wrap">
     <img src="tickex-logo_sobre_oscuro.svg"
          alt="Tickex"
-         style="height:230px;display:block;margin:0 auto 8px auto;">
+         class="tx-login-logo">
   </div>
   <h2>Iniciar sesión</h2>
-  <p style="color:var(--muted);margin-top:8px;">
+  <p>
     Ingresá con tu cuenta de Tickex para ver tus Tickex, historial de compras y facturas.
   </p>
 </div>
 
 <?php if (!empty($errores)): ?>
-  <div class="card" style="max-width:480px;margin:0 auto 16px auto;">
+  <div class="card tx-login-errors">
     <div class="flash err">
       <ul style="margin:0 0 0 18px;padding:0;">
         <?php foreach ($errores as $e): ?>
@@ -436,7 +452,7 @@ include __DIR__ . '/inc/layout_top.php';
   </div>
 <?php endif; ?>
 
-<div class="card" style="max-width:480px;margin:0 auto 16px auto;">
+<div class="card tx-login-card">
   <form method="post">
     <?php if ($nextSafe !== ''): ?>
       <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextSafe, ENT_QUOTES, 'UTF-8'); ?>">
@@ -470,6 +486,8 @@ include __DIR__ . '/inc/layout_top.php';
     <a href="forgot_password.php">Recuperala acá</a>.
   </div>
 </div>
+</section>
+</main>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
 
