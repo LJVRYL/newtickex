@@ -25,6 +25,17 @@ try {
         throw new RuntimeException('Newsletter no publicado.');
     }
 
+    $shareTitle = 'Canjeá tu QR Free | SAVE THE RAVE';
+    $shareDescription = 'Reservá tu entrada gratuita para SAVE THE RAVE. Completá tus datos y recibí tu QR por email.';
+    $shareUrl = event_newsletters_absolute_url('newsletter_free.php?evento=' . rawurlencode((string)$event['slug']));
+    $shareImage = '';
+    if (!empty($event['flyer_filename'])) {
+        $shareImage = event_newsletters_absolute_url((string)$event['flyer_filename']);
+    } elseif (!empty($event['flyer'])) {
+        $shareImage = event_newsletters_absolute_url((string)$event['flyer']);
+    }
+
+    $newsletter['subject'] = $shareTitle;
     $newsletter['cta_label'] = 'Canje QR Free';
     $newsletter['checkout_url'] = event_newsletters_absolute_url(
         'acceso.php?slug=' . rawurlencode((string)$event['slug'])
@@ -32,6 +43,13 @@ try {
 
     $artists = event_newsletters_artists($pdo, (int)$newsletter['id']);
     $rendered = event_newsletters_render($event, $newsletter, $artists);
+    $socialMeta = '<meta property="og:type" content="website">'
+        . '<meta property="og:title" content="' . event_newsletters_escape($shareTitle) . '">'
+        . '<meta property="og:description" content="' . event_newsletters_escape($shareDescription) . '">'
+        . '<meta property="og:url" content="' . event_newsletters_escape($shareUrl) . '">'
+        . ($shareImage !== '' ? '<meta property="og:image" content="' . event_newsletters_escape($shareImage) . '">' : '')
+        . '<meta name="twitter:card" content="summary_large_image">';
+    $rendered['body_html'] = str_replace('</head>', $socialMeta . '</head>', $rendered['body_html']);
 
     header('Content-Type: text/html; charset=UTF-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');

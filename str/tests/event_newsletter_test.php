@@ -73,10 +73,12 @@ newsletter_test_assert(event_newsletters_latest_published($pdo, 8)['event']['id'
 newsletter_test_assert(substr(event_newsletters_public_url(7), -22) === 'newsletter.php?admin=7', 'public newsletter URL remains stable per administrator');
 
 $freeVariant = $newsletter;
+$freeVariant['subject'] = 'Canjeá tu QR Free | SAVE THE RAVE';
 $freeVariant['cta_label'] = 'Canje QR Free';
 $freeVariant['checkout_url'] = 'https://str.tickex.com.ar/acceso.php?slug=evento-uno';
 $freeRendered = event_newsletters_render($event, $freeVariant, $artists);
 newsletter_test_assert(strpos($freeRendered['body_html'], 'Canje QR Free') !== false, 'free newsletter uses an independent CTA label');
+newsletter_test_assert(strpos($freeRendered['body_html'], '<title>Canjeá tu QR Free | SAVE THE RAVE</title>') !== false, 'free newsletter has its own share title');
 newsletter_test_assert(strpos($freeRendered['body_html'], 'acceso.php?slug=evento-uno') !== false, 'free newsletter points to the free checkout');
 newsletter_test_assert(strpos($rendered['body_html'], 'checkout_totalcoin.php?event=1') !== false, 'paid newsletter remains unchanged');
 echo 'ALL EVENT NEWSLETTER TESTS PASSED' . PHP_EOL;
