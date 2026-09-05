@@ -71,4 +71,12 @@ $latest = event_newsletters_latest_published($pdo, 7);
 newsletter_test_assert($latest && (int)$latest['event']['id'] === 2, 'another administrator publication never replaces this administrator newsletter');
 newsletter_test_assert(event_newsletters_latest_published($pdo, 8)['event']['id'] == 3, 'each administrator resolves only their own latest newsletter');
 newsletter_test_assert(substr(event_newsletters_public_url(7), -22) === 'newsletter.php?admin=7', 'public newsletter URL remains stable per administrator');
+
+$freeVariant = $newsletter;
+$freeVariant['cta_label'] = 'Sacar entrada gratis';
+$freeVariant['checkout_url'] = 'https://str.tickex.com.ar/acceso.php?slug=evento-uno';
+$freeRendered = event_newsletters_render($event, $freeVariant, $artists);
+newsletter_test_assert(strpos($freeRendered['body_html'], 'Sacar entrada gratis') !== false, 'free newsletter uses an independent CTA label');
+newsletter_test_assert(strpos($freeRendered['body_html'], 'acceso.php?slug=evento-uno') !== false, 'free newsletter points to the free checkout');
+newsletter_test_assert(strpos($rendered['body_html'], 'checkout_totalcoin.php?event=1') !== false, 'paid newsletter remains unchanged');
 echo 'ALL EVENT NEWSLETTER TESTS PASSED' . PHP_EOL;
