@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_capacity.php';
 $title = "Crear evento – TICKEX";
 
 // Sólo super_admin o admin_evento pueden crear eventos
@@ -21,6 +22,7 @@ $adminId = isset($_SESSION['user_id'])
 
 try {
     $pdo = db();
+    tickex_event_capacity_ensure_schema($pdo);
 } catch (Exception $e) {
     http_response_code(500);
     echo "Error DB: " . e($e->getMessage());
@@ -43,6 +45,7 @@ $slug        = '';
 $fechaDesde  = '';
 $fechaHasta  = '';
 $descripcion = '';
+$capacidadTotal = '';
 
 // flash messages
 $flashes = function_exists('flash_get_all') ? flash_get_all() : array();
@@ -54,12 +57,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fechaDesde  = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
     $fechaHasta  = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
     $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
+    $capacidadTotal = isset($_POST['capacidad_total']) ? (int)$_POST['capacidad_total'] : 0;
 
     $errorMsg = '';
 
     // Validaciones básicas
     if ($nombre === '' || $slug === '') {
         $errorMsg = 'Nombre y slug son obligatorios.';
+    } elseif ($capacidadTotal < 1) {
+        $errorMsg = 'Definí un cupo total mayor a cero.';
     } elseif (!preg_match('/^[a-z0-9\-]+$/', $slug)) {
         $errorMsg = 'El slug solo puede tener minúsculas, números y guiones (a-z, 0-9, -).';
     } else {
@@ -112,9 +118,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($hasCreadoPor) {
                 $stmtEv = $pdo->prepare("
                     INSERT INTO eventos
-                        (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, creado_por_admin_id)
+                        (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, creado_por_admin_id, capacidad_total)
                     VALUES
-                        (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :creador)
+                        (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :creador, :capacidad)
                 ");
                 $stmtEv->execute(array(
                     ':nombre'      => $nombre,
@@ -124,13 +130,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':fdesde'      => ($fechaDesde !== '' ? $fechaDesde : null),
                     ':fhasta'      => ($fechaHasta !== '' ? $fechaHasta : null),
                     ':creador'     => $adminId,
+                    ':capacidad'   => $capacidadTotal,
                 ));
             } else {
                 $stmtEv = $pdo->prepare("
                     INSERT INTO eventos
-                        (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en)
+                        (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, capacidad_total)
                     VALUES
-                        (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'))
+                        (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :capacidad)
                 ");
                 $stmtEv->execute(array(
                     ':nombre'      => $nombre,
@@ -139,6 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':flyer'       => $flyerFilename,
                     ':fdesde'      => ($fechaDesde !== '' ? $fechaDesde : null),
                     ':fhasta'      => ($fechaHasta !== '' ? $fechaHasta : null),
+                    ':capacidad'   => $capacidadTotal,
                 ));
             }
 
@@ -218,6 +226,10 @@ include __DIR__.'/inc/layout_top.php';
     <label for="descripcion">Descripción breve (opcional)</label>
     <textarea id="descripcion" name="descripcion"
               placeholder="Texto descriptivo del evento..."><?php echo e($descripcion); ?></textarea>
+
+    <label for="capacidad_total">Cupo total del evento</label>
+    <input type="number" id="capacidad_total" name="capacidad_total" min="1" required value="<?php echo e($capacidadTotal); ?>" placeholder="Ej: 300">
+    <small class="muted">Es el máximo de QR que podrán emitirse entre todas las categorías y ventas manuales.</small>
 
     <label>Fechas del evento (desde / hasta)</label>
     <div class="tx-create-date-grid">

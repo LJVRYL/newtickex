@@ -12,6 +12,8 @@ function door_test_ok($condition, $message)
 
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE eventos (id INTEGER PRIMARY KEY,nombre TEXT)');
+$pdo->exec("INSERT INTO eventos VALUES (15,'Puerta'),(16,'Ajena')");
 $pdo->exec('CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY,evento_id INTEGER,nombre TEXT,precio REAL,cantidad_disponible INTEGER)');
 $pdo->exec("CREATE TABLE entradas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +31,7 @@ $pdo->exec("CREATE TABLE entradas (
     oculto INTEGER NOT NULL DEFAULT 0
 )");
 $pdo->exec("INSERT INTO tipos_entrada (id,evento_id,nombre,precio,cantidad_disponible) VALUES (39,15,'General Puerta',15000,2),(40,16,'Ajena',10000,2)");
+tickex_event_capacity_set($pdo, 15, 1);
 
 tickex_door_list_ensure_schema($pdo);
 door_test_ok((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'event_door_guest_%'")->fetchColumn() === 2, 'door list schema is created');
@@ -56,6 +59,13 @@ door_test_ok((int)$pdo->query('SELECT COUNT(*) FROM entradas')->fetchColumn() ==
 door_test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=39')->fetchColumn() === 1, 'repeated confirmation cannot consume stock twice');
 
 $brunoId = (int)$pdo->query("SELECT id FROM event_door_guest_reservations WHERE normalized_name LIKE 'bruno%'")->fetchColumn();
+$capacityBlocked = false;
+try {
+    tickex_door_confirm_paid_checkin($pdo, $brunoId, 15, 22);
+} catch (RuntimeException $e) {
+    $capacityBlocked = strpos($e->getMessage(), 'Cupo global insuficiente') !== false;
+}
+door_test_ok($capacityBlocked, 'door cannot issue beyond the event global capacity');
 door_test_ok(tickex_door_cancel_reservation($pdo, $brunoId, 15), 'administrator can remove an unpaid reservation');
 door_test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE nombre LIKE 'Bruno%'")->fetchColumn() === 0, 'removed unpaid reservation never becomes revenue');
 

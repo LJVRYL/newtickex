@@ -6,6 +6,7 @@ require_once __DIR__.'/inc/produccion.php';
 require_once __DIR__.'/inc/venues.php';
 require_once __DIR__.'/inc/senforms.php';
 require_once __DIR__.'/inc/event_trash.php';
+require_once __DIR__.'/inc/event_capacity.php';
 
 require_login();
 $csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
@@ -100,6 +101,13 @@ function stats_evento($pdo, $eventoId, $colCheck, $hasTipos, $hasCantDisp, $hasC
       }
     }
   }
+  try {
+    $capacity = tickex_event_capacity_status($pdo, $eventoId);
+    if ($capacity['limit'] !== null) {
+      $out['stock_total'] = (int)$capacity['limit'];
+      $out['disponibles'] = (int)$capacity['available'];
+    }
+  } catch (Exception $e) {}
   return $out;
 }
 

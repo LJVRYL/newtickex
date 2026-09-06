@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/event_capacity.php';
 // Reusable helper for processing tc_orders after payment confirmation.
 
 require_once __DIR__ . '/order_events.php';
@@ -245,6 +246,9 @@ if (!function_exists('process_tc_order_row')) {
         $pdo->beginTransaction();
         $insertedEntries = array();
         try {
+            // Toda emisión, sin importar su categoría u origen, consume el
+            // cupo físico global del evento.
+            tickex_event_capacity_assert_available($pdo, $eventoId, $expectedQty);
             $buyerName = trim((isset($order['buyer_first']) ? $order['buyer_first'] : '') . ' ' . (isset($order['buyer_last']) ? $order['buyer_last'] : ''));
             $buyerEmail = isset($order['buyer_email']) ? $order['buyer_email'] : '';
             $fechaReg = date('Y-m-d H:i:s');

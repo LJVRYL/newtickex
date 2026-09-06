@@ -4,6 +4,7 @@ tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
+require_once __DIR__ . '/inc/event_capacity.php';
 
 if (!function_exists('e')) {
   function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -159,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
           $sql = 'INSERT INTO entradas (' . implode(',', $insertCols) . ') VALUES (' . implode(',', $insertVals) . ')';
           $pdo->beginTransaction();
+          tickex_event_capacity_assert_available($pdo, $eventoPost, 1);
           $stIns = $pdo->prepare($sql);
           $stIns->execute($params);
 

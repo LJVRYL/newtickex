@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_access_uuid')) {
     function tickex_access_uuid()
@@ -386,6 +387,8 @@ if (!function_exists('tickex_access_issue_entry')) {
 
         try {
             $pdo->beginTransaction();
+
+            tickex_event_capacity_assert_available($pdo, (int)$linkRow['evento_id'], 1);
 
             $usedTx = tickex_access_used_count($pdo, (int)$linkRow['id']);
             if ($maxUses > 0 && $usedTx >= $maxUses) {

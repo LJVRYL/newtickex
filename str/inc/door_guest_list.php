@@ -1,6 +1,7 @@
 <?php
 
 /* Reservas nominadas de puerta: no son ventas hasta cobrar e ingresar. */
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_door_list_ensure_schema')) {
     function tickex_door_list_ensure_schema($pdo)
@@ -173,6 +174,8 @@ if (!function_exists('tickex_door_confirm_paid_checkin')) {
                 return array('ok'=>true, 'already_processed'=>true, 'entrada_id'=>(int)$reservation['entrada_id']);
             }
             if ($reservation['status'] !== 'reserved') throw new RuntimeException('La reserva ya no está disponible.');
+
+            tickex_event_capacity_assert_available($pdo, $eventId, 1);
 
             $stType = $pdo->prepare('SELECT id,cantidad_disponible FROM tipos_entrada WHERE id=:type AND evento_id=:event LIMIT 1');
             $stType->execute(array(':type'=>(int)$reservation['ticket_type_id'], ':event'=>(int)$eventId));

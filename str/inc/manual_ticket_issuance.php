@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/order_processing.php';
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_manual_ensure_order_columns')) {
     function tickex_manual_ensure_order_columns($pdo)
@@ -44,6 +45,7 @@ if (!function_exists('tickex_manual_issue_package')) {
     {
         $eventId = isset($data['evento_id']) ? (int)$data['evento_id'] : 0;
         $ticketTypeId = isset($data['tipo_id']) ? (int)$data['tipo_id'] : 0;
+        $isUncategorized = !empty($data['sin_tipo']);
         $packageQuantity = max(1, min(20, isset($data['cantidad']) ? (int)$data['cantidad'] : 1));
         $mode = isset($data['modo']) ? (string)$data['modo'] : 'courtesy';
         $customTotalRaw = array_key_exists('monto_total', $data) ? trim((string)$data['monto_total']) : '';
@@ -54,7 +56,7 @@ if (!function_exists('tickex_manual_issue_package')) {
         $restrictToAdmin = !empty($data['restrict_to_admin']);
         $hidden = !empty($data['oculto']) ? 1 : 0;
 
-        if ($eventId <= 0 || $ticketTypeId <= 0) throw new InvalidArgumentException('Evento o tipo de entrada inválido.');
+        if ($eventId <= 0 || (!$isUncategorized && $ticketTypeId <= 0)) throw new InvalidArgumentException('Evento o tipo de entrada inválido.');
         if (!in_array($mode, array('courtesy', 'manual_transfer'), true)) throw new InvalidArgumentException('Modalidad de emisión inválida.');
         if ($hasCustomTotal && $mode !== 'manual_transfer') throw new InvalidArgumentException('El monto libre solo puede usarse en una venta manual.');
         if ($hasCustomTotal && (!is_numeric($customTotalRaw) || (float)$customTotalRaw <= 0 || (float)$customTotalRaw > 999999999.99)) {
@@ -72,17 +74,23 @@ if (!function_exists('tickex_manual_issue_package')) {
         $event = $stEvent->fetch(PDO::FETCH_ASSOC);
         if (!$event) throw new RuntimeException('No tenés acceso al evento seleccionado.');
 
-        $stType = $pdo->prepare('SELECT id, evento_id, nombre, tipo, precio, cantidad_disponible, qr_quantity FROM tipos_entrada WHERE id = :id AND evento_id = :evento LIMIT 1');
-        $stType->execute(array(':id' => $ticketTypeId, ':evento' => $eventId));
-        $ticketType = $stType->fetch(PDO::FETCH_ASSOC);
-        if (!$ticketType) throw new RuntimeException('El tipo de entrada no pertenece al evento seleccionado.');
+        if ($isUncategorized) {
+            if ($mode !== 'manual_transfer' || !$hasCustomTotal) throw new InvalidArgumentException('La entrada manual requiere un monto total cobrado.');
+            $ticketType = array('id'=>0, 'evento_id'=>$eventId, 'nombre'=>'Entrada manual', 'tipo'=>'manual', 'precio'=>0, 'cantidad_disponible'=>null, 'qr_quantity'=>1);
+        } else {
+            $stType = $pdo->prepare('SELECT id, evento_id, nombre, tipo, precio, cantidad_disponible, qr_quantity FROM tipos_entrada WHERE id = :id AND evento_id = :evento LIMIT 1');
+            $stType->execute(array(':id' => $ticketTypeId, ':evento' => $eventId));
+            $ticketType = $stType->fetch(PDO::FETCH_ASSOC);
+            if (!$ticketType) throw new RuntimeException('El tipo de entrada no pertenece al evento seleccionado.');
+        }
 
         $qrQuantity = tickex_ticket_qr_quantity(isset($ticketType['qr_quantity']) ? $ticketType['qr_quantity'] : 1);
         $issuedQuantity = tickex_ticket_issued_quantity($packageQuantity, $qrQuantity);
-        $available = isset($ticketType['cantidad_disponible']) ? (int)$ticketType['cantidad_disponible'] : 0;
-        if ($available < $issuedQuantity) {
+        $available = isset($ticketType['cantidad_disponible']) && $ticketType['cantidad_disponible'] !== null ? (int)$ticketType['cantidad_disponible'] : null;
+        if (!$isUncategorized && $available < $issuedQuantity) {
             throw new RuntimeException('Stock insuficiente: se necesitan ' . $issuedQuantity . ' lugares y quedan ' . $available . '.');
         }
+        tickex_event_capacity_assert_available($pdo, $eventId, $issuedQuantity);
 
         $configuredPackagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
         $total = $hasCustomTotal

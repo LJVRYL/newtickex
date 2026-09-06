@@ -34,6 +34,12 @@ $pdo->exec("INSERT OR REPLACE INTO tipos_entrada (id, evento_id, nombre, tipo, p
 
 require_once __DIR__ . '/../inc/order_processing.php';
 
+// La prueba corre sobre una copia que puede contener entradas históricas del
+// evento #1. Reservar cupo dentro de esa copia evita que esos datos ajenos al
+// fixture alteren el resultado del flujo que se está probando.
+$fixtureIssued = tickex_event_capacity_issued($pdo, 1);
+tickex_event_capacity_set($pdo, 1, $fixtureIssued + 100);
+
 $selected = json_encode(array(array('id' => 7, 'name' => 'General', 'qty' => 2, 'price' => 100, 'qr_quantity' => 1)));
 $pdo->prepare("INSERT INTO tc_orders (request_id, state, evento_id, ref, amount, buyer_first, buyer_last, buyer_email, selected_tickets_json, payment_status) VALUES ('test-rid', 'created', 1, 'test-ref', 200, 'Test', 'Buyer', 'test@example.invalid', :tickets, 'confirmed')")->execute(array(':tickets' => $selected));
 

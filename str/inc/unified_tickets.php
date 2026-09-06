@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/event_capacity.php';
 /**
  * inc/unified_tickets.php
  * Funciones para unificar entradas de STR y Tickex/SenForms en panel_evento.php
@@ -932,9 +933,19 @@ function get_unified_stats($pdo, $evento_id) {
     
     $stats['pendiente'] = $stats['total'] - $stats['checkins'];
     
-    // cantidad_total ya representa la capacidad inicial. No se le vuelven a
-    // sumar las entradas emitidas porque eso infla artificialmente el stock.
-    if ($stats['stock_total'] !== null) $stats['stock_total'] = $stockTotalInicial;
+    // El cupo global manda sobre las categorías. En eventos todavía no
+    // migrados, el helper conserva la suma histórica de cantidad_total.
+    try {
+        $capacity = tickex_event_capacity_status($pdo, $evento_id);
+        if ($capacity['limit'] !== null) {
+            $stats['stock_total'] = (int)$capacity['limit'];
+            $stats['disponibles'] = (int)$capacity['available'];
+        } elseif ($stats['stock_total'] !== null) {
+            $stats['stock_total'] = $stockTotalInicial;
+        }
+    } catch (Exception $e) {
+        if ($stats['stock_total'] !== null) $stats['stock_total'] = $stockTotalInicial;
+    }
     
     return $stats;
 }

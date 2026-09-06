@@ -11,6 +11,7 @@ require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
 require_once __DIR__ . '/inc/ticket_packages.php';
 require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
+require_once __DIR__ . '/inc/event_capacity.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -570,6 +571,25 @@ if (empty($entryOptions)) {
     'qr_quantity' => 1,
   );
 }
+
+// Ninguna categoría puede ofrecer más lugares que el cupo físico global.
+try {
+  $globalCapacity = tickex_event_capacity_status($pdoLocal, $eventId);
+  if ($globalCapacity['available'] !== null) {
+    foreach ($entryOptions as &$capacityOption) {
+      $qrPerUnit = tickex_ticket_qr_quantity(isset($capacityOption['qr_quantity']) ? $capacityOption['qr_quantity'] : 1);
+      $globalPackages = tickex_ticket_package_capacity((int)$globalCapacity['available'], $qrPerUnit);
+      $capacityOption['avail'] = $capacityOption['avail'] === null
+        ? $globalPackages
+        : min((int)$capacityOption['avail'], $globalPackages);
+      $capacityOption['available_qr'] = min(
+        $capacityOption['available_qr'] === null ? (int)$globalCapacity['available'] : (int)$capacityOption['available_qr'],
+        (int)$globalCapacity['available']
+      );
+    }
+    unset($capacityOption);
+  }
+} catch (Exception $e) {}
 
 // Mapa rápido para validar selección en POST
 $optionMap = array();

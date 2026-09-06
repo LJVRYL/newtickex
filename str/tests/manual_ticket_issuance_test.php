@@ -77,6 +77,35 @@ manual_test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WH
 manual_test_ok(abs((float)$pdo->query('SELECT amount FROM tc_orders WHERE id=' . (int)$customSale['order_id'])->fetchColumn() - 20000.0) < 0.001, 'manual order stores the custom total');
 manual_test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=' . $singleTypeId)->fetchColumn() === 8, 'custom total sale decrements exactly two stock units');
 
+$stockBeforeUncategorized = (int)$pdo->query('SELECT SUM(cantidad_disponible) FROM tipos_entrada WHERE evento_id=' . $eventId)->fetchColumn();
+$uncategorized = tickex_manual_issue_package($pdo, array(
+    'evento_id' => $eventId,
+    'tipo_id' => 0,
+    'sin_tipo' => true,
+    'cantidad' => 2,
+    'modo' => 'manual_transfer',
+    'monto_total' => '20000',
+    'email' => 'sin-categoria@example.invalid',
+    'nombre' => 'Venta Sin Categoria',
+    'admin_id' => 77,
+    'restrict_to_admin' => true,
+));
+manual_test_ok((int)$uncategorized['issued_quantity'] === 2, 'uncategorized manual sale issues one QR per requested entry');
+manual_test_ok(abs((float)$uncategorized['total'] - 20000.0) < 0.001, 'uncategorized manual sale records its exact free amount');
+manual_test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE tc_order_request_id='" . $uncategorized['request_id'] . "' AND tipo='Entrada manual'")->fetchColumn() === 2, 'uncategorized QR entries use the manual label');
+manual_test_ok((int)$pdo->query('SELECT SUM(cantidad_disponible) FROM tipos_entrada WHERE evento_id=' . $eventId)->fetchColumn() === $stockBeforeUncategorized, 'uncategorized sale does not alter category stock');
+$issuedNow = tickex_event_capacity_issued($pdo, $eventId);
+tickex_event_capacity_set($pdo, $eventId, $issuedNow + 1);
+$globalBlocked = false;
+try {
+    tickex_manual_issue_package($pdo, array(
+        'evento_id'=>$eventId, 'tipo_id'=>0, 'sin_tipo'=>true, 'cantidad'=>2,
+        'modo'=>'manual_transfer', 'monto_total'=>'20000', 'email'=>'blocked@example.invalid',
+        'admin_id'=>77, 'restrict_to_admin'=>true,
+    ));
+} catch (RuntimeException $e) { $globalBlocked = strpos($e->getMessage(), 'Cupo global insuficiente') !== false; }
+manual_test_ok($globalBlocked, 'uncategorized sale cannot exceed the event global capacity');
+
 $denied = false;
 try {
     tickex_manual_issue_package($pdo, array(

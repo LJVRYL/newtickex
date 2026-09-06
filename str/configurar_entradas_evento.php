@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_capacity.php';
 $title = "Configurar entradas del evento";
 require_login();
 $pdo = db();
+tickex_event_capacity_ensure_schema($pdo);
 $eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global'])
@@ -15,6 +17,16 @@ $okMsg = '';
 
 $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 tickex_require_event_access($pdo, $eventoId, $cu);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_event_capacity') {
+  try {
+    $capacity = isset($_POST['capacidad_total']) ? (int)$_POST['capacidad_total'] : 0;
+    tickex_event_capacity_set($pdo, $eventoId, $capacity);
+    $okMsg = 'Cupo global del evento actualizado.';
+  } catch (Exception $e) {
+    $error = $e->getMessage();
+  }
+}
 
 // Actualizar cantidad_disponible solamente después de autenticar y validar propiedad.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_disponible') {
@@ -262,6 +274,7 @@ if ($eventoId > 0) {
   $stEv->execute(array($eventoId));
   $evento = $stEv->fetch(PDO::FETCH_ASSOC);
 }
+$capacityStatus = tickex_event_capacity_status($pdo, $eventoId);
 
 // ===== Plantillas (Mis Entradas) del admin =====
 if ($hasTablaPlantillas) {
@@ -333,6 +346,23 @@ include __DIR__.'/inc/layout_top.php';
         <div class="muted">Sin flyer.</div>
       <?php endif; ?>
     </div>
+  </div>
+</div>
+
+<div class="card tx-ticket-capacity">
+  <h3>Cupo global del evento</h3>
+  <p class="muted">Es el límite físico total de personas. Todas las entradas —checkout, promociones, cortesías, puerta y manuales— consumen este mismo cupo.</p>
+  <form method="post" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+    <input type="hidden" name="action" value="update_event_capacity">
+    <div style="min-width:220px;">
+      <label for="capacidad_total">Capacidad total</label>
+      <input id="capacidad_total" type="number" name="capacidad_total" min="1" required value="<?php echo (int)$capacityStatus['limit']; ?>">
+    </div>
+    <button class="btn" type="submit">Guardar cupo global</button>
+  </form>
+  <div class="muted" style="margin-top:10px;">
+    Emitidos: <strong><?php echo (int)$capacityStatus['issued']; ?></strong> ·
+    Disponibles: <strong><?php echo $capacityStatus['available'] !== null ? (int)$capacityStatus['available'] : '-'; ?></strong>
   </div>
 </div>
 

@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_free_checkout_ensure_schema')) {
     function tickex_free_checkout_ensure_schema($pdo)
@@ -273,6 +274,8 @@ if (!function_exists('tickex_free_checkout_issue')) {
 
         try {
             $pdo->beginTransaction();
+
+            tickex_event_capacity_assert_available($pdo, $eventoId, 1);
 
             if (isset($typeRow['cantidad_disponible'])) {
                 $stUpd = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = cantidad_disponible - 1 WHERE id = :id AND evento_id = :eid AND cantidad_disponible > 0');

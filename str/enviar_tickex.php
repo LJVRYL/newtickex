@@ -55,7 +55,9 @@ $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
-    $tipoId   = isset($_POST['tipo_id']) ? (int)$_POST['tipo_id'] : 0;
+    $tipoSelection = isset($_POST['tipo_id']) ? trim((string)$_POST['tipo_id']) : '';
+    $isManualFree = $tipoSelection === 'manual_free';
+    $tipoId   = $isManualFree ? 0 : (int)$tipoSelection;
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
     $nombre   = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
     $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
@@ -66,12 +68,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
-    if ($tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
+    if (!$isManualFree && $tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
     if (!in_array($mode, array('courtesy','manual_transfer'), true)) $errors[] = 'Seleccioná una modalidad válida.';
     if ($quantity < 1 || $quantity > 20) $errors[] = 'La cantidad de promociones debe estar entre 1 y 20.';
     if ($customTotal !== '' && $mode !== 'manual_transfer') $errors[] = 'El monto libre solo corresponde a una venta manual.';
     if ($customTotal !== '' && (!is_numeric($customTotal) || (float)$customTotal <= 0 || (float)$customTotal > 999999999.99)) {
         $errors[] = 'Ingresá un monto total cobrado válido y mayor a cero.';
+    }
+    if ($isManualFree && ($mode !== 'manual_transfer' || $customTotal === '')) {
+        $errors[] = 'La entrada manual sin categoría requiere el monto total cobrado.';
     }
 
     // Resolver email por Tickex ID (apodo) si no viene email
@@ -116,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = tickex_manual_issue_package($pdo, array(
                 'evento_id' => $eventoId,
                 'tipo_id' => $tipoId,
+                'sin_tipo' => $isManualFree,
                 'cantidad' => $quantity,
                 'modo' => $mode,
                 'monto_total' => $customTotal,
@@ -181,6 +187,7 @@ include __DIR__.'/inc/layout_top.php';
       <label>Tipo de entrada</label>
       <select name="tipo_id" required>
         <option value="">Elegí tipo</option>
+        <option value="manual_free" data-manual-free="1">Entrada manual — monto libre (1 QR por unidad)</option>
         <?php foreach ($tiposPorEvento as $eid => $tipos): ?>
           <?php foreach ($tipos as $t): ?>
             <option value="<?php echo (int)$t['id']; ?>" data-evento="<?php echo (int)$eid; ?>">
@@ -189,7 +196,7 @@ include __DIR__.'/inc/layout_top.php';
           <?php endforeach; ?>
         <?php endforeach; ?>
       </select>
-      <small class="muted">Se filtra al elegir evento.</small>
+      <small class="muted">La entrada manual no usa ni modifica ninguna categoría; solamente consume el cupo global.</small>
     </div>
     <div>
       <label>Modalidad</label>
@@ -268,9 +275,25 @@ include __DIR__.'/inc/layout_top.php';
       customTotalInput.disabled = !isSale;
       if (!isSale) customTotalInput.value = '';
     }
+    function syncManualFree(){
+      if (!tipoSelect || !modeSelect || !customTotalInput) return;
+      const isManualFree = tipoSelect.value === 'manual_free';
+      if (isManualFree) {
+        modeSelect.value = 'manual_transfer';
+        customTotalInput.required = true;
+        syncCustomTotal();
+        customTotalInput.focus();
+      } else {
+        customTotalInput.required = false;
+      }
+    }
     if (modeSelect) {
       modeSelect.addEventListener('change', syncCustomTotal);
       syncCustomTotal();
+    }
+    if (tipoSelect) {
+      tipoSelect.addEventListener('change', syncManualFree);
+      syncManualFree();
     }
   })();
 </script>
