@@ -141,6 +141,8 @@ function db(){
                 snapshot_body_html TEXT,
                 snapshot_body_text TEXT,
                 snapshot_taken_at TEXT,
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                removed_at TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )');
@@ -233,6 +235,7 @@ function db(){
                 permanent_error_count INTEGER NOT NULL DEFAULT 0,
                 skipped_duplicate_count INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
+                removed_at TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )');

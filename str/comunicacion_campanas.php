@@ -7,11 +7,11 @@ require_once __DIR__ . '/inc/communication_campaigns.php';
 require_once __DIR__ . '/inc/communication_execution_engine.php';
 require_once __DIR__ . '/inc/communication_ops.php';
 
-require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -23,10 +23,7 @@ if (!$isAllowed) {
 $pdo = db();
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $organizationId = 1;
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
 $contactScope = array(
     'is_super' => $isSuper,
@@ -290,6 +287,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
             }
         }
 
+        if ($action === 'toggle_favorite') {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            $result = communication_campaigns_toggle_favorite($pdo, $organizationId, $adminId, $isSuper, $id);
+            if (!empty($result['ok'])) {
+                $flashOk = !empty($result['is_favorite']) ? 'Campana agregada a favoritas.' : 'Campana quitada de favoritas.';
+            } else {
+                $flashErr = isset($result['error']) ? (string)$result['error'] : 'No se pudo actualizar la campana.';
+            }
+        }
+
+        if ($action === 'remove_campaign') {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            $result = communication_campaigns_remove($pdo, $organizationId, $adminId, $isSuper, $id);
+            if (!empty($result['ok'])) {
+                $flashOk = 'Campana eliminada de la vista. Su historial de envios se conservo.';
+                if ($editId === $id) $editId = 0;
+            } else {
+                $flashErr = isset($result['error']) ? (string)$result['error'] : 'No se pudo eliminar la campana.';
+            }
+        }
+
         if ($action === 'estimate_saved' || $action === 'preview_saved') {
             $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
             if ($id > 0) {
@@ -338,7 +356,7 @@ $scopeSqlList = str_replace(
   array('c.organization_id', 'c.created_by_admin_id'),
   $scopeSql
 );
-$listSql = 'SELECT c.*, a.name AS audience_name, t.name AS template_name, cr.id AS active_run_id, cr.status AS active_run_status, cr.processed_count AS active_processed_count, cr.resolved_recipients AS active_resolved_recipients FROM communication_campaigns c LEFT JOIN communication_audiences a ON a.id = c.audience_id LEFT JOIN communication_templates t ON t.id = c.template_id LEFT JOIN communication_campaign_runs cr ON cr.id = (SELECT r2.id FROM communication_campaign_runs r2 WHERE r2.campaign_id = c.id ORDER BY r2.id DESC LIMIT 1) WHERE ' . $scopeSqlList;
+$listSql = 'SELECT c.*, a.name AS audience_name, t.name AS template_name, cr.id AS active_run_id, cr.status AS active_run_status, cr.processed_count AS active_processed_count, cr.resolved_recipients AS active_resolved_recipients FROM communication_campaigns c LEFT JOIN communication_audiences a ON a.id = c.audience_id LEFT JOIN communication_templates t ON t.id = c.template_id LEFT JOIN communication_campaign_runs cr ON cr.id = (SELECT r2.id FROM communication_campaign_runs r2 WHERE r2.campaign_id = c.id AND r2.removed_at IS NULL ORDER BY r2.id DESC LIMIT 1) WHERE c.removed_at IS NULL AND ' . $scopeSqlList;
 if ($q !== '') {
     $listSql .= ' AND (c.name LIKE :q OR c.slug LIKE :q OR c.description LIKE :q OR c.notes_internal LIKE :q)';
     $scopeParams[':q'] = '%' . $q . '%';
@@ -348,7 +366,7 @@ if ($fStatus !== '') {
     $listSql .= ' AND c.status = :fs';
     $scopeParams[':fs'] = $fStatusN;
 }
-$listSql .= ' ORDER BY c.updated_at DESC, c.id DESC';
+$listSql .= ' ORDER BY c.is_favorite DESC, CASE WHEN c.status = "archived" THEN 1 ELSE 0 END, c.updated_at DESC, c.id DESC';
 $stList = $pdo->prepare($listSql);
 $stList->execute($scopeParams);
 $rows = $stList->fetchAll(PDO::FETCH_ASSOC);
@@ -357,7 +375,7 @@ $editRow = null;
 if ($editId > 0) {
     $scopeSqlE = communication_campaigns_scope_sql($isSuper);
     $scopeParamsE = communication_campaigns_scope_params($organizationId, $adminId, $isSuper);
-    $stE = $pdo->prepare('SELECT * FROM communication_campaigns WHERE id = :id AND ' . $scopeSqlE . ' LIMIT 1');
+    $stE = $pdo->prepare('SELECT * FROM communication_campaigns WHERE id = :id AND removed_at IS NULL AND ' . $scopeSqlE . ' LIMIT 1');
     $stE->execute(array(':id' => $editId) + $scopeParamsE);
     $editRow = $stE->fetch(PDO::FETCH_ASSOC);
 }
@@ -379,6 +397,8 @@ $editableStatuses = communication_campaigns_editable_statuses();
 
 $title = 'Comunicacion - Campanas';
 include __DIR__ . '/inc/layout_top.php';
+include __DIR__ . '/inc/campaign_manager_view.php';
+if (false):
 ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -622,6 +642,7 @@ include __DIR__ . '/inc/layout_top.php';
   <div id="campaign-live-status-meta" style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;"></div>
 </div>
 
+<?php endif; ?>
 <script>
 (function() {
   const dispatchUrl = <?php echo json_encode('ops/communication_campaign_dispatch.php'); ?>;

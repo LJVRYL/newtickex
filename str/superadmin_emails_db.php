@@ -2,11 +2,11 @@
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/communication_contacts.php';
 
-require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -17,19 +17,20 @@ if (!$isAllowed) {
 
 $pdo = db();
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $fRegistered = isset($_GET['f_registered']) ? trim((string)$_GET['f_registered']) : '';
 $fBlocked = isset($_GET['f_blocked']) ? trim((string)$_GET['f_blocked']) : '';
 $fSource = isset($_GET['f_source']) ? trim((string)$_GET['f_source']) : '';
+$fContactType = isset($_GET['f_contact_type']) ? trim((string)$_GET['f_contact_type']) : '';
+$fEventId = isset($_GET['f_event_id']) ? (int)$_GET['f_event_id'] : 0;
+$fRole = isset($_GET['f_role']) ? trim((string)$_GET['f_role']) : '';
 $fImportBatch = isset($_GET['f_import_batch']) ? trim((string)$_GET['f_import_batch']) : '';
 $fImportFile = isset($_GET['f_import_file']) ? trim((string)$_GET['f_import_file']) : '';
 $fImportedFrom = isset($_GET['f_imported_from']) ? trim((string)$_GET['f_imported_from']) : '';
 $fImportedTo = isset($_GET['f_imported_to']) ? trim((string)$_GET['f_imported_to']) : '';
 $view = isset($_GET['view']) ? trim((string)$_GET['view']) : 'all';
+$contactPage = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 if (!in_array($view, array('all', 'base', 'imported'), true)) {
   $view = 'all';
 }
@@ -75,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   } else {
     $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
     $emailAction = isset($_POST['email']) ? trim((string)$_POST['email']) : '';
-    $adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+    $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
     if ($action === 'import_csv') {
       $fileOk = isset($_FILES['csv_file']) && is_array($_FILES['csv_file']) && isset($_FILES['csv_file']['error']) && (int)$_FILES['csv_file']['error'] === UPLOAD_ERR_OK;
@@ -208,6 +209,9 @@ $emails = communication_contacts_resolve($pdo, $contactScope);
 
 $registeredCount = 0;
 $blockedCount = 0;
+$buyerCount = 0;
+$guestCount = 0;
+$contactRoles = array();
 foreach ($emails as $rowEmail) {
   if (isset($rowEmail['registrado']) && $rowEmail['registrado'] === 'Si') {
     $registeredCount++;
@@ -215,6 +219,39 @@ foreach ($emails as $rowEmail) {
   if (!empty($rowEmail['bloqueado'])) {
     $blockedCount++;
   }
+  $rowTypes = communication_contacts_type_keys($rowEmail);
+  if (in_array('buyer', $rowTypes, true)) $buyerCount++;
+  if (in_array('guest', $rowTypes, true)) $guestCount++;
+  $roleLabel = isset($rowEmail['rol']) ? trim((string)$rowEmail['rol']) : '';
+  if ($roleLabel !== '') $contactRoles[strtolower($roleLabel)] = $roleLabel;
+}
+natcasesort($contactRoles);
+
+$eventOptions = array();
+$eventNamesById = array();
+try {
+  $eventSql = "SELECT id, nombre, COALESCE(slug,'') AS slug FROM eventos";
+  $eventParams = array();
+  $eventWhere = array();
+  if (!$isSuper && communication_contacts_table_has_column($pdo, 'eventos', 'creado_por_admin_id')) {
+    $eventWhere[] = 'creado_por_admin_id = :admin_id';
+    $eventParams[':admin_id'] = $adminId;
+  }
+  if (communication_contacts_table_has_column($pdo, 'eventos', 'borrado_en')) {
+    $eventWhere[] = 'borrado_en IS NULL';
+  }
+  if ($eventWhere) $eventSql .= ' WHERE ' . implode(' AND ', $eventWhere);
+  $eventSql .= ' ORDER BY id DESC';
+  $eventStmt = $pdo->prepare($eventSql);
+  $eventStmt->execute($eventParams);
+  while ($eventRow = $eventStmt->fetch(PDO::FETCH_ASSOC)) {
+    $eid = (int)$eventRow['id'];
+    $eventOptions[] = $eventRow;
+    $eventNamesById[$eid] = trim((string)$eventRow['nombre']) !== '' ? (string)$eventRow['nombre'] : ('Evento #' . $eid);
+  }
+} catch (Exception $e) {
+  $eventOptions = array();
+  $eventNamesById = array();
 }
 
 $filters = communication_contacts_normalize_filters(array(
@@ -222,6 +259,9 @@ $filters = communication_contacts_normalize_filters(array(
     'f_registered' => $fRegistered,
     'f_blocked' => $fBlocked,
     'f_source' => $fSource,
+    'f_contact_type' => $fContactType,
+    'f_event_id' => $fEventId,
+    'f_role' => $fRole,
     'f_import_batch' => $fImportBatch,
   'f_import_file' => $fImportFile,
   'imported_from' => $fImportedFrom,
@@ -245,14 +285,25 @@ if ($export === 'csv') {
   $out = fopen('php://output', 'w');
   if ($out !== false) {
     fputs($out, "\xEF\xBB\xBF");
-    fputcsv($out, array('email', 'nombre', 'rol', 'source', 'import_batch', 'import_file', 'imported_at', 'registrado', 'fuentes', 'lotes_importados', 'ultimo_envio', 'ultima_entrada', 'acceso'));
+    fputcsv($out, array('email', 'nombre', 'tipo_contacto', 'rol', 'eventos', 'entradas_emitidas', 'compras_registradas', 'monto_registrado', 'source', 'import_batch', 'import_file', 'imported_at', 'registrado', 'fuentes', 'lotes_importados', 'ultimo_envio', 'ultima_entrada', 'acceso'));
     foreach ($rows as $r) {
       $src = array_keys($r['fuentes']);
       $batches = isset($r['imported_batches']) && is_array($r['imported_batches']) ? $r['imported_batches'] : array();
+      $types = communication_contacts_type_keys($r);
+      $eventLabels = array();
+      foreach ((isset($r['event_ids']) && is_array($r['event_ids']) ? $r['event_ids'] : array()) as $eid) {
+        $eid = (int)$eid;
+        $eventLabels[] = isset($eventNamesById[$eid]) ? $eventNamesById[$eid] : ('Evento #' . $eid);
+      }
       fputcsv($out, array(
         (string)$r['email'],
         (string)($r['nombre'] !== '' ? $r['nombre'] : '-'),
+        implode(', ', array_map('communication_contacts_type_label', $types)),
         (string)($r['rol'] !== '' ? $r['rol'] : '-'),
+        implode(', ', $eventLabels),
+        (int)(isset($r['tickets_count']) ? $r['tickets_count'] : 0),
+        (int)(isset($r['paid_entries_count']) ? $r['paid_entries_count'] : 0),
+        (float)(isset($r['paid_amount']) ? $r['paid_amount'] : 0),
         (string)(isset($r['source']) ? $r['source'] : ''),
         (string)(isset($r['import_batch']) ? $r['import_batch'] : ''),
         (string)(isset($r['import_file']) ? $r['import_file'] : ''),
@@ -270,9 +321,22 @@ if ($export === 'csv') {
   exit;
 }
 
-$title = 'Comunicacion - Contactos';
+$filteredCount = count($rows);
+$contactsPerPage = 50;
+$totalPages = max(1, (int)ceil($filteredCount / $contactsPerPage));
+if ($contactPage > $totalPages) $contactPage = $totalPages;
+$rows = array_slice($rows, ($contactPage - 1) * $contactsPerPage, $contactsPerPage);
+$paginationQuery = $_GET;
+unset($paginationQuery['page'], $paginationQuery['export']);
+$paginationBase = http_build_query($paginationQuery);
+
+$communicationImportedCount = 0;
+foreach ($emails as $communicationEmail) if (!empty($communicationEmail['fuentes']) && isset($communicationEmail['fuentes']['import_csv'])) $communicationImportedCount++;
+$title = 'Comunicación';
 include __DIR__ . '/inc/layout_top.php';
 ?>
+<?php include __DIR__.'/inc/communication_hub_view.php'; ?>
+<?php if (false): // Vista anterior mantenida como referencia temporal. ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
   <a class="btn secondary" href="panel_admin.php">Volver</a>
@@ -459,5 +523,5 @@ include __DIR__ . '/inc/layout_top.php';
     </tbody>
   </table>
 </div>
-
+<?php endif; ?>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

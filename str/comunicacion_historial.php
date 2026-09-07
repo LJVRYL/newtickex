@@ -2,11 +2,11 @@
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/communication_ops.php';
 
-require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -22,10 +22,7 @@ communication_campaigns_ensure_schema($pdo);
 communication_ops_ensure_schema($pdo);
 
 $organizationId = 1;
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $flashOk = '';
@@ -94,6 +91,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashErr = isset($res['error']) ? (string)$res['error'] : 'No se pudo reencolar campana.';
             }
         }
+
+        if ($action === 'remove_run') {
+            $runIdPost = isset($_POST['run_id']) ? (int)$_POST['run_id'] : 0;
+            $res = communication_ops_action_remove_run($pdo, $organizationId, $adminId, $isSuper, $runIdPost, 'historial');
+            if (!empty($res['ok'])) {
+                $flashOk = 'Ejecucion eliminada de la vista. Las metricas y la auditoria se conservaron.';
+                $runId = 0;
+            } else {
+                $flashErr = isset($res['error']) ? (string)$res['error'] : 'No se pudo eliminar la ejecucion.';
+            }
+        }
     }
 }
 
@@ -118,6 +126,9 @@ if ($runId > 0) {
 
 $title = 'Comunicacion - Historial';
 include __DIR__ . '/inc/layout_top.php';
+include __DIR__ . '/inc/communication_history_view.php';
+include __DIR__ . '/inc/layout_bottom.php';
+return;
 ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
