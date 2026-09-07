@@ -1,0 +1,38 @@
+<?php
+require_once __DIR__ . '/../inc/support_center.php';
+function support_assert($condition,$message){if(!$condition){fwrite(STDERR,'FAIL: '.$message.PHP_EOL);exit(1);}echo 'PASS: '.$message.PHP_EOL;}
+$pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE usuarios_admin(id INTEGER PRIMARY KEY,email TEXT,apodo TEXT)');
+$pdo->exec("INSERT INTO usuarios_admin VALUES(2,'str@example.com','STR'),(9,'juan@example.com','JUAN'),(10,'agus@example.com','AGUS'),(99,'support@example.com','ROOT')");
+$pdo->exec('CREATE TABLE eventos(id INTEGER PRIMARY KEY,nombre TEXT,creado_por_admin_id INTEGER,borrado_en TEXT)');
+$pdo->exec("INSERT INTO eventos VALUES(15,'Evento STR',2,NULL),(17,'Evento Juan',9,NULL),(18,'Evento Agus',10,NULL)");
+tickex_support_ensure_schema($pdo);
+support_assert((int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('support_tickets','support_messages')")->fetchColumn()===2,'support schema is created');
+list($wrongEvent,$wrongMessage)=tickex_support_create_ticket($pdo,10,array('event_id'=>15,'category'=>'events','subject'=>'Evento incorrecto','body'=>'No debería poder asociarlo.','priority'=>'normal'));
+support_assert(!$wrongEvent&&strpos($wrongMessage,'no pertenece')!==false,'client cannot attach another organizer event');
+list($created,$message,$ticketId)=tickex_support_create_ticket($pdo,10,array('event_id'=>18,'category'=>'payments','subject'=>'No veo una acreditación','body'=>'La venta figura confirmada pero todavía no veo el detalle.','priority'=>'high'));
+support_assert($created&&$ticketId>0,'client can create a scoped support ticket');
+support_assert(count(tickex_support_list_tickets($pdo,10,false))===1,'owner sees the own ticket');
+support_assert(count(tickex_support_list_tickets($pdo,9,false))===0,'another organizer cannot list the ticket');
+support_assert(tickex_support_get_ticket($pdo,$ticketId,9,false)===null,'another organizer cannot open the ticket');
+list($foreignReply)=tickex_support_add_message($pdo,$ticketId,9,false,'Intento ajeno');
+support_assert(!$foreignReply,'another organizer cannot reply to the ticket');
+list($supportReply)=tickex_support_add_message($pdo,$ticketId,99,true,'Estamos revisando la acreditación informada.');
+support_assert($supportReply,'superadministrator can answer any ticket');
+$ticket=tickex_support_get_ticket($pdo,$ticketId,10,false);
+support_assert($ticket['status']==='waiting_client'&&count($ticket['messages'])===2,'support response updates state and conversation');
+list($clientReply)=tickex_support_add_message($pdo,$ticketId,10,false,'Adjunto la referencia en el texto.');
+support_assert($clientReply&&tickex_support_get_ticket($pdo,$ticketId,10,false)['status']==='open','client response returns ticket to support queue');
+list($updated)=tickex_support_update_ticket($pdo,$ticketId,99,true,'resolved','urgent');
+$ticket=tickex_support_get_ticket($pdo,$ticketId,99,true);
+support_assert($updated&&$ticket['status']==='resolved'&&$ticket['priority']==='urgent','superadministrator controls status and priority');
+list($reopened)=tickex_support_update_ticket($pdo,$ticketId,10,false,'open');
+support_assert($reopened&&tickex_support_get_ticket($pdo,$ticketId,10,false)['status']==='open','owner can reopen a resolved ticket');
+list($forbiddenStatus)=tickex_support_update_ticket($pdo,$ticketId,10,false,'in_progress');
+support_assert(!$forbiddenStatus,'client cannot assign internal workflow states');
+$clientPage=file_get_contents(__DIR__.'/../soporte.php');$superPage=file_get_contents(__DIR__.'/../superadmin_soporte.php');$nav=file_get_contents(__DIR__.'/../inc/nav.php');
+support_assert(strpos($clientPage,'tickex_csrf_verify')!==false&&strpos($superPage,'tickex_csrf_verify')!==false,'support writes require request protection');
+support_assert(strpos($clientPage,'add_notification')!==false&&strpos($superPage,'add_notification')!==false,'support activity creates dashboard notifications');
+support_assert(strpos($nav,'soporte.php')!==false&&strpos($nav,'superadmin_soporte.php')!==false,'support center is reachable from both navigation roles');
+support_assert($pdo->query('PRAGMA integrity_check')->fetchColumn()==='ok','support database remains consistent');
+echo 'ALL SUPPORT CENTER TESTS PASSED'.PHP_EOL;
