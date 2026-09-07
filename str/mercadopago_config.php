@@ -84,6 +84,11 @@ $settings = tickex_mp_platform_settings($pdo);
 $policy = tickex_mp_admin_policy($pdo, $adminId);
 $effectiveFee = tickex_mp_effective_platform_fee_percent($settings, $policy);
 $effectiveServiceCharge = tickex_mp_effective_service_charge_percent($settings, $policy);
+if (!$isSuper && $policy['account_type'] !== 'str_owner' && $policy['platform_fee_override_percent'] === null) {
+    $effectiveServiceCharge = tickex_subscription_service_fee($pdo, $adminId, $effectiveServiceCharge);
+    $serviceShareOfCheckout = $effectiveServiceCharge > 0 ? ($effectiveServiceCharge / (100 + $effectiveServiceCharge)) * 100 : 0;
+    $effectiveFee = max(0, round($serviceShareOfCheckout - (float)$settings['mp_cost_estimate_percent'], 4));
+}
 $stEvents = $pdo->prepare("SELECT e.id,e.nombre,e.slug,e.fecha_desde,e.fecha_hasta,c.provider,c.marketplace_fee_percent FROM eventos e LEFT JOIN mercadopago_event_configs c ON c.event_id=e.id WHERE e.creado_por_admin_id=:admin AND (e.borrado_en IS NULL) ORDER BY e.id DESC");
 $stEvents->execute(array(':admin' => $adminId));
 $events = $stEvents->fetchAll(PDO::FETCH_ASSOC);

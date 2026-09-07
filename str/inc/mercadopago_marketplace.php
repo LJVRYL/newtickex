@@ -2,6 +2,8 @@
 
 /* Mercado Pago Split Payments 1:1 (Checkout Pro) for Tickex. */
 
+require_once __DIR__ . '/subscriptions.php';
+
 if (!function_exists('tickex_mp_base64url_encode')) {
     function tickex_mp_base64url_encode($value)
     {
@@ -361,8 +363,15 @@ if (!function_exists('tickex_mp_event_config')) {
         // global habilita o pausa las ventas, pero no cambia su proveedor.
         if ($policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
         $row['provider'] = $provider;
-        $row['service_charge_percent'] = tickex_mp_effective_service_charge_percent($settings, $policy);
-        $row['marketplace_fee_percent'] = tickex_mp_effective_platform_fee_percent($settings, $policy);
+        $serviceCharge = tickex_mp_effective_service_charge_percent($settings, $policy);
+        // Las excepciones comerciales individuales conservan prioridad. Si no
+        // existe una, el plan puede reemplazar la política general al activarse.
+        if ($policy['account_type'] !== 'str_owner' && $policy['platform_fee_override_percent'] === null) {
+            $serviceCharge = tickex_subscription_service_fee($pdo, $ownerId, $serviceCharge);
+        }
+        $serviceShareOfCheckout = $serviceCharge > 0 ? ($serviceCharge / (100 + $serviceCharge)) * 100 : 0;
+        $row['service_charge_percent'] = $serviceCharge;
+        $row['marketplace_fee_percent'] = max(0, round($serviceShareOfCheckout - (float)$settings['mp_cost_estimate_percent'], 4));
         $row['total_cost_target_percent'] = (float)$settings['total_cost_target_percent'];
         $row['mp_cost_estimate_percent'] = (float)$settings['mp_cost_estimate_percent'];
         $row['account_type'] = $policy['account_type'];
