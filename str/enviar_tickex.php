@@ -1,9 +1,10 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/manual_ticket_issuance.php';
+require_once __DIR__.'/inc/event_lifecycle.php';
 require_login();
 $cu = current_user();
 $rol = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
@@ -17,20 +18,29 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 
 $pdo = db();
 
-// Eventos visibles
-$evSql = ($rol === 'admin_evento') ? "SELECT id, nombre FROM eventos WHERE creado_por_admin_id = :aid ORDER BY id DESC" : "SELECT id, nombre FROM eventos ORDER BY id DESC";
+// Sólo eventos del organizador que todavía no terminaron. Los próximos se
+// incluyen aunque aún no estén publicados; los borrados y pasados, nunca.
+$evSql = ($rol === 'admin_evento')
+    ? "SELECT id,nombre,slug,fecha_desde,fecha_hasta FROM eventos WHERE borrado_en IS NULL AND creado_por_admin_id=:aid ORDER BY fecha_desde ASC,id DESC"
+    : "SELECT id,nombre,slug,fecha_desde,fecha_hasta FROM eventos WHERE borrado_en IS NULL ORDER BY fecha_desde ASC,id DESC";
 $stEv = $pdo->prepare($evSql);
 if ($rol === 'admin_evento') {
     $stEv->execute(array(':aid'=>(int)$cu['id']));
 } else {
     $stEv->execute();
 }
-$eventos = $stEv->fetchAll(PDO::FETCH_ASSOC);
+$eventos = array_values(array_filter($stEv->fetchAll(PDO::FETCH_ASSOC), function($event) {
+    return tickex_event_is_current($event);
+}));
+$eventosPermitidos = array();
+foreach ($eventos as $eventoPermitido) $eventosPermitidos[(int)$eventoPermitido['id']] = true;
 
 $tiposPorEvento = array();
+$tiposPermitidosPorEvento = array();
 foreach ($eventos as $ev) {
   $eid = (int)$ev['id'];
   $tiposPorEvento[$eid] = array();
+  $tiposPermitidosPorEvento[$eid] = array();
 
   // Tipos de entrada (todas, incluso ocultas/inactivas)
   try {
@@ -46,6 +56,7 @@ foreach ($eventos as $ev) {
         'qr_quantity' => tickex_ticket_qr_quantity(isset($row['qr_quantity']) ? $row['qr_quantity'] : 1),
         'origen' => 'tipo',
       );
+      $tiposPermitidosPorEvento[$eid][(int)$row['id']] = true;
     }
   } catch (Exception $e) {}
 }
@@ -53,7 +64,28 @@ foreach ($eventos as $ev) {
 $errors = array();
 $success = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// La eliminación queda protegida y limitada a eventos del organizador.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_tickex') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    } else {
+        $deleteId = isset($_POST['tickex_id']) ? (int)$_POST['tickex_id'] : 0;
+        if ($rol === 'admin_evento') {
+            $delete = $pdo->prepare("DELETE FROM entradas WHERE id=:id AND tc_order_request_id LIKE 'manual-%' AND evento_id IN (SELECT id FROM eventos WHERE creado_por_admin_id=:admin)");
+            $delete->execute(array(':id'=>$deleteId, ':admin'=>(int)$cu['id']));
+        } else {
+            $delete = $pdo->prepare("DELETE FROM entradas WHERE id=:id AND tc_order_request_id LIKE 'manual-%'");
+            $delete->execute(array(':id'=>$deleteId));
+        }
+        if ($delete->rowCount() === 1) {
+            flash('ok','Tickex eliminado.');
+            header('Location: enviar_tickex.php'); exit;
+        }
+        $errors[] = 'No se encontró el Tickex o no tenés permiso para eliminarlo.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST['action'] !== 'delete_tickex')) {
     $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
     $tipoSelection = isset($_POST['tipo_id']) ? trim((string)$_POST['tipo_id']) : '';
     $isManualFree = $tipoSelection === 'manual_free';
@@ -66,10 +98,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $customTotal = isset($_POST['monto_total']) ? trim((string)$_POST['monto_total']) : '';
     $hidden   = (isset($_POST['oculto']) && in_array($rol, array('super_admin','superadmin'), true)) ? 1 : 0;
 
+    // Las cortesías son una emisión simple, sin campos comerciales.
+    if ($mode === 'courtesy') {
+        $quantity = 1;
+        $customTotal = '';
+    }
+
     if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
+    if ($eventoId > 0 && !isset($eventosPermitidos[$eventoId])) $errors[] = 'Ese evento ya terminó o no está disponible para tu cuenta.';
+    elseif (!isset($eventosPermitidos[$eventoId])) $errors[] = 'El evento seleccionado ya terminó o no está disponible para tu cuenta.';
     if (!$isManualFree && $tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
+    elseif (!$isManualFree && (!isset($tiposPermitidosPorEvento[$eventoId]) || !isset($tiposPermitidosPorEvento[$eventoId][$tipoId]))) $errors[] = 'El tipo de entrada no pertenece al evento seleccionado.';
     if (!in_array($mode, array('courtesy','manual_transfer'), true)) $errors[] = 'Seleccioná una modalidad válida.';
+    if ($mode === 'courtesy') { $quantity = 1; $customTotal = ''; }
     if ($quantity < 1 || $quantity > 20) $errors[] = 'La cantidad de promociones debe estar entre 1 y 20.';
     if ($customTotal !== '' && $mode !== 'manual_transfer') $errors[] = 'El monto libre solo corresponde a una venta manual.';
     if ($customTotal !== '' && (!is_numeric($customTotal) || (float)$customTotal <= 0 || (float)$customTotal > 999999999.99)) {
@@ -146,8 +188,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $title = 'Enviar Tickex';
+$pageFlashes = function_exists('flash_get_all') ? flash_get_all() : array();
 include __DIR__.'/inc/layout_top.php';
 ?>
+<?php include __DIR__.'/inc/send_ticket_form.php'; ?>
+<?php if (false): // Vista anterior conservada temporalmente como referencia de compatibilidad. ?>
 <div class="card tx-send-hero">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver</a>
   <div>
@@ -297,6 +342,7 @@ include __DIR__.'/inc/layout_top.php';
     }
   })();
 </script>
+<?php endif; ?>
 
 
 <div class="card tx-send-history">
@@ -310,22 +356,19 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 
   <?php
-    // Eliminar tickex si se pide
-    if (isset($_GET['del_tickex']) && (int)$_GET['del_tickex'] > 0) {
-      $delId = (int)$_GET['del_tickex'];
-      $pdo->prepare("DELETE FROM entradas WHERE id = ?")->execute(array($delId));
-      echo '<div class="flash ok">Tickex eliminado.</div>';
-    }
-
     // Buscar últimos Tickex emitidos manualmente mediante una orden auditable.
-    $where = "WHERE tc_order_request_id LIKE 'manual-%'";
+    $where = "WHERE en.tc_order_request_id LIKE 'manual-%'";
     $params = array();
+    if ($rol === 'admin_evento') {
+      $where .= ' AND ev.creado_por_admin_id=:history_admin';
+      $params[':history_admin'] = (int)$cu['id'];
+    }
     if (isset($_GET['buscar']) && trim($_GET['buscar']) !== '') {
       $q = '%'.trim($_GET['buscar']).'%';
-      $where .= " AND (email LIKE :q OR nombre LIKE :q OR codigo LIKE :q)";
+      $where .= " AND (en.email LIKE :q OR en.nombre LIKE :q OR en.codigo LIKE :q OR ev.nombre LIKE :q)";
       $params[':q'] = $q;
     }
-    $sql = "SELECT * FROM entradas $where ORDER BY id DESC LIMIT 20";
+    $sql = "SELECT en.*,ev.nombre AS evento_nombre FROM entradas en INNER JOIN eventos ev ON ev.id=en.evento_id $where ORDER BY en.id DESC LIMIT 20";
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $ultimos = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -354,11 +397,11 @@ include __DIR__.'/inc/layout_top.php';
             <td data-label="Email" style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
             <td data-label="Código"><?php echo e($u['codigo']); ?></td>
             <td data-label="Tipo"><?php echo e($u['tipo']); ?></td>
-            <td data-label="Evento"><?php echo (int)$u['evento_id']; ?></td>
+            <td data-label="Evento"><?php echo e($u['evento_nombre']); ?></td>
             <td data-label="Fecha"><?php echo e($u['fecha_registro']); ?></td>
             <td data-label="Acciones" style="white-space:nowrap;">
               <a class="btn secondary" style="padding:6px 10px;" href="ticket.php?c=<?php echo urlencode((string)$u['codigo']); ?>" target="_blank" rel="noopener" title="Ver ticket" aria-label="Ver ticket">👁</a>
-              <a class="btn danger" style="padding:6px 10px;" href="enviar_tickex.php?del_tickex=<?php echo (int)$u['id']; ?>" onclick="return confirm('¿Eliminar este tickex?');" title="Eliminar" aria-label="Eliminar">🗑</a>
+              <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este Tickex?');"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="delete_tickex"><input type="hidden" name="tickex_id" value="<?php echo (int)$u['id']; ?>"><button class="btn danger" style="padding:6px 10px;" type="submit" title="Eliminar" aria-label="Eliminar">🗑</button></form>
             </td>
           </tr>
         <?php endforeach; ?>

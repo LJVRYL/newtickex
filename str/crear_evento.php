@@ -1,253 +1,88 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/event_capacity.php';
-$title = "Crear evento – TICKEX";
-
-// Sólo super_admin o admin_evento pueden crear eventos
-require_login();
-
-$cu = current_user();
-$tipoGlobal = isset($_SESSION['tipo_global'])
-    ? $_SESSION['tipo_global']
-    : (isset($cu['rol']) ? $cu['rol'] : '');
-
-if (!in_array($tipoGlobal, array('super_admin','admin_evento','superadmin'), true)) {
-    header('Location: panel_admin.php');
-    exit;
+require_once __DIR__.'/inc/event_creation.php';
+$title='Crear evento – TICKEX';
+$cu=current_user();
+$tipoGlobal=isset($cu['tipo_global'])?(string)$cu['tipo_global']:(isset($cu['rol'])?(string)$cu['rol']:'');
+$adminContext=isset($_SESSION['auth_context']) && $_SESSION['auth_context']==='admin';
+if (!$adminContext || !in_array($tipoGlobal,array('super_admin','admin_evento','superadmin'),true)) {
+    $next=isset($_SERVER['REQUEST_URI'])?(string)$_SERVER['REQUEST_URI']:'/crear_evento.php';
+    header('Location: /login_admin.php?next='.urlencode($next),true,302); exit;
 }
-
-$adminId = isset($_SESSION['user_id'])
-    ? (int)$_SESSION['user_id']
-    : (isset($cu['id']) ? (int)$cu['id'] : 0);
-
-try {
-    $pdo = db();
-    tickex_event_capacity_ensure_schema($pdo);
-} catch (Exception $e) {
-    http_response_code(500);
-    echo "Error DB: " . e($e->getMessage());
-    exit;
-}
-
-// Detectar si existe creado_por_admin_id en eventos
-$colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-$hasCreadoPor = false;
-foreach ($colsEv as $c) {
-    if (isset($c['name']) && $c['name'] === 'creado_por_admin_id') {
-        $hasCreadoPor = true;
-        break;
-    }
-}
-
-// Valores por defecto para repintar form
-$nombre      = '';
-$slug        = '';
-$fechaDesde  = '';
-$fechaHasta  = '';
-$descripcion = '';
-$capacidadTotal = '';
-
-// flash messages
-$flashes = function_exists('flash_get_all') ? flash_get_all() : array();
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $nombre      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
-    $slug        = isset($_POST['slug']) ? trim($_POST['slug']) : '';
-    $fechaDesde  = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
-    $fechaHasta  = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
-    $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
-    $capacidadTotal = isset($_POST['capacidad_total']) ? (int)$_POST['capacidad_total'] : 0;
-
-    $errorMsg = '';
-
-    // Validaciones básicas
-    if ($nombre === '' || $slug === '') {
-        $errorMsg = 'Nombre y slug son obligatorios.';
-    } elseif ($capacidadTotal < 1) {
-        $errorMsg = 'Definí un cupo total mayor a cero.';
-    } elseif (!preg_match('/^[a-z0-9\-]+$/', $slug)) {
-        $errorMsg = 'El slug solo puede tener minúsculas, números y guiones (a-z, 0-9, -).';
-    } else {
-        // Unicidad de slug
-        $stSlug = $pdo->prepare("SELECT id FROM eventos WHERE slug = :slug LIMIT 1");
-        $stSlug->execute(array(':slug'=>$slug));
-        $slugRow = $stSlug->fetch(PDO::FETCH_ASSOC);
-        if ($slugRow) {
-            $errorMsg = 'Ese slug ya está en uso por otro evento.';
-        }
-    }
-
-    // Manejar flyer (opcional)
-    $flyerFilename = null;
-    if ($errorMsg === '') {
-        if (isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
-            if ($_FILES['flyer']['error'] === UPLOAD_ERR_OK) {
-                $tmp  = $_FILES['flyer']['tmp_name'];
-                $size = (int)$_FILES['flyer']['size'];
-
-                if ($size > 2 * 1024 * 1024) {
-                    $errorMsg = "El flyer no puede pesar más de 2 MB.";
-                } else {
-                    $ext = strtolower(pathinfo($_FILES['flyer']['name'], PATHINFO_EXTENSION));
-                    if (!in_array($ext, array('png','jpg','jpeg'), true)) {
-                        $errorMsg = "Solo se permiten imágenes PNG o JPG.";
-                    } else {
-                        $safe = preg_replace('/[^a-zA-Z0-9_\-\.]/','_', $_FILES['flyer']['name']);
-                        $new  = time() . '_' . $safe;
-                        $dest = __DIR__ . '/event_flyers/' . $new;
-                        if (!move_uploaded_file($tmp, $dest)) {
-                            $errorMsg = "No se pudo guardar el flyer en el servidor.";
-                        } else {
-                            $flyerFilename = 'event_flyers/' . $new;
-                        }
-                    }
+$adminId=isset($cu['id'])?(int)$cu['id']:0;
+try { $pdo=db(); tickex_event_capacity_ensure_schema($pdo); }
+catch (Exception $e) { http_response_code(500); echo 'Error interno al conectar con la base de datos.'; exit; }
+$hasCreadoPor=false;
+foreach ($pdo->query('PRAGMA table_info(eventos)')->fetchAll(PDO::FETCH_ASSOC) as $column) if (isset($column['name']) && $column['name']==='creado_por_admin_id') $hasCreadoPor=true;
+$nombre=''; $slug=''; $fechaDesde=''; $fechaHasta=''; $descripcion=''; $capacidadTotal=''; $formError='';
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+    $nombre=isset($_POST['nombre'])?trim((string)$_POST['nombre']):'';
+    $slug=isset($_POST['slug'])?tickex_event_creation_slugify($_POST['slug']):''; if ($slug==='' && $nombre!=='') $slug=tickex_event_creation_slugify($nombre);
+    $fechaDesde=isset($_POST['fecha_desde'])?trim((string)$_POST['fecha_desde']):''; $fechaHasta=isset($_POST['fecha_hasta'])?trim((string)$_POST['fecha_hasta']):'';
+    $descripcion=isset($_POST['descripcion'])?trim((string)$_POST['descripcion']):''; $capacidadTotal=isset($_POST['capacidad_total'])?(int)$_POST['capacidad_total']:0;
+    if (!tickex_csrf_verify(isset($_POST['_csrf'])?(string)$_POST['_csrf']:'')) $formError='La sesión venció. Actualizá la página e intentá nuevamente.';
+    else $formError=tickex_event_creation_validate(array('nombre'=>$nombre,'slug'=>$slug,'fecha_desde'=>$fechaDesde,'fecha_hasta'=>$fechaHasta,'descripcion'=>$descripcion,'capacidad_total'=>$capacidadTotal));
+    if ($formError==='') { $st=$pdo->prepare('SELECT id FROM eventos WHERE slug=:slug LIMIT 1'); $st->execute(array(':slug'=>$slug)); if ($st->fetch()) $formError='Ese identificador público ya está en uso. Probá con otro.'; }
+    $flyerFilename=null; $uploadedFlyerPath=null;
+    if ($formError==='' && isset($_FILES['flyer']) && (int)$_FILES['flyer']['error']!==UPLOAD_ERR_NO_FILE) {
+        if ((int)$_FILES['flyer']['error']!==UPLOAD_ERR_OK) $formError='No pudimos recibir el flyer. Probá nuevamente.';
+        elseif ((int)$_FILES['flyer']['size']>2*1024*1024) $formError='El flyer no puede pesar más de 2 MB.';
+        else {
+            $tmp=(string)$_FILES['flyer']['tmp_name']; $info=@getimagesize($tmp); $mime=is_array($info)&&isset($info['mime'])?(string)$info['mime']:''; $extensions=array('image/png'=>'png','image/jpeg'=>'jpg');
+            if (!isset($extensions[$mime])) $formError='El flyer debe ser una imagen PNG o JPG válida.';
+            else {
+                $dir=__DIR__.'/event_flyers'; if (!is_dir($dir) && !@mkdir($dir,0755,true)) $formError='No pudimos preparar la carpeta del flyer.';
+                else { try { $file='event_'.gmdate('Ymd_His').'_'.bin2hex(random_bytes(6)).'.'.$extensions[$mime]; } catch(Exception $e) { $file='event_'.gmdate('Ymd_His').'_'.mt_rand(100000,999999).'.'.$extensions[$mime]; }
+                    $uploadedFlyerPath=$dir.'/'.$file; if (!move_uploaded_file($tmp,$uploadedFlyerPath)) { $uploadedFlyerPath=null; $formError='No pudimos guardar el flyer.'; } else $flyerFilename='event_flyers/'.$file;
                 }
-            } else {
-                $errorMsg = "Error al subir el flyer (código: " . (int)$_FILES['flyer']['error'] . ").";
             }
         }
     }
-
-    if ($errorMsg !== '') {
-        flash('err', $errorMsg);
-    } else {
+    if ($formError==='') {
         try {
             $pdo->beginTransaction();
-
-            if ($hasCreadoPor) {
-                $stmtEv = $pdo->prepare("
-                    INSERT INTO eventos
-                        (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, creado_por_admin_id, capacidad_total)
-                    VALUES
-                        (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :creador, :capacidad)
-                ");
-                $stmtEv->execute(array(
-                    ':nombre'      => $nombre,
-                    ':slug'        => $slug,
-                    ':descripcion' => ($descripcion !== '' ? $descripcion : null),
-                    ':flyer'       => $flyerFilename,
-                    ':fdesde'      => ($fechaDesde !== '' ? $fechaDesde : null),
-                    ':fhasta'      => ($fechaHasta !== '' ? $fechaHasta : null),
-                    ':creador'     => $adminId,
-                    ':capacidad'   => $capacidadTotal,
-                ));
-            } else {
-                $stmtEv = $pdo->prepare("
-                    INSERT INTO eventos
-                        (nombre, slug, descripcion, flyer_filename, fecha_desde, fecha_hasta, creado_en, capacidad_total)
-                    VALUES
-                        (:nombre, :slug, :descripcion, :flyer, :fdesde, :fhasta, datetime('now'), :capacidad)
-                ");
-                $stmtEv->execute(array(
-                    ':nombre'      => $nombre,
-                    ':slug'        => $slug,
-                    ':descripcion' => ($descripcion !== '' ? $descripcion : null),
-                    ':flyer'       => $flyerFilename,
-                    ':fdesde'      => ($fechaDesde !== '' ? $fechaDesde : null),
-                    ':fhasta'      => ($fechaHasta !== '' ? $fechaHasta : null),
-                    ':capacidad'   => $capacidadTotal,
-                ));
-            }
-
-            $eventoId = (int)$pdo->lastInsertId();
-
-            // Un ID puede haber pertenecido a un evento eliminado en esquemas
-            // SQLite antiguos. Un evento nuevo nunca debe heredar mappings del
-            // bridge ni referencias legacy de ese ID anterior.
-            $hasBridgeMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_event_map' LIMIT 1")->fetchColumn();
-            if ($hasBridgeMap) {
-                $clearBridge = $pdo->prepare('DELETE FROM bridge_event_map WHERE evento_id=:eid');
-                $clearBridge->execute(array(':eid'=>$eventoId));
-            }
-            $hasLegacyMap = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map' LIMIT 1")->fetchColumn();
-            if ($hasLegacyMap) {
-                $clearLegacy = $pdo->prepare('DELETE FROM tickex_event_map WHERE str_event_id=:eid');
-                $clearLegacy->execute(array(':eid'=>$eventoId));
-            }
-            $pdo->commit();
-
-            // Nuevo flujo: ir a configurar_entradas_evento.php
-            header('Location: configurar_entradas_evento.php?id=' . $eventoId);
-            exit;
-
-                } catch (Exception $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-                        $msg = $e->getMessage();
-                        if (stripos($msg, 'unique') !== false && stripos($msg, 'slug') !== false) {
-                                $msg = 'Ese slug ya está en uso por otro evento.';
-                        }
-                        flash('err', 'Error al crear el evento: ' . $msg);
+            $sql=$hasCreadoPor?"INSERT INTO eventos (nombre,slug,descripcion,flyer_filename,fecha_desde,fecha_hasta,creado_en,creado_por_admin_id,capacidad_total) VALUES (:nombre,:slug,:descripcion,:flyer,:desde,:hasta,datetime('now'),:creador,:capacidad)":"INSERT INTO eventos (nombre,slug,descripcion,flyer_filename,fecha_desde,fecha_hasta,creado_en,capacidad_total) VALUES (:nombre,:slug,:descripcion,:flyer,:desde,:hasta,datetime('now'),:capacidad)";
+            $params=array(':nombre'=>$nombre,':slug'=>$slug,':descripcion'=>$descripcion!==''?$descripcion:null,':flyer'=>$flyerFilename,':desde'=>$fechaDesde,':hasta'=>$fechaHasta,':capacidad'=>$capacidadTotal); if($hasCreadoPor)$params[':creador']=$adminId;
+            $stmt=$pdo->prepare($sql); $stmt->execute($params); $eventoId=(int)$pdo->lastInsertId();
+            if ((bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_event_map'")->fetchColumn()) { $clear=$pdo->prepare('DELETE FROM bridge_event_map WHERE evento_id=:id'); $clear->execute(array(':id'=>$eventoId)); }
+            if ((bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickex_event_map'")->fetchColumn()) { $clear=$pdo->prepare('DELETE FROM tickex_event_map WHERE str_event_id=:id'); $clear->execute(array(':id'=>$eventoId)); }
+            $pdo->commit(); header('Location: configurar_entradas_evento.php?id='.$eventoId); exit;
+        } catch(Exception $e) {
+            if($pdo->inTransaction())$pdo->rollBack(); if($uploadedFlyerPath!==null && is_file($uploadedFlyerPath))@unlink($uploadedFlyerPath);
+            $formError=stripos($e->getMessage(),'unique')!==false?'Ese identificador público ya está en uso. Probá con otro.':'No pudimos crear el evento. Revisá los datos e intentá nuevamente.';
         }
     }
 }
-
-include __DIR__.'/inc/layout_top.php';
+$flashes=function_exists('flash_get_all')?flash_get_all():array(); $csrf=tickex_csrf_token(); include __DIR__.'/inc/layout_top.php';
 ?>
-<?php if (!empty($flashes)): ?>
-    <div class="card tx-create-flashes">
-        <?php foreach ($flashes as $f): ?>
-            <div class="flash <?php echo e($f['type']); ?>"><?php echo e($f['msg']); ?></div>
-        <?php endforeach; ?>
-    </div>
-<?php endif; ?>
-<div class="card tx-create-nav">
-  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
-  <?php if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin'): ?>
-    <a class="btn secondary" href="superadmin.php">SuperAdmin</a>
-  <?php endif; ?>
-</div>
-
-<div class="card tx-create-hero">
-  <span class="tx-kicker"><i></i>Nuevo evento</span>
-  <h2>Crear nuevo evento</h2>
-  <div class="tx-create-intro">
-    Usuario: <strong><?php echo e(isset($_SESSION['usuario']) ? $_SESSION['usuario'] : ''); ?></strong>
-    (<?php echo e($tipoGlobal); ?>)<br>
-    Esta pantalla crea el evento. Después vas a configurar las entradas
-    en el siguiente paso.
-  </div>
-</div>
-
-<form class="tx-create-form" method="post" enctype="multipart/form-data">
-
-  <div class="card tx-create-card">
-    <h3>Datos del evento</h3>
-
-    <label for="nombre">Nombre del evento</label>
-    <input type="text" id="nombre" name="nombre" required value="<?php echo e($nombre); ?>">
-
-    <label for="slug">Slug / URL corta (ej: &quot;str2&quot;, &quot;retro&quot;)</label>
-    <input type="text" id="slug" name="slug" required
-           placeholder="solo minúsculas, números y -" value="<?php echo e($slug); ?>">
-
-    <label for="descripcion">Descripción breve (opcional)</label>
-    <textarea id="descripcion" name="descripcion"
-              placeholder="Texto descriptivo del evento..."><?php echo e($descripcion); ?></textarea>
-
-    <label for="capacidad_total">Cupo total del evento</label>
-    <input type="number" id="capacidad_total" name="capacidad_total" min="1" required value="<?php echo e($capacidadTotal); ?>" placeholder="Ej: 300">
-    <small class="muted">Es el máximo de QR que podrán emitirse entre todas las categorías y ventas manuales.</small>
-
-    <label>Fechas del evento (desde / hasta)</label>
-    <div class="tx-create-date-grid">
-      <div>
-        <label for="fecha_desde">Desde</label>
-        <input type="date" id="fecha_desde" name="fecha_desde" value="<?php echo e($fechaDesde); ?>">
-      </div>
-      <div>
-        <label for="fecha_hasta">Hasta</label>
-        <input type="date" id="fecha_hasta" name="fecha_hasta" value="<?php echo e($fechaHasta); ?>">
-      </div>
-    </div>
-
-    <label for="flyer">Flyer del evento (PNG/JPG, máx. 2MB)</label>
-    <input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg">
-  </div>
-
-    <button class="btn tx-create-submit" type="submit">Crear evento y configurar entradas</button>
-</form>
-
-<?php include __DIR__.'/inc/layout_bottom.php'; ?>
+<style>
+.event-create{max-width:1180px;margin:0 auto;display:grid;gap:18px}.event-create *{box-sizing:border-box}.create-toolbar,.create-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}.create-toolbar>div{display:flex;gap:8px}.create-hero{position:relative;overflow:hidden;padding:32px;background:radial-gradient(circle at 88% 18%,rgba(55,207,236,.16),transparent 30%),linear-gradient(135deg,rgba(23,28,54,.98),rgba(44,28,87,.96));border-color:rgba(139,92,246,.28)}.create-hero h1{margin:8px 0;font-size:clamp(30px,4vw,48px);line-height:1.02;letter-spacing:-.035em}.create-hero p{margin:0;max-width:680px;color:#c7c9da}.create-kicker{color:#54d9ef;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.13em}.create-kicker:before{content:"";display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:50%;background:#54d9ef;box-shadow:0 0 14px #54d9ef}.create-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:26px}.create-progress div{padding:13px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(6,9,23,.28);color:#9fa3ba;font-weight:700}.create-progress strong{display:inline-grid;place-items:center;width:25px;height:25px;margin-right:8px;border-radius:8px;background:rgba(255,255,255,.08);color:#fff}.create-progress .current{color:#fff;border-color:rgba(124,92,255,.55);background:rgba(111,75,239,.2)}.create-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;align-items:start}.create-main,.create-aside{display:grid;gap:16px}.create-aside{position:sticky;top:90px}.create-section{padding:24px}.section-head{display:flex;gap:13px;margin-bottom:22px}.section-number{flex:0 0 36px;height:36px;display:grid;place-items:center;border-radius:11px;background:linear-gradient(135deg,#7250f5,#9357ff);font-weight:900}.section-head h2{margin:0 0 4px;font-size:20px}.section-head p{margin:0;color:#9fa3ba;font-size:14px}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.field{display:grid;gap:8px}.field-full{margin-top:17px}.field label{font-size:13px;font-weight:800;color:#e9eafa}.field small{color:#858aa3;line-height:1.45}.field input,.field textarea{margin:0}.field textarea{min-height:126px;resize:vertical}.slug-shell{position:relative}.slug-shell input{padding-right:60px}.slug-shell span{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:#777c95}.slug-preview{padding:8px 11px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(4,8,20,.42);font-size:12px;color:#888da5}.slug-preview strong{color:#bdc0d3}.capacity-presets{display:flex;gap:7px;flex-wrap:wrap}.capacity-presets button{border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:7px 10px;background:rgba(255,255,255,.035);color:#bfc2d5;cursor:pointer}.upload-box{display:flex;align-items:center;gap:14px;padding:16px;border:1px dashed rgba(143,120,255,.38);border-radius:14px;background:rgba(91,63,177,.06)}.upload-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;background:rgba(114,80,245,.18);font-size:20px}.upload-box input{width:100%;font-size:12px}.summary{padding:20px}.summary h3{margin:0 0 16px}.summary-event{padding:16px;min-height:116px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:linear-gradient(145deg,rgba(29,34,60,.9),rgba(14,18,35,.95))}.summary-event small{color:#58d7eb;text-transform:uppercase;font-weight:900;letter-spacing:.12em}.summary-event strong{display:block;margin:8px 0 5px;font-size:18px}.summary-event span{font-size:12px;color:#9297ae}.summary-row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.07);font-size:13px}.summary-row span{color:#8e93aa}.summary-row strong{text-align:right}.create-note{padding:17px;color:#aeb2c5;font-size:13px;line-height:1.55}.create-note strong{display:block;color:#fff;margin-bottom:4px}.create-actions{padding:18px 22px}.create-actions p{margin:0;color:#989db3;font-size:13px}.create-actions .btn{min-width:245px}.required{color:#8e74ff}.char-count{text-align:right}.create-error{border-color:rgba(255,93,115,.42);background:rgba(92,20,35,.23)}@media(max-width:900px){.create-layout{grid-template-columns:1fr}.create-aside{position:static}.create-progress{grid-template-columns:1fr}.create-progress div:not(.current){display:none}}@media(max-width:640px){.create-hero,.create-section{padding:20px}.field-grid{grid-template-columns:1fr}.create-actions{align-items:stretch;flex-direction:column}.create-actions .btn{width:100%;min-width:0}.upload-box{align-items:flex-start;flex-direction:column}}
+</style>
+<main class="event-create">
+ <div class="create-toolbar"><a class="btn secondary" href="panel_admin.php">← Volver al panel</a><div><a class="btn secondary" href="eventos.php">Mis eventos</a><?php if($tipoGlobal==='super_admin'||$tipoGlobal==='superadmin'):?><a class="btn secondary" href="superadmin.php">SuperAdmin</a><?php endif;?></div></div>
+ <?php if($formError!==''):?><div class="card create-error"><div class="flash err"><?php echo e($formError);?></div></div><?php endif;?>
+ <?php foreach($flashes as $flash):?><div class="card"><div class="flash <?php echo e($flash['type']);?>"><?php echo e($flash['msg']);?></div></div><?php endforeach;?>
+ <section class="card create-hero"><span class="create-kicker">Configuración inicial</span><h1>Creá la base de tu evento</h1><p>Definí la identidad, las fechas y el cupo general. Después vas a crear los tipos de entrada.</p><div class="create-progress"><div class="current"><strong>1</strong>Datos del evento</div><div><strong>2</strong>Tipos de entrada</div><div><strong>3</strong>Publicación</div></div></section>
+ <form method="post" enctype="multipart/form-data" novalidate><input type="hidden" name="_csrf" value="<?php echo e($csrf);?>"><div class="create-layout"><div class="create-main">
+  <section class="card create-section"><div class="section-head"><span class="section-number">1</span><div><h2>Identidad</h2><p>Cómo se va a reconocer el evento dentro y fuera de Tickex.</p></div></div><div class="field-grid">
+   <div class="field"><label for="nombre">Nombre del evento <span class="required">*</span></label><input id="nombre" name="nombre" required maxlength="120" autocomplete="off" placeholder="Ej: SAVE THE RAVE · Edición primavera" value="<?php echo e($nombre);?>"><small>Usá el nombre completo que querés mostrar al público.</small></div>
+   <div class="field"><label for="slug">Identificador público <span class="required">*</span></label><div class="slug-shell"><input id="slug" name="slug" required maxlength="80" autocomplete="off" placeholder="save-the-rave" value="<?php echo e($slug);?>"><span id="slugStatus">auto</span></div><div class="slug-preview">Enlace: <strong id="slugPreview"><?php echo e($slug!==''?$slug:'tu-evento');?></strong></div></div>
+  </div></section>
+  <section class="card create-section"><div class="section-head"><span class="section-number">2</span><div><h2>Planificación</h2><p>Fechas operativas y límite real de personas que pueden ingresar.</p></div></div><div class="field-grid">
+   <div class="field"><label for="fecha_desde">Comienza <span class="required">*</span></label><input type="date" id="fecha_desde" name="fecha_desde" required value="<?php echo e($fechaDesde);?>"><small>Desde este día figurará como activo.</small></div>
+   <div class="field"><label for="fecha_hasta">Finaliza <span class="required">*</span></label><input type="date" id="fecha_hasta" name="fecha_hasta" required value="<?php echo e($fechaHasta);?>"><small>Al terminar este día pasará a finalizados.</small></div></div>
+   <div class="field field-full"><label for="capacidad_total">Cupo total del evento <span class="required">*</span></label><input type="number" id="capacidad_total" name="capacidad_total" min="1" max="1000000" required placeholder="Ej: 300" value="<?php echo e($capacidadTotal);?>"><div class="capacity-presets"><button type="button" data-capacity="100">100</button><button type="button" data-capacity="300">300</button><button type="button" data-capacity="500">500</button><button type="button" data-capacity="1000">1.000</button></div><small>Máximo global de QR: ventas online, puerta, transferencias y cortesías. No depende de las categorías.</small></div>
+  </section>
+  <section class="card create-section"><div class="section-head"><span class="section-number">3</span><div><h2>Presentación</h2><p>Podés completar esta parte ahora o volver más tarde.</p></div></div>
+   <div class="field"><label for="descripcion">Descripción breve</label><textarea id="descripcion" name="descripcion" maxlength="3000" placeholder="Contá en pocas líneas de qué se trata el evento."><?php echo e($descripcion);?></textarea><small class="char-count"><span id="descriptionCount">0</span>/3000</small></div>
+   <div class="field field-full"><label for="flyer">Flyer</label><div class="upload-box"><span class="upload-icon">▧</span><div><strong>Sumá la imagen principal</strong><input type="file" id="flyer" name="flyer" accept="image/png,image/jpeg"><small id="flyerHint">PNG o JPG real, hasta 2 MB.</small></div></div></div>
+  </section>
+  <footer class="card create-actions"><p>Los campos con <span class="required">*</span> son obligatorios.</p><button class="btn" type="submit">Crear evento y continuar →</button></footer>
+ </div><aside class="create-aside"><section class="card summary"><h3>Vista previa</h3><div class="summary-event"><small>Nuevo evento</small><strong id="summaryName">Nombre del evento</strong><span id="summaryDates">Elegí las fechas</span></div><div class="summary-row"><span>Cupo general</span><strong id="summaryCapacity">Sin definir</strong></div><div class="summary-row"><span>Siguiente paso</span><strong>Crear entradas</strong></div><div class="summary-row"><span>Estado inicial</span><strong>Borrador operativo</strong></div></section><section class="card create-note"><strong>Qué sucede después</strong>Vas a definir precios, promociones, paquetes y cortesías antes de compartir el enlace.</section></aside></div></form>
+</main>
+<script>
+(function(){var n=document.getElementById('nombre'),s=document.getElementById('slug'),f=document.getElementById('fecha_desde'),h=document.getElementById('fecha_hasta'),c=document.getElementById('capacidad_total'),d=document.getElementById('descripcion'),manual=s.value.trim()!=='';
+function slug(v){return v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)}function date(v){if(!v)return'';var b=v.split('-');return b[2]+'/'+b[1]+'/'+b[0]}function update(){document.getElementById('summaryName').textContent=n.value.trim()||'Nombre del evento';document.getElementById('slugPreview').textContent=s.value.trim()||'tu-evento';var a=date(f.value),b=date(h.value);document.getElementById('summaryDates').textContent=a?(a+(b&&b!==a?' — '+b:'')):'Elegí las fechas';document.getElementById('summaryCapacity').textContent=c.value?Number(c.value).toLocaleString('es-AR')+' personas':'Sin definir';document.getElementById('descriptionCount').textContent=d.value.length}n.addEventListener('input',function(){if(!manual){s.value=slug(n.value);document.getElementById('slugStatus').textContent='auto'}update()});s.addEventListener('input',function(){manual=true;s.value=slug(s.value);document.getElementById('slugStatus').textContent='editable';update()});f.addEventListener('change',function(){if(!h.value||h.value<f.value)h.value=f.value;h.min=f.value;update()});h.addEventListener('change',update);c.addEventListener('input',update);d.addEventListener('input',update);document.querySelectorAll('[data-capacity]').forEach(function(b){b.addEventListener('click',function(){c.value=b.getAttribute('data-capacity');update()})});document.getElementById('flyer').addEventListener('change',function(){document.getElementById('flyerHint').textContent=this.files&&this.files[0]?this.files[0].name:'PNG o JPG real, hasta 2 MB.'});if(f.value)h.min=f.value;update()})();
+</script>
+<?php include __DIR__.'/inc/layout_bottom.php';?>

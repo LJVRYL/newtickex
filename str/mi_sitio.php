@@ -1,11 +1,13 @@
 <?php
 require_once __DIR__ . '/inc/auth.php';
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/event_lifecycle.php';
 
 // Tipo global (super_admin, admin_evento)
 $tg = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
 if (!in_array($tg, array('admin_evento','super_admin','superadmin'), true)) {
-    header('Location: login.php');
+    $next = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '/mi_sitio.php';
+    header('Location: /login_admin.php?next=' . urlencode($next), true, 302);
     exit;
 }
 
@@ -80,6 +82,12 @@ if (!function_exists('e')) {
 $page_title = 'Mi sitio';
 $errors = array();
 $saved  = false;
+$csrf = tickex_csrf_token();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    exit('Solicitud vencida o inválida.');
+}
 
 // Cargar config actual
 $config = array(
@@ -301,26 +309,77 @@ $eventos = $stEv ? $stEv->fetchAll(PDO::FETCH_ASSOC) : array();
 
 // Función para saber si el evento sigue vigente por fecha
 function evento_vigente($ev, $hasFechaDesde, $hasFechaHasta) {
-    $now = time();
-    $fd = ($hasFechaDesde && !empty($ev['fecha_desde'])) ? strtotime($ev['fecha_desde']) : false;
-    $fh = ($hasFechaHasta && !empty($ev['fecha_hasta'])) ? strtotime($ev['fecha_hasta']) : false;
-    if ($fh !== false) return $fh >= $now;
-    if ($fd !== false) return $fd >= $now;
-    return true; // sin fechas, lo consideramos vigente
+    if (!$hasFechaDesde) $ev['fecha_desde'] = '';
+    if (!$hasFechaHasta) $ev['fecha_hasta'] = '';
+    return tickex_event_is_current($ev);
 }
+
+$eventosPublicados = 0;
+$eventosVigentes = 0;
+foreach ($eventos as $eventoResumen) {
+    if (!empty($eventoResumen['publicado_site'])) $eventosPublicados++;
+    if (evento_vigente($eventoResumen, $hasFechaDesde, $hasFechaHasta)) $eventosVigentes++;
+}
+$canalesConectados = 0;
+foreach (array('whatsapp','instagram_url','tiktok_url','facebook_url','youtube_url') as $canalCampo) {
+    if (!empty($config[$canalCampo])) $canalesConectados++;
+}
+$sitioConfigurado = !empty($config['slug_publico']) && !empty($config['nombre_publico']);
 
 require __DIR__ . '/inc/layout_top.php';
 ?>
+<style>
+  .site-admin-hero{position:relative;overflow:hidden;padding:28px;background:linear-gradient(135deg,rgba(15,118,110,.24),rgba(40,27,93,.88))}
+  .site-admin-hero:after{content:"";position:absolute;width:290px;height:290px;right:-100px;bottom:-190px;border:1px solid rgba(55,210,190,.22);border-radius:50%}
+  .site-admin-eyebrow{color:#4de0ca;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}
+  .site-admin-hero h1{margin:7px 0 6px;font-size:clamp(28px,4vw,44px)}
+  .site-admin-hero p{margin:0;color:var(--muted);max-width:650px}
+  .site-admin-toolbar{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}
+  .site-admin-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .site-admin-stats{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:10px;margin-top:24px}
+  .site-admin-stat{padding:13px 15px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(6,10,22,.38)}
+  .site-admin-stat span{display:block;color:var(--muted);font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}
+  .site-admin-stat strong{display:block;margin-top:3px;font-size:20px}
+  .site-admin-section{padding:0}
+  .site-admin-section>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px}
+  .site-admin-section>summary::-webkit-details-marker{display:none}
+  .site-admin-section>summary:after{content:"+";display:grid;place-items:center;width:32px;height:32px;flex:0 0 auto;border:1px solid var(--line);border-radius:10px;color:#6ee7d5;font-size:22px}
+  .site-admin-section[open]>summary:after{content:"−"}
+  .site-admin-section-title{font-size:18px;font-weight:800}
+  .site-admin-section-subtitle{margin-top:3px;color:var(--muted);font-size:13px}
+  .site-admin-section-body{border-top:1px solid var(--line);padding:22px}
+  .site-admin-events-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+  .site-admin-events-head h2{margin:0}.site-admin-events-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .site-status{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2);font-size:11px;font-weight:800}
+  .site-status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .site-status.on{color:var(--ok)}.site-status.off{color:var(--muted)}.site-status.past{color:var(--warn)}
+  .site-event-card{margin:0!important;padding:16px!important;transition:border-color .2s ease,transform .2s ease}
+  .site-event-card:hover{border-color:rgba(118,94,255,.42);transform:translateY(-1px)}
+  .site-event-meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+  @media(max-width:720px){.site-admin-hero{padding:22px}.site-admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.site-admin-toolbar{align-items:stretch}.site-admin-actions,.site-admin-actions .btn{width:100%}.site-admin-actions .btn{text-align:center}}
+</style>
 <div class="page">
-  <div class="page-header">
-    <h1>Mi sitio</h1>
-    <p class="lead">Configurá el sitio público donde tus clientes ven y compran entradas.</p>
-    <div style="margin-top:8px;">
+  <div class="card site-admin-hero">
+    <div class="site-admin-toolbar">
+      <div>
+        <div class="site-admin-eyebrow">Presencia pública</div>
+        <h1>Mi sitio</h1>
+        <p>Configurá tu página, conectá tus canales y elegí qué eventos querés mostrar.</p>
+      </div>
+      <div class="site-admin-actions">
+        <a class="btn secondary" href="#eventos-sitio">Administrar eventos</a>
       <?php if (!empty($config['slug_publico'])): ?>
-        <a class="btn" href="site.php?slug=<?php echo e($config['slug_publico']); ?>" target="_blank">Ver mi sitio</a>
+          <a class="btn" href="site.php?slug=<?php echo e($config['slug_publico']); ?>" target="_blank">Ver sitio público</a>
       <?php else: ?>
-        <span class="muted" style="font-size:12px;">Guardá un slug para habilitar "Ver mi sitio".</span>
+          <a class="btn" href="#identidad-sitio">Configurar sitio</a>
       <?php endif; ?>
+      </div>
+    </div>
+    <div class="site-admin-stats">
+      <div class="site-admin-stat"><span>Estado</span><strong><?php echo !empty($config['visible']) ? 'Publicado' : 'Oculto'; ?></strong></div>
+      <div class="site-admin-stat"><span>Eventos visibles</span><strong><?php echo (int)$eventosPublicados; ?></strong></div>
+      <div class="site-admin-stat"><span>Eventos vigentes</span><strong><?php echo (int)$eventosVigentes; ?></strong></div>
+      <div class="site-admin-stat"><span>Canales</span><strong><?php echo (int)$canalesConectados; ?>/5</strong></div>
     </div>
   </div>
 
@@ -330,9 +389,16 @@ require __DIR__ . '/inc/layout_top.php';
     <div class="alert success">Cambios guardados.</div>
   <?php endif; ?>
 
-  <div class="card">
-    <div class="card-body">
+  <details class="card site-admin-section" id="identidad-sitio"<?php echo (!$sitioConfigurado || !empty($errors)) ? ' open' : ''; ?>>
+    <summary>
+      <div>
+        <div class="site-admin-section-title">Identidad y portada</div>
+        <div class="site-admin-section-subtitle">Nombre, dirección pública, textos principales y estado del sitio.</div>
+      </div>
+    </summary>
+    <div class="site-admin-section-body">
       <form method="post" action="mi_sitio.php">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <div class="form-group">
           <label for="nombre_publico">Nombre público del sitio</label>
           <input type="text" id="nombre_publico" name="nombre_publico" class="form-control" value="<?php echo e($config['nombre_publico']); ?>" required>
@@ -367,14 +433,20 @@ require __DIR__ . '/inc/layout_top.php';
         </div>
       </form>
     </div>
-  </div>
+  </details>
 
-  <div class="card">
-    <div class="card-body">
-      <h3 style="margin-top:0;">Redes, WhatsApp y QR</h3>
-      <p class="muted" style="margin-top:4px;">Si cargás WhatsApp o redes, se muestran en tu sitio público. El QR siempre apunta a tu slug.</p>
+  <details class="card site-admin-section" id="canales-sitio">
+    <summary>
+      <div>
+        <div class="site-admin-section-title">Canales y QR</div>
+        <div class="site-admin-section-subtitle"><?php echo (int)$canalesConectados; ?> de 5 canales conectados · QR permanente del sitio.</div>
+      </div>
+    </summary>
+    <div class="site-admin-section-body">
+      <p class="muted" style="margin-top:0;">WhatsApp y redes se muestran en tu página pública. El QR siempre apunta a tu dirección.</p>
 
       <form method="post" action="mi_sitio.php">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="save_extras">
 
         <div class="form-group">
@@ -432,12 +504,17 @@ require __DIR__ . '/inc/layout_top.php';
         <?php endif; ?>
       </div>
     </div>
-  </div>
+  </details>
 
-  <div class="card">
+  <div class="card" id="eventos-sitio">
     <div class="card-body">
-      <h3 style="margin-top:0;">Eventos publicados en tu sitio</h3>
-      <p class="muted" style="margin-top:4px;">Publicá o quitá eventos. Si la fecha ya pasó, se muestran como inactivos aunque estén publicados.</p>
+      <div class="site-admin-events-head">
+        <div>
+          <h2>Eventos del sitio</h2>
+          <p>Elegí qué eventos aparecen públicamente. Los finalizados se retiran automáticamente.</p>
+        </div>
+        <span class="site-status <?php echo $eventosPublicados > 0 ? 'on' : 'off'; ?>"><?php echo (int)$eventosPublicados; ?> publicados</span>
+      </div>
 
       <?php if (empty($eventos)): ?>
         <div class="muted">Todavía no tenés eventos.</div>
@@ -445,7 +522,7 @@ require __DIR__ . '/inc/layout_top.php';
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
           <?php foreach ($eventos as $ev): ?>
             <?php $vigente = evento_vigente($ev, $hasFechaDesde, $hasFechaHasta); ?>
-            <div class="card" style="margin:0;">
+            <div class="card site-event-card">
               <div style="display:flex;gap:10px;">
                 <div style="width:76px;height:76px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
                   <?php $fly = isset($ev['flyer_filename']) ? $ev['flyer_filename'] : ''; ?>
@@ -471,18 +548,23 @@ require __DIR__ . '/inc/layout_top.php';
                 </div>
               </div>
 
-              <div style="margin-top:8px;font-size:12px;line-height:1.5;">
-                <div>Publicado en sitio: <strong><?php echo (!empty($ev['publicado_site']) ? 'Sí' : 'No'); ?></strong></div>
-                <div>Estado por fecha: <strong><?php echo $vigente ? 'Activo' : 'Inactivo (evento pasado)'; ?></strong></div>
+              <div class="site-event-meta">
+                <span class="site-status <?php echo !empty($ev['publicado_site']) ? 'on' : 'off'; ?>"><?php echo !empty($ev['publicado_site']) ? 'Publicado' : 'Oculto'; ?></span>
+                <span class="site-status <?php echo $vigente ? 'on' : 'past'; ?>"><?php echo $vigente ? 'Vigente' : 'Finalizado'; ?></span>
               </div>
 
               <form method="post" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="toggle_event">
                 <input type="hidden" name="event_id" value="<?php echo (int)$ev['id']; ?>">
                 <input type="hidden" name="to" value="<?php echo (!empty($ev['publicado_site']) ? 0 : 1); ?>">
-                <button class="btn <?php echo (!empty($ev['publicado_site']) ? 'secondary' : 'primary'); ?>" type="submit">
-                  <?php echo (!empty($ev['publicado_site']) ? 'Ocultar del sitio' : 'Publicar en el sitio'); ?>
-                </button>
+                <?php if (!$vigente && empty($ev['publicado_site'])): ?>
+                  <button class="btn secondary" type="button" disabled title="Los eventos finalizados no pueden volver a publicarse.">Evento finalizado</button>
+                <?php else: ?>
+                  <button class="btn <?php echo (!empty($ev['publicado_site']) ? 'secondary' : 'primary'); ?>" type="submit">
+                    <?php echo (!empty($ev['publicado_site']) ? 'Ocultar del sitio' : 'Publicar en el sitio'); ?>
+                  </button>
+                <?php endif; ?>
                 <?php if (!empty($config['slug_publico'])): ?>
                   <a class="btn secondary" href="site.php?slug=<?php echo e($config['slug_publico']); ?>" target="_blank">Ver sitio</a>
                 <?php endif; ?>

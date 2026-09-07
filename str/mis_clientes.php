@@ -2,15 +2,14 @@
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/unified_tickets.php';
 
-require_login();
-
 $cu = current_user();
 $rol = isset($cu['tipo_global']) && $cu['tipo_global'] !== ''
   ? $cu['tipo_global']
   : (isset($cu['rol']) ? $cu['rol'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : ''));
 
-if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
-    header('Location: /login.php?next=' . urlencode($_SERVER['REQUEST_URI']), true, 302);
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+if (!$adminContext || !in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
+    header('Location: /login_admin.php?next=' . urlencode($_SERVER['REQUEST_URI']), true, 302);
     exit;
 }
 
@@ -170,6 +169,11 @@ foreach ($eventIds as $eid) {
 // Filtrar / ordenar
 // ------------------------------------------------------------------
 $clientesList = array_values($clientes);
+$overviewTotal = count($clientesList);
+$overviewRegistered = count(array_filter($clientesList, function($c){ return $c['is_reg']; }));
+$overviewGuests = $overviewTotal - $overviewRegistered;
+$overviewTickets = 0;
+foreach ($clientesList as $overviewClient) $overviewTickets += (int)$overviewClient['tickets'];
 
 if ($q !== '') {
     $qLower = mb_strtolower($q, 'UTF-8');
@@ -245,6 +249,62 @@ if ($export === 'csv' || $export === 'excel') {
 
 include __DIR__.'/inc/layout_top.php';
 ?>
+<?php include __DIR__.'/inc/client_directory_view.php'; ?>
+<?php if (false): // Vista anterior mantenida como referencia temporal. ?>
+
+<style>
+  .tickex-clients-table {
+    width: 100%;
+    min-width: 780px;
+    table-layout: fixed;
+  }
+  .tickex-clients-table th:nth-child(1) { width: 22%; }
+  .tickex-clients-table th:nth-child(2) { width: 22%; }
+  .tickex-clients-table th:nth-child(3) { width: 14%; }
+  .tickex-clients-table th:nth-child(4) { width: 22%; }
+  .tickex-clients-table th:nth-child(5) { width: 8%; }
+  .tickex-clients-table th:nth-child(6) { width: 12%; }
+  .tickex-client-name,
+  .tickex-client-contact {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tickex-client-events {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .tickex-client-event-name {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-weight: 650;
+  }
+  .tickex-client-event-count {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1.4;
+  }
+  @media (max-width: 760px) {
+    .tickex-clients-table { min-width: 700px; }
+    .tickex-clients-table th:nth-child(3),
+    .tickex-clients-table td:nth-child(3) { display: none; }
+  }
+</style>
 
 <div class="card" style="margin-top:16px;">
   <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">
@@ -302,7 +362,7 @@ include __DIR__.'/inc/layout_top.php';
 </div>
 
 <div class="card" style="padding:0;overflow-x:auto;">
-  <table class="table" style="min-width:720px;">
+  <table class="table tickex-clients-table">
     <thead>
       <tr>
         <th>Cliente</th>
@@ -321,7 +381,7 @@ include __DIR__.'/inc/layout_top.php';
           <tr>
             <td>
               <div style="display:flex;align-items:center;gap:8px;">
-                <div style="font-weight:600;">
+                <div class="tickex-client-name" style="font-weight:600;">
                   <?php echo e($c['display']); ?>
                 </div>
                 <?php if ($c['is_reg']): ?>
@@ -331,10 +391,24 @@ include __DIR__.'/inc/layout_top.php';
                 <?php endif; ?>
               </div>
             </td>
-            <td><?php echo $c['email'] !== '' ? e($c['email']) : '<span style="color:var(--muted);">—</span>'; ?></td>
-            <td><?php echo $c['telefono'] !== '' ? e($c['telefono']) : '<span style="color:var(--muted);">—</span>'; ?></td>
+            <td><div class="tickex-client-contact" title="<?php echo e($c['email']); ?>"><?php echo $c['email'] !== '' ? e($c['email']) : '<span style="color:var(--muted);">—</span>'; ?></div></td>
+            <td><div class="tickex-client-contact" title="<?php echo e($c['telefono']); ?>"><?php echo $c['telefono'] !== '' ? e($c['telefono']) : '<span style="color:var(--muted);">—</span>'; ?></div></td>
             <td>
-              <?php echo e(implode(', ', $c['events'])); ?>
+              <?php
+                $clientEvents = array_values($c['events']);
+                $clientEventCount = count($clientEvents);
+                $clientEventsTitle = implode(' · ', $clientEvents);
+              ?>
+              <?php if ($clientEventCount > 0): ?>
+                <div class="tickex-client-events" title="<?php echo e($clientEventsTitle); ?>">
+                  <span class="tickex-client-event-name"><?php echo e($clientEvents[0]); ?></span>
+                  <?php if ($clientEventCount > 1): ?>
+                    <span class="tickex-client-event-count">+<?php echo (int)($clientEventCount - 1); ?></span>
+                  <?php endif; ?>
+                </div>
+              <?php else: ?>
+                <span style="color:var(--muted);">—</span>
+              <?php endif; ?>
             </td>
             <td><?php echo (int)$c['tickets']; ?></td>
             <td>
@@ -354,5 +428,5 @@ include __DIR__.'/inc/layout_top.php';
     </tbody>
   </table>
 </div>
-
+<?php endif; ?>
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>
