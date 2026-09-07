@@ -37,8 +37,13 @@ function sf_event_allowed($ev, $mappedSlugList, $isSuper){
 
 $selectedEvent = null;
 $searchResults = array();
+$csrf = tickex_csrf_token();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud vencida o inválida.');
+    }
     $action = $_POST['action'] ?? '';
     try {
         if ($action === 'pick_event') {
@@ -177,6 +182,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Buscar/Seleccionar evento</h3>
   <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="pick_event">
     <div>
       <label>SiteName (slug)</label>
@@ -188,6 +194,7 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 
   <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="pick_by_id">
     <div>
       <label>Event Id</label>
@@ -199,6 +206,7 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 
   <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="search">
     <div>
       <label>Buscar (nombre o slug)</label>
@@ -223,6 +231,7 @@ include __DIR__.'/inc/layout_top.php';
             </td>
             <td>
               <form method="post" style="margin:0;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="pick_by_id">
                 <input type="hidden" name="event_id" value="<?php echo (int)$row['Id']; ?>">
                 <button class="btn secondary" type="submit">Seleccionar</button>
@@ -242,6 +251,7 @@ include __DIR__.'/inc/layout_top.php';
     <div class="muted" style="font-size:12px;">SiteName: <?php echo e($selectedEvent['SiteName']); ?> | Límite: <?php echo (int)$selectedEvent['TicketAmountLimit']; ?> | Activo: <?php echo $selectedEvent['Active'] ? 'Sí' : 'No'; ?></div>
 
     <form method="post" style="margin-top:10px;" onsubmit="return confirm('¿Eliminar este evento de SenForms? Esto eliminará sus tickets/tipos.');">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="delete_event">
       <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
       <button class="btn danger" type="submit">Eliminar evento</button>
@@ -249,6 +259,7 @@ include __DIR__.'/inc/layout_top.php';
     </form>
 
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="update_limit">
       <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
       <div>
@@ -274,6 +285,7 @@ include __DIR__.'/inc/layout_top.php';
                   <div class="muted">$<?php echo htmlspecialchars($t['Price'], ENT_QUOTES, 'UTF-8'); ?> (bloqueado)</div>
                 <?php else: ?>
                   <form method="post" style="display:flex;gap:6px;align-items:center;">
+                    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="update_price">
                     <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
                     <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -292,6 +304,7 @@ include __DIR__.'/inc/layout_top.php';
               </td>
               <td>
                 <form method="post" onsubmit="return confirm('¿Eliminar este tipo de entrada?');" style="margin:0;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="delete_ticket_type">
                   <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
                   <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -309,6 +322,7 @@ include __DIR__.'/inc/layout_top.php';
     <div style="margin-top:12px;">
       <h4 style="margin:0 0 6px;">Crear nuevo tipo de entrada</h4>
       <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="create_ticket_type">
         <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
         <div>
@@ -343,6 +357,7 @@ include __DIR__.'/inc/layout_top.php';
               <td><?php echo e($tk['PaymentState']); ?></td>
               <td>
                 <form method="post" onsubmit="return confirm('¿Eliminar este ticket?');">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="delete_ticket">
                   <input type="hidden" name="ticket_id" value="<?php echo (int)$tk['Id']; ?>">
                   <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">

@@ -89,6 +89,7 @@ fpmcheck.php
 .env
 .vscode/
 .idea/
+.local/
 node_modules/
 dist/
 build/

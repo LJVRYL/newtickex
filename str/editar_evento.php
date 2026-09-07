@@ -1,449 +1,188 @@
 <?php
-
-
-
-header("X-STR-HIT: 1");
-file_put_contents("/tmp/str-hit.log", date("c")." HIT editar_evento\n", FILE_APPEND);
-file_put_contents("/tmp/str-hit.log", date("c")." HIT editar_evento\n", FILE_APPEND);
-/* STR_DEBUG_PHP_LOG (temporal) */
-ini_set('display_errors', '0');
-ini_set('log_errors', '1');
-ini_set('error_log', '/tmp/str-php-error.log');
-error_reporting(E_ALL);
-/* END STR_DEBUG_PHP_LOG */
-
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
-
-require_once __DIR__.'/inc/bootstrap.php';
-$title = "Editar evento";
+require_once __DIR__ . '/inc/bootstrap.php';
 
 require_login();
 $pdo = db();
-
-function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
-$adminId    = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
-
-if (!in_array($tipoGlobal, array('admin_evento','super_admin'), true)) {
-    abort_404("No tenés permiso.");
+$cu = current_user();
+$tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : '';
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
+if (!in_array($tipoGlobal, array('admin_evento', 'super_admin', 'superadmin'), true)) {
+    abort_404('No tenés permiso.');
 }
 
 $eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-if ($eventoId<=0) abort_404("ID de evento inválido.");
+if ($eventoId <= 0) abort_404('ID de evento inválido.');
+tickex_require_event_access($pdo, $eventoId, $cu);
 
-// ===== Evento =====
-$stEv = $pdo->prepare("SELECT * FROM eventos WHERE id=?");
-$stEv->execute(array($eventoId));
+$stEv = $pdo->prepare('SELECT * FROM eventos WHERE id=:id LIMIT 1');
+$stEv->execute(array(':id' => $eventoId));
 $evento = $stEv->fetch(PDO::FETCH_ASSOC);
-if(!$evento) abort_404("Evento no encontrado.");
+if (!$evento) abort_404('Evento no encontrado.');
 
-// admin_evento solo ve propios
-if ($tipoGlobal==='admin_evento') {
-    $creador = isset($evento['creado_por_admin_id']) ? (int)$evento['creado_por_admin_id'] : 0;
-    if ($creador!==$adminId) abort_404("No podés editar este evento.");
+$error = '';
+$okMsg = '';
+$csrf = tickex_csrf_token();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    exit('Solicitud vencida o inválida.');
 }
 
-$error=''; $okMsg='';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_evento'])) {
+    $nombre = trim(isset($_POST['nombre']) ? (string)$_POST['nombre'] : '');
+    $fechaDesde = trim(isset($_POST['fecha_desde']) ? (string)$_POST['fecha_desde'] : '');
+    $fechaHasta = trim(isset($_POST['fecha_hasta']) ? (string)$_POST['fecha_hasta'] : '');
+    $descripcion = trim(isset($_POST['descripcion']) ? (string)$_POST['descripcion'] : '');
+    if ($nombre === '') $error = 'El nombre es obligatorio.';
 
-// =======================
-// GUARDAR DATOS EVENTO
-// =======================
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_evento'])) {
-
-    $nombre = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
-    $fechaDesde = isset($_POST['fecha_desde']) ? trim($_POST['fecha_desde']) : '';
-    $fechaHasta = isset($_POST['fecha_hasta']) ? trim($_POST['fecha_hasta']) : '';
-    $descripcion = isset($_POST['descripcion']) ? trim($_POST['descripcion']) : '';
-
-    if($nombre==='') $error="El nombre es obligatorio.";
-
-    // flyer opcional
     $flyerFilename = isset($evento['flyer_filename']) ? $evento['flyer_filename'] : null;
-
-    if(!$error && isset($_FILES['flyer']) && $_FILES['flyer']['error']!==UPLOAD_ERR_NO_FILE){
-        if($_FILES['flyer']['error']===UPLOAD_ERR_OK){
-            $tmp=$_FILES['flyer']['tmp_name'];
-            $size=(int)$_FILES['flyer']['size'];
-            if($size>2*1024*1024){
-                $error="El flyer no puede pesar más de 2MB.";
-            }else{
-                $ext=strtolower(pathinfo($_FILES['flyer']['name'], PATHINFO_EXTENSION));
-                if(!in_array($ext,array('png','jpg','jpeg'),true)){
-                    $error="Solo PNG/JPG.";
-                }else{
-                    $safe=preg_replace('/[^a-zA-Z0-9_\-\.]/','_',$_FILES['flyer']['name']);
-                    $new=time().'_'.$safe;
-                    $dest=__DIR__.'/event_flyers/'.$new;
-                    if(!move_uploaded_file($tmp,$dest)){
-                        $error="No se pudo guardar el flyer.";
-                    }else{
-                        $flyerFilename='event_flyers/'.$new;
-                    }
+    if ($error === '' && isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
+        if ($_FILES['flyer']['error'] !== UPLOAD_ERR_OK) {
+            $error = 'Error al subir el flyer.';
+        } elseif ((int)$_FILES['flyer']['size'] > 2 * 1024 * 1024) {
+            $error = 'El flyer no puede pesar más de 2 MB.';
+        } else {
+            $imageInfo = @getimagesize($_FILES['flyer']['tmp_name']);
+            $allowedMime = array('image/png' => 'png', 'image/jpeg' => 'jpg');
+            $mime = is_array($imageInfo) && isset($imageInfo['mime']) ? $imageInfo['mime'] : '';
+            if (!isset($allowedMime[$mime])) {
+                $error = 'El archivo debe ser una imagen PNG o JPG válida.';
+            } else {
+                $directory = __DIR__ . '/event_flyers';
+                if (!is_dir($directory)) @mkdir($directory, 0755, true);
+                $new = bin2hex(random_bytes(16)) . '.' . $allowedMime[$mime];
+                if (!move_uploaded_file($_FILES['flyer']['tmp_name'], $directory . '/' . $new)) {
+                    $error = 'No se pudo guardar el flyer.';
+                } else {
+                    $flyerFilename = 'event_flyers/' . $new;
                 }
             }
-        }else{
-            $error="Error al subir flyer.";
         }
     }
 
-    if(!$error){
-        $st=$pdo->prepare("
-            UPDATE eventos
-            SET nombre=:n, descripcion=:d, flyer_filename=:f,
-                fecha_desde=:fd, fecha_hasta=:fh
-            WHERE id=:id
-        ");
+    if ($error === '') {
+        $st = $pdo->prepare('UPDATE eventos SET nombre=:nombre, descripcion=:descripcion, flyer_filename=:flyer, fecha_desde=:desde, fecha_hasta=:hasta WHERE id=:id');
         $st->execute(array(
-            ':n'=>$nombre,
-            ':d'=>($descripcion!==''?$descripcion:null),
-            ':f'=>$flyerFilename,
-            ':fd'=>($fechaDesde!==''?$fechaDesde:null),
-            ':fh'=>($fechaHasta!==''?$fechaHasta:null),
-            ':id'=>$eventoId
+            ':nombre' => $nombre,
+            ':descripcion' => $descripcion !== '' ? $descripcion : null,
+            ':flyer' => $flyerFilename,
+            ':desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            ':hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            ':id' => $eventoId,
         ));
-        $okMsg="Evento actualizado.";
-        // refrescar
-        $stEv->execute(array($eventoId));
-        $evento=$stEv->fetch(PDO::FETCH_ASSOC);
+        $okMsg = 'Evento actualizado.';
+        $stEv->execute(array(':id' => $eventoId));
+        $evento = $stEv->fetch(PDO::FETCH_ASSOC);
     }
 }
 
-// =======================
-// AGREGAR TIPO DESDE PLANTILLA
-// =======================
-if ($_SERVER["REQUEST_METHOD"]==="POST" && isset($_POST["add_from_template"])) {
-
-    $tplId = isset($_POST["tpl_id"]) ? (int)$_POST["tpl_id"] : 0;
-    if($tplId<=0) $error="Plantilla inválida.";
-
-    if(!$error){
-        $stTpl=$pdo->prepare("\n            SELECT * FROM plantillas_entrada\n            WHERE id=? AND activo=1\n        ");
-        $stTpl->execute(array($tplId));
-        $tpl=$stTpl->fetch(PDO::FETCH_ASSOC);
-        if(!$tpl) $error="No se encontró la plantilla.";
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template'])) {
+    $tplId = isset($_POST['tpl_id']) ? (int)$_POST['tpl_id'] : 0;
+    if ($tplId <= 0) $error = 'Plantilla inválida.';
+    if ($error === '') {
+        $sql = 'SELECT * FROM plantillas_entrada WHERE id=:id AND activo=1';
+        $params = array(':id' => $tplId);
+        if (!tickex_is_super_admin($cu)) {
+            $sql .= ' AND creado_por_admin_id=:admin';
+            $params[':admin'] = $adminId;
+        }
+        $stTpl = $pdo->prepare($sql . ' LIMIT 1');
+        $stTpl->execute($params);
+        $tpl = $stTpl->fetch(PDO::FETCH_ASSOC);
+        if (!$tpl) $error = 'No se encontró la plantilla.';
     }
-
-    if(!$error){
-        $tipoVenta = strtoupper($tpl["tipo"]);
-        $precio = (int)$tpl["precio_default"];
-        $cant = (int)$tpl["cantidad_default"];
-        $hora = isset($tpl["hora_limite_default"]) ? $tpl["hora_limite_default"] : null;
-        $desc = isset($tpl["descripcion"]) ? $tpl["descripcion"] : null;
-
-        if($tipoVenta==="FREE"){
-            $precio = 0;
-        }
-
-        $stIns=$pdo->prepare("
-            INSERT INTO tipos_entrada
-              (evento_id, nombre, tipo, precio,
-               cantidad_total, cantidad_disponible, hora_limite, reglas_precio, qr_quantity)
-            VALUES
-              (:eid,:nom,:tipo,:pre,:ct,:cd,:hl,:reg,:qr_quantity)
-        ");
-
-        $pre = (int)($tpl["precio_default"] ?? $tpl["precio"] ?? 0);
-        $ct  = (int)($tpl["cantidad_default"] ?? $tpl["cantidad_total"] ?? 0);
-        $hl  = ($tpl["hora_limite_default"] ?? $tpl["hora_limite"] ?? null);
-        $reg = ($tpl["reglas_default"] ?? $tpl["reglas_precio"] ?? null);
-        $qrQuantity = isset($tpl['qr_quantity']) ? max(1, min(10, (int)$tpl['qr_quantity'])) : 1;
-
-        $tipo = $tpl["tipo"] ?? ($tpl["tipo_venta"] ?? null);
-        if ($tipo === null || $tipo === "") {
-          $tipo = ($pre > 0) ? "paga" : "free";
-        }
-        if ($tipo !== "free" && $tipo !== "paga") { $tipo = "free"; }
-
+    if ($error === '') {
+        $precio = (int)(isset($tpl['precio_default']) ? $tpl['precio_default'] : (isset($tpl['precio']) ? $tpl['precio'] : 0));
+        $cantidad = (int)(isset($tpl['cantidad_default']) ? $tpl['cantidad_default'] : (isset($tpl['cantidad_total']) ? $tpl['cantidad_total'] : 0));
+        $tipo = isset($tpl['tipo']) ? (string)$tpl['tipo'] : '';
+        if (!in_array($tipo, array('free', 'paga'), true)) $tipo = $precio > 0 ? 'paga' : 'free';
+        if ($tipo === 'free') $precio = 0;
+        $stIns = $pdo->prepare('INSERT INTO tipos_entrada (evento_id,nombre,tipo,precio,cantidad_total,cantidad_disponible,hora_limite,reglas_precio,qr_quantity) VALUES (:evento,:nombre,:tipo,:precio,:total,:disponible,:hora,:reglas,:qr)');
         $stIns->execute(array(
-          ":eid"  => $eventoId,
-          ":nom"  => ($tpl["nombre"] ?? ""),
-          ":tipo" => $tipo,
-          ":pre"  => $pre,
-          ":ct"   => $ct,
-          ":cd"   => $ct,
-          ":hl"   => $hl,
-          ":reg"  => $reg,
-          ":qr_quantity" => $qrQuantity,
+            ':evento' => $eventoId,
+            ':nombre' => isset($tpl['nombre']) ? (string)$tpl['nombre'] : '',
+            ':tipo' => $tipo,
+            ':precio' => $precio,
+            ':total' => $cantidad,
+            ':disponible' => $cantidad,
+            ':hora' => isset($tpl['hora_limite_default']) ? $tpl['hora_limite_default'] : (isset($tpl['hora_limite']) ? $tpl['hora_limite'] : null),
+            ':reglas' => isset($tpl['reglas_default']) ? $tpl['reglas_default'] : (isset($tpl['reglas_precio']) ? $tpl['reglas_precio'] : null),
+            ':qr' => isset($tpl['qr_quantity']) ? max(1, min(10, (int)$tpl['qr_quantity'])) : 1,
         ));
-$okMsg="Tipo agregado desde Mis Entradas.";
+        $okMsg = 'Tipo agregado desde Mis entradas.';
     }
 }
 
-// =======================
-// ELIMINAR TIPO DEL EVENTO
-// =======================
-if (isset($_GET['del_te'])) {
-    $teId=(int)$_GET['del_te'];
-
-    $st=$pdo->prepare("SELECT id FROM tipos_entrada WHERE id=? AND evento_id=?");
-    $st->execute(array($teId,$eventoId));
-    if($st->fetch()){
-        $pdo->prepare("DELETE FROM tipos_entrada WHERE id=?")->execute(array($teId));
-        header("Location: editar_evento.php?id=".$eventoId);
-        exit;
-    } else {
-        abort_404("Tipo inexistente.");
-    }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_type'])) {
+    $typeId = isset($_POST['type_id']) ? (int)$_POST['type_id'] : 0;
+    $st = $pdo->prepare('DELETE FROM tipos_entrada WHERE id=:id AND evento_id=:evento');
+    $st->execute(array(':id' => $typeId, ':evento' => $eventoId));
+    if ($st->rowCount() !== 1) abort_404('Tipo inexistente.');
+    header('Location: editar_evento.php?id=' . $eventoId, true, 303);
+    exit;
 }
 
-// ===== Tipos del evento =====
-$stTE=$pdo->prepare("SELECT * FROM tipos_entrada WHERE evento_id=? ORDER BY id DESC");
-$stTE->execute(array($eventoId));
-$tiposEvento=$stTE->fetchAll(PDO::FETCH_ASSOC);
+$stTE = $pdo->prepare('SELECT * FROM tipos_entrada WHERE evento_id=:evento ORDER BY id DESC');
+$stTE->execute(array(':evento' => $eventoId));
+$tiposEvento = $stTE->fetchAll(PDO::FETCH_ASSOC);
 
-// ===== Plantillas del admin =====
-$params=array();
-$sql="SELECT * FROM plantillas_entrada WHERE activo=1 ";
-if($tipoGlobal!=='super_admin'){
-    $sql.="AND creado_por_admin_id=? ";
-    $params[]=$adminId;
+$params = array();
+$sql = 'SELECT * FROM plantillas_entrada WHERE activo=1';
+if (!tickex_is_super_admin($cu)) {
+    $sql .= ' AND creado_por_admin_id=:admin';
+    $params[':admin'] = $adminId;
 }
-$sql.="ORDER BY categoria ASC, nombre ASC";
-$stTpl=$pdo->prepare($sql);
+$stTpl = $pdo->prepare($sql . ' ORDER BY categoria ASC, nombre ASC');
 $stTpl->execute($params);
-$plantillas=$stTpl->fetchAll(PDO::FETCH_ASSOC);
+$plantillas = $stTpl->fetchAll(PDO::FETCH_ASSOC);
 
-include __DIR__.'/inc/layout_top.php';
+$title = 'Editar evento';
+include __DIR__ . '/inc/layout_top.php';
 ?>
-
 <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel general</a>
-  <a class="btn secondary" href="panel_evento.php?id=<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$eventoId; ?>">Administrar entradas</a>
-  <span style="flex:1 1 auto;"></span>
-  <a class="btn danger" href="login.php?logout=1">Salir</a>
+  <a class="btn secondary" href="panel_evento.php">Mis eventos</a>
+  <a class="btn secondary" href="panel_evento.php?evento_id=<?php echo (int)$eventoId; ?>">Panel del evento</a>
 </div>
-
-<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- if($error): ?><div class="flash err"><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($error); ?></div><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- endif; ?>
-<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- if($okMsg): ?><div class="flash ok"><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($okMsg); ?></div><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- endif; ?>
+<?php if ($error !== ''): ?><div class="flash err"><?php echo e($error); ?></div><?php endif; ?>
+<?php if ($okMsg !== ''): ?><div class="flash ok"><?php echo e($okMsg); ?></div><?php endif; ?>
 
 <div class="card">
   <h2>Editar evento</h2>
-
   <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="save_evento" value="1">
-
-    <label>Nombre</label>
-    <input name="nombre" value="<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($evento['nombre']); ?>" required>
-
-    <label>Descripción</label>
-    <textarea name="descripcion" rows="3"><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e(isset($evento['descripcion'])?$evento['descripcion']:''); ?></textarea>
-
+    <label>Nombre</label><input name="nombre" value="<?php echo e($evento['nombre']); ?>" required>
+    <label>Descripción</label><textarea name="descripcion" rows="3"><?php echo e(isset($evento['descripcion']) ? $evento['descripcion'] : ''); ?></textarea>
     <label>Fechas (desde / hasta)</label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <div style="flex:1 1 160px;">
-        <input type="date" name="fecha_desde" value="<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e(isset($evento['fecha_desde'])?$evento['fecha_desde']:''); ?>">
-      </div>
-      <div style="flex:1 1 160px;">
-        <input type="date" name="fecha_hasta" value="<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e(isset($evento['fecha_hasta'])?$evento['fecha_hasta']:''); ?>">
-      </div>
-    </div>
-
-    <label>Flyer (PNG/JPG máx 2MB)</label>
-    <input type="file" name="flyer" accept="image/png,image/jpeg">
-
-    <div style="margin-top:10px;">
-      <button class="btn secondary" type="submit">Guardar cambios</button>
-    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;"><input type="date" name="fecha_desde" value="<?php echo e(isset($evento['fecha_desde']) ? $evento['fecha_desde'] : ''); ?>"><input type="date" name="fecha_hasta" value="<?php echo e(isset($evento['fecha_hasta']) ? $evento['fecha_hasta'] : ''); ?>"></div>
+    <label>Flyer (PNG/JPG, máximo 2 MB)</label><input type="file" name="flyer" accept="image/png,image/jpeg">
+    <div style="margin-top:10px;"><button class="btn" type="submit">Guardar cambios</button></div>
   </form>
 </div>
 
 <div class="card">
   <h2>Tipos de entrada del evento</h2>
-  <div class="muted">Estos son los tipos activos para este evento.</div>
-
-  <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- if(empty($tiposEvento)): ?>
-    <div class="muted" style="margin-top:8px;">Todavía no agregaste tipos.</div>
-  <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- else: ?>
-    <table class="table" style="margin-top:8px;">
-      <thead>
-        <tr>
-          <th>ID</th><th>Categoría</th><th>Nombre</th><th>Tipo</th><th>Precio</th>
-          <th>Cantidad</th><th>Hora límite</th><th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- foreach($tiposEvento as $te): ?>
-          <tr>
-            <td><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$te['id']; ?></td>
-            <td><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($te['categoria']); ?></td>
-            <td><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($te['nombre']); ?></td>
-            <td><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($te['tipo_venta']); ?></td>
-            <td>$<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$te['precio']; ?></td>
-            <td><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$te['cantidad_total']; ?></td>
-            <td><?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($te['hora_limite']); ?></td>
-            <td>
-              <a class="btn danger" style="padding:6px 10px;font-size:12px;"
-                 href="editar_evento.php?id=<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$eventoId; ?>&del_te=<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$te['id']; ?>"
-                 onclick="return confirm('¿Eliminar tipo <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($te['nombre']); ?>?');">🗑️</a>
-            </td>
-          </tr>
-        <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- endforeach; ?>
-      </tbody>
-    </table>
-  <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- endif; ?>
+  <?php if (!$tiposEvento): ?><div class="muted">Todavía no agregaste tipos.</div><?php else: ?>
+  <div style="overflow:auto;"><table class="table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Precio</th><th>Cantidad</th><th>Acciones</th></tr></thead><tbody>
+  <?php foreach ($tiposEvento as $te): ?><tr>
+    <td><?php echo e(isset($te['nombre']) ? $te['nombre'] : ''); ?></td>
+    <td><?php echo e(isset($te['tipo']) ? $te['tipo'] : (isset($te['tipo_venta']) ? $te['tipo_venta'] : '')); ?></td>
+    <td>$<?php echo number_format((float)(isset($te['precio']) ? $te['precio'] : 0), 0, ',', '.'); ?></td>
+    <td><?php echo (int)(isset($te['cantidad_total']) ? $te['cantidad_total'] : 0); ?></td>
+    <td><form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este tipo de entrada?');"><input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="delete_type" value="1"><input type="hidden" name="type_id" value="<?php echo (int)$te['id']; ?>"><button class="btn danger" type="submit">Eliminar</button></form></td>
+  </tr><?php endforeach; ?>
+  </tbody></table></div>
+  <?php endif; ?>
 </div>
 
 <div class="card">
-  <h2>Agregar desde Mis Entradas</h2>
-  <div class="muted">Copiás una plantilla tuya al evento en 1 click.</div>
-
-  <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- if(empty($plantillas)): ?>
-    <div class="muted" style="margin-top:8px;">No tenés plantillas activas todavía.</div>
-    <a class="btn secondary" href="plantillas_entrada.php" style="margin-top:8px;">Ir a Mis Entradas</a>
-  <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- else: ?>
-    <form method="post" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <input type="hidden" name="add_from_template" value="1">
-      <select name="tpl_id" required style="max-width:520px;">
-        <option value="">Elegí una plantilla...</option>
-        <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- foreach($plantillas as $p): ?>
-          <option value="<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo (int)$p['id']; ?>">
-            <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- echo e($p['categoria'].' — '.$p['nombre'].' ('.$p['tipo'].')'); ?>
-          </option>
-        <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- endforeach; ?>
-      </select>
-      <button class="btn secondary" type="submit">Agregar al evento</button>
-      <a class="btn secondary" href="plantillas_entrada.php">Gestionar Mis Entradas</a>
-    </form>
-  <?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- endif; ?>
+  <h2>Agregar desde Mis entradas</h2>
+  <?php if (!$plantillas): ?><div class="muted">No tenés plantillas activas todavía.</div><?php else: ?>
+  <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="add_from_template" value="1">
+    <select name="tpl_id" required><option value="">Elegí una plantilla...</option><?php foreach ($plantillas as $p): ?><option value="<?php echo (int)$p['id']; ?>"><?php echo e((isset($p['categoria']) ? $p['categoria'] . ' — ' : '') . $p['nombre']); ?></option><?php endforeach; ?></select>
+    <button class="btn secondary" type="submit">Agregar al evento</button>
+    <a class="btn secondary" href="mis_entradas.php">Gestionar Mis entradas</a>
+  </form>
+  <?php endif; ?>
 </div>
-
-<?php
-ini_set("display_errors",1);
-ini_set("display_startup_errors",1);
-error_reporting(E_ALL);
- include __DIR__.'/inc/layout_bottom.php'; ?>
+<?php include __DIR__ . '/inc/layout_bottom.php'; ?>

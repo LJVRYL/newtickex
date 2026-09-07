@@ -11,10 +11,17 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 }
 
 $pdo = db();
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
+$isSuper = in_array($rol, array('super_admin','superadmin'), true);
 $prefEventoId = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 
 ensure_produccion_table($pdo);
 ensure_produccion_assignment_table($pdo);
+$csrf = tickex_csrf_token();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+  http_response_code(403);
+  exit('Solicitud vencida o inválida.');
+}
 
 // Eventos visibles
 $colsEv = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
@@ -52,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         flash('warn','El nombre es obligatorio.');
     } else {
         try {
-            $stmt = $pdo->prepare("INSERT INTO produccion_artistas (nombre, tipo, categoria, precio, origen, pide_viaticos, viaticos_monto, telefono, email, notas) VALUES (:n,:t,:c,:p,:o,:v,:vm,:tel,:em,:no)");
+            $stmt = $pdo->prepare("INSERT INTO produccion_artistas (nombre, tipo, categoria, precio, origen, pide_viaticos, viaticos_monto, telefono, email, notas, owner_admin_id) VALUES (:n,:t,:c,:p,:o,:v,:vm,:tel,:em,:no,:owner)");
             $stmt->execute(array(
                 ':n' => $nombre,
                 ':t' => $tipo,
@@ -64,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
               ':tel'=> $telefono,
               ':em'=> $email,
                 ':no'=> $notas,
+                ':owner'=> $adminId,
             ));
             flash('ok','Artista agregado.');
         } catch (Exception $e) {
@@ -94,8 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         SET nombre=:n, tipo=:t, categoria=:c, precio=:p, origen=:o,
           pide_viaticos=:v, viaticos_monto=:vm, telefono=:tel, email=:em, notas=:no,
           updated_at=CURRENT_TIMESTAMP
-        WHERE id=:id");
-      $stmt->execute(array(
+        WHERE id=:id" . ($isSuper ? '' : ' AND owner_admin_id=:owner'));
+      $editParams = array(
         ':n'=>$nombre,
         ':t'=>$tipo,
         ':c'=>$categoria,
@@ -107,7 +115,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         ':em'=>$email,
         ':no'=>$notas,
         ':id'=>$id,
-      ));
+      );
+      if (!$isSuper) $editParams[':owner'] = $adminId;
+      $stmt->execute($editParams);
       flash('ok','Artista actualizado.');
       if ($prefEventoId > 0) {
         header('Location: produccion.php?evento_id='.(int)$prefEventoId);
@@ -145,6 +155,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
     foreach (array_keys($eventoSel) as $eid) { $selected[$eid] = true; }
 
+    $allowedEventIds = array();
+    foreach ($eventos as $allowedEvent) $allowedEventIds[(int)$allowedEvent['id']] = true;
+    foreach (array_keys($selected) as $selectedEventId) {
+      if (!isset($allowedEventIds[(int)$selectedEventId])) {
+        http_response_code(404);
+        exit('Evento no encontrado.');
+      }
+    }
+    if (!$isSuper) {
+      $ownedArtist = $pdo->prepare('SELECT 1 FROM produccion_artistas WHERE id=:id AND owner_admin_id=:owner LIMIT 1');
+      $ownedArtist->execute(array(':id'=>$artistaId, ':owner'=>$adminId));
+      if (!$ownedArtist->fetchColumn()) {
+        http_response_code(404);
+        exit('Artista no encontrado.');
+      }
+    }
+
     $ok = add_produccion_assignment_multi($pdo, $artistaId, array_keys($selected), $precio, $notasA);
     flash($ok ? 'ok' : 'err', $ok ? 'Artista asignado a '.count($selected).' evento(s).' : 'No se pudo asignar.');
     if ($prefEventoId > 0) {
@@ -159,7 +186,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
     if ($id > 0) {
         try {
-            $pdo->prepare('DELETE FROM produccion_artistas WHERE id = :id')->execute(array(':id'=>$id));
+            $deleteSql = 'DELETE FROM produccion_artistas WHERE id=:id' . ($isSuper ? '' : ' AND owner_admin_id=:owner');
+            $deleteParams = array(':id'=>$id);
+            if (!$isSuper) $deleteParams[':owner'] = $adminId;
+            $pdo->prepare($deleteSql)->execute($deleteParams);
             flash('ok','Artista eliminado.');
         } catch (Exception $e) {
             flash('err','No se pudo eliminar: '.$e->getMessage());
@@ -168,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Listado
-$artistas = get_produccion_artistas($pdo);
+$artistas = get_produccion_artistas($pdo, $adminId, $isSuper);
 
 $title = 'Producción';
 include __DIR__.'/inc/layout_top.php';
@@ -187,6 +217,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="max-width:900px;">
   <h3>Agregar artista</h3>
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="add_artista">
     <div>
       <label>Nombre</label>
@@ -254,6 +285,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="max-width:900px;">
   <h3>Asignar artista existente a eventos</h3>
   <form method="post" style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;align-items:end;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="assign_artist">
     <div>
       <label>Artista</label>
@@ -372,6 +404,7 @@ include __DIR__.'/inc/layout_top.php';
                 <div style="display:flex;flex-direction:column;gap:6px;">
                   <button class="btn secondary" type="button" onclick="toggleEdit(<?php echo (int)$a['id']; ?>)">Editar</button>
                   <form method="post" onsubmit="return confirm('¿Eliminar este artista?');">
+                    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="del_artista">
                     <input type="hidden" name="id" value="<?php echo (int)$a['id']; ?>">
                     <button class="btn danger" type="submit">Borrar</button>
@@ -382,6 +415,7 @@ include __DIR__.'/inc/layout_top.php';
             <tr id="edit-row-<?php echo (int)$a['id']; ?>" style="display:none;background:var(--panel-2);">
               <td colspan="13">
                 <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;align-items:end;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="edit_artista">
                   <input type="hidden" name="id" value="<?php echo (int)$a['id']; ?>">
                   <div>

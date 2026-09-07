@@ -38,6 +38,12 @@ if (!tickex_can_access_event($pdo, $evento_id, $cu)) {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    echo json_encode(array('error' => 'Solicitud vencida o inválida'));
+    exit;
+}
+
 if (!tickex_event_bridge_allowed($pdo, $evento_id)) {
     http_response_code(403);
     echo json_encode(array('error' => 'Bridge solo está disponible para cuentas internas'));

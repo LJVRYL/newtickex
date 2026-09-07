@@ -6,3 +6,9 @@
   # redirect that could change POST to GET or discard the ApiKey header.
   RewriteRule ^notification/tcwbh/?$ totalcoin_webhook.php [END]
 </IfModule>
+
+# Evita que copias de base, logs, respaldos o configuraciones históricas
+# puedan descargarse aunque accidentalmente queden dentro del document root.
+<FilesMatch "(?i)(^arca_config\.json$|\.(?:sqlite|sqlite3|db|sql|log|env|ini|bak|save|pem|key|crt|p12|pfx|tar|gz|zip)$)">
+  Require all denied
+</FilesMatch>
