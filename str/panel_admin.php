@@ -75,6 +75,18 @@ if ($tipoGlobal === 'admin_evento') {
 $pdo = db();
 tickex_event_trash_ensure_schema($pdo);
 
+// El superadministrador necesita una vista de plataforma; los organizadores
+// conservan debajo su panel operativo centrado en eventos.
+if (in_array($tipoGlobal, array('super_admin','superadmin'), true)) {
+  require_once __DIR__ . '/inc/superadmin_dashboard.php';
+  $superDashboard = tickex_superadmin_dashboard_data($pdo);
+  $title = 'Panel Superadmin';
+  include __DIR__ . '/inc/layout_top.php';
+  include __DIR__ . '/inc/superadmin_dashboard_view.php';
+  include __DIR__ . '/inc/layout_bottom.php';
+  exit;
+}
+
 // Contadores globales
 $totalEntradas = 0;
 $checkinsGlobal = 0;

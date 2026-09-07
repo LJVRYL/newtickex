@@ -1,0 +1,36 @@
+<?php
+require_once __DIR__ . '/../inc/superadmin_dashboard.php';
+function dashboard_assert($condition,$message){if(!$condition){fwrite(STDERR,'FAIL: '.$message.PHP_EOL);exit(1);}echo 'PASS: '.$message.PHP_EOL;}
+$pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE usuarios_admin(id INTEGER PRIMARY KEY,username TEXT,email TEXT,nombre TEXT,apellido TEXT,tipo_global TEXT,activo INTEGER)');
+$pdo->exec("INSERT INTO usuarios_admin VALUES(2,'str','str@example.com','Save','The Rave','admin_evento',1),(9,'juan','juan@example.com','Juan','','admin_evento',1),(10,'off','off@example.com','Off','','admin_evento',0),(99,'root','root@example.com','Root','','super_admin',1)");
+$pdo->exec('CREATE TABLE registro_pendientes(id INTEGER PRIMARY KEY,completado_en TEXT)');$pdo->exec("INSERT INTO registro_pendientes VALUES(1,'2026-01-01'),(2,NULL)");
+$pdo->exec('CREATE TABLE eventos(id INTEGER PRIMARY KEY,nombre TEXT,fecha_desde TEXT,fecha_hasta TEXT,publicado_site INTEGER,creado_por_admin_id INTEGER,borrado_en TEXT)');
+$pdo->exec("INSERT INTO eventos VALUES(15,'Vigente','2026-09-01','2026-09-10',1,2,NULL),(16,'Finalizado','2026-08-01','2026-08-02',1,2,NULL),(17,'Borrado','2026-09-01','2026-09-10',0,9,'2026-09-02')");
+$pdo->exec('CREATE TABLE entradas(id INTEGER PRIMARY KEY,evento_id INTEGER,oculto INTEGER,checked_in INTEGER)');$pdo->exec('INSERT INTO entradas VALUES(1,15,0,1),(2,15,0,0),(3,16,1,0)');
+$pdo->exec('CREATE TABLE tc_orders(id INTEGER PRIMARY KEY,request_id TEXT,amount REAL,payment_status TEXT,payment_provider TEXT,created_at TEXT,evento_id INTEGER,seller_admin_id INTEGER)');$pdo->exec("INSERT INTO tc_orders VALUES(1,'ok',1000,'confirmed','totalcoin','2026-09-01',15,2),(2,'wait',500,'pending','mercadopago','2026-09-02',15,2)");
+$pdo->exec('CREATE TABLE mercadopago_marketplace_accounts(admin_id INTEGER,status TEXT)');$pdo->exec("INSERT INTO mercadopago_marketplace_accounts VALUES(9,'connected')");
+$pdo->exec('CREATE TABLE communication_campaigns(id INTEGER PRIMARY KEY,removed_at TEXT,status TEXT)');$pdo->exec("INSERT INTO communication_campaigns VALUES(1,NULL,'failed'),(2,NULL,'sent')");
+tickex_support_ensure_schema($pdo);
+list($ok,$msg,$supportId)=tickex_support_create_ticket($pdo,2,array('event_id'=>15,'category'=>'events','subject'=>'Necesito ayuda','body'=>'El evento necesita una revisión completa.','priority'=>'urgent'));
+dashboard_assert($ok,'support fixture is created');
+$data=tickex_superadmin_dashboard_data($pdo,'2026-09-07');
+dashboard_assert($data['metrics']['organizers']===2,'dashboard counts only active organizers');
+dashboard_assert($data['metrics']['buyers']===1,'dashboard counts completed buyer accounts');
+dashboard_assert($data['metrics']['events']===2&&$data['metrics']['active_events']===1,'dashboard separates existing and active events');
+dashboard_assert($data['metrics']['issued']===2&&$data['metrics']['checkins']===1,'dashboard counts visible issued entries and check-ins');
+dashboard_assert((float)$data['metrics']['revenue']===1000.0,'dashboard revenue includes confirmed payments only');
+dashboard_assert($data['alerts']['payments_pending']===1,'dashboard flags pending payments');
+dashboard_assert($data['alerts']['support_waiting']===1,'dashboard flags support waiting for action');
+dashboard_assert($data['alerts']['mp_missing']===1,'dashboard flags active organizers without Mercado Pago');
+dashboard_assert($data['alerts']['campaigns_attention']===1,'dashboard flags failed campaigns');
+dashboard_assert(count($data['organizers'])===2,'inactive organizers stay out of the recent list');
+$panel=file_get_contents(__DIR__.'/../panel_admin.php');$legacy=file_get_contents(__DIR__.'/../superadmin.php');
+$eventsPage=file_get_contents(__DIR__.'/../superadmin_eventos.php');
+$usersPage=file_get_contents(__DIR__.'/../superadmin_usuarios.php');
+dashboard_assert(strpos($panel,'superadmin_dashboard_view.php')!==false,'main panel routes superadministrator to platform overview');
+dashboard_assert(strpos($legacy,"header('Location: panel_admin.php')")!==false,'legacy superadmin entry redirects to the unified panel');
+dashboard_assert(strpos($eventsPage,'LEFT JOIN usuarios_admin')!==false,'global events resolve the real organizer account');
+dashboard_assert(strpos($usersPage,'UPDATE usuarios SET rol')!==false&&strpos($usersPage,'UPDATE usuarios SET email_confirmado')!==false,'buyer actions update the buyer table');
+dashboard_assert($pdo->query('PRAGMA integrity_check')->fetchColumn()==='ok','dashboard queries keep database consistent');
+echo 'ALL SUPERADMIN DASHBOARD TESTS PASSED'.PHP_EOL;

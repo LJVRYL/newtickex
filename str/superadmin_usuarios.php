@@ -72,12 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashOk = 'Administrador independiente creado/actualizado. ID: ' . $newAdminId;
             } elseif ($accion === 'cambiar_rol' && $usuarioId > 0) {
                 $nuevoRol = (isset($_POST['nuevo_rol']) && $_POST['nuevo_rol'] === 'admin') ? 'admin' : 'cliente';
-                $stmt = $pdo->prepare('UPDATE usuarios_admin SET rol = :rol WHERE id = :id');
+                // La tabla que se lista en esta pantalla es usuarios. La promoción
+                // a administrador independiente se realiza únicamente por email arriba.
+                $stmt = $pdo->prepare('UPDATE usuarios SET rol = :rol WHERE id = :id');
                 $stmt->execute(array(':rol' => $nuevoRol, ':id' => $usuarioId));
                 $flashOk = 'Rol actualizado correctamente.';
             } elseif ($accion === 'cambiar_validado' && $usuarioId > 0) {
                 $nuevoVal = (isset($_POST['nuevo_validado']) && (string)$_POST['nuevo_validado'] === '1') ? 1 : 0;
-                $stmt = $pdo->prepare('UPDATE usuarios_admin SET email_confirmado = :val WHERE id = :id');
+                $stmt = $pdo->prepare('UPDATE usuarios SET email_confirmado = :val WHERE id = :id');
                 $stmt->execute(array(':val' => $nuevoVal, ':id' => $usuarioId));
                 $flashOk = 'Estado de validacion actualizado.';
             } elseif ($accion === 'bloquear' && $usuarioId > 0) {
@@ -86,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $email = (string)$stU->fetchColumn();
                 if ($email !== '') {
                     $reason = isset($_POST['reason']) ? trim((string)$_POST['reason']) : '';
-                    $adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+                    $adminId = tickex_admin_id($cu);
 
                     $stOff = $pdo->prepare('UPDATE user_blocks SET active = 0, unblocked_at = datetime(\'now\'), unblocked_by_admin_id = :aid WHERE active = 1 AND lower(email) = lower(:e)');
                     $stOff->execute(array(':aid' => $adminId, ':e' => $email));
@@ -102,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stU->execute(array(':id' => $usuarioId));
                 $email = (string)$stU->fetchColumn();
                 if ($email !== '') {
-                    $adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+                    $adminId = tickex_admin_id($cu);
                     $stOff = $pdo->prepare('UPDATE user_blocks SET active = 0, unblocked_at = datetime(\'now\'), unblocked_by_admin_id = :aid WHERE active = 1 AND lower(email) = lower(:e)');
                     $stOff->execute(array(':aid' => $adminId, ':e' => $email));
                     $flashOk = 'Usuario desbloqueado: ' . e($email);
