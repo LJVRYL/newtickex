@@ -49,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
         $error = 'La sesión venció. Volvé a abrir el enlace del email.';
     } elseif ($pass1 === '' || $pass2 === '') {
         $error = 'La contraseña es obligatoria.';
-    } elseif (strlen($pass1) < 6) {
-        $error = 'La contraseña debe tener al menos 6 caracteres.';
+    } elseif (strlen($pass1) < 10) {
+        $error = 'La contraseña debe tener al menos 10 caracteres.';
     } elseif ($pass1 !== $pass2) {
         $error = 'Las contraseñas no coinciden.';
     }
@@ -132,7 +132,7 @@ require __DIR__ . '/inc/layout_top.php';
   </div>
   <form method="post">
     <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
-    <label for="pass1">Nueva contraseña (mín 6)</label>
+    <label for="pass1">Nueva contraseña (mínimo 10)</label>
     <input type="password" id="pass1" name="pass1" required autocomplete="new-password" value="<?php echo e($pass1); ?>">
 
     <label for="pass2">Repetir contraseña</label>

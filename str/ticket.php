@@ -96,13 +96,22 @@ if ($eventoId > 0) {
     }
 }
 
-// QR apunta a checkin (que SOLO checkinea con sesión puerta)
-$baseUrl    = 'https://str.tickex.com.ar';
-$checkinUrl = $baseUrl . '/checkin.php?c=' . urlencode($codigo);
+// QR apunta a checkin (que SOLO checkinea con sesión puerta).
+// Tanto el QR como el enlace compartible mantienen opaco el código interno.
+$configuredBaseUrl = getenv('TICKEX_SITE_URL');
+if (is_string($configuredBaseUrl) && trim($configuredBaseUrl) !== '') {
+    $baseUrl = rtrim(trim($configuredBaseUrl), '/');
+} elseif (!empty($_SERVER['HTTP_HOST'])) {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $baseUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
+} else {
+    $baseUrl = 'https://str.tickex.com.ar';
+}
+$checkinUrl = tickex_secure_checkin_url($pdo, $baseUrl, (int)$entrada['id'], $codigo);
 // QR externo por ahora (simple)
 $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urlencode($checkinUrl);
 
-$ticketLink = (isset($_SERVER['HTTP_HOST']) ? 'http://'.$_SERVER['HTTP_HOST'] : $baseUrl).'/ticket.php?c='.urlencode($codigo);
+$ticketLink = tickex_secure_ticket_url($pdo, $baseUrl, (int)$entrada['id'], $codigo);
 $mensajeBase = "Hola, aqui tienes tu entrada:\nEvento: " . ($eventoNombre ?: 'TICKEX') . "\nNombre: " . $nombre . "\nTipo: " . $tipoDesc . "\nCódigo: " . $codigo . "\nVer ticket: " . $ticketLink;
 $waMensaje = $mensajeBase;
 $mailSubject = 'Tu entrada - ' . ($eventoNombre ?: 'TICKEX');

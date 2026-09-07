@@ -5,8 +5,9 @@ tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/notificaciones.php';
+require_once __DIR__ . '/inc/customer_portal.php';
 
-if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
+if (!isset($_SESSION['auth_context'], $_SESSION['usuario_id']) || $_SESSION['auth_context'] !== 'user' || (int)$_SESSION['usuario_id'] <= 0) {
   header('Location: login.php');
   exit;
 }
@@ -134,6 +135,55 @@ function _tickex_admin_display($pdo, $adminId)
     }
   } catch (Exception $e) {}
   return '#' . $aid;
+}
+
+// --- Datos personales y seguridad de la cuenta ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_profile') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  $nombre = isset($_POST['nombre']) ? trim((string)$_POST['nombre']) : '';
+  $apellido = isset($_POST['apellido']) ? trim((string)$_POST['apellido']) : '';
+  $apodo = isset($_POST['apodo']) ? trim((string)$_POST['apodo']) : '';
+  $dni = isset($_POST['dni']) ? preg_replace('/\D+/', '', (string)$_POST['dni']) : '';
+  $genero = isset($_POST['genero']) ? trim((string)$_POST['genero']) : '';
+  if (!tickex_csrf_verify($provided)) $flashErr = 'La sesión venció. Actualizá la página.';
+  elseif ($nombre === '' || $apellido === '') $flashErr = 'Nombre y apellido son obligatorios.';
+  elseif (strlen($nombre) > 80 || strlen($apellido) > 80) $flashErr = 'Nombre o apellido demasiado largo.';
+  elseif ($apodo !== '' && !preg_match('/^[a-zA-Z0-9_-]{3,32}$/', $apodo)) $flashErr = 'El Tickex ID debe tener entre 3 y 32 letras, números, guiones o guiones bajos.';
+  elseif ($dni !== '' && (strlen($dni) < 7 || strlen($dni) > 9)) $flashErr = 'Revisá el DNI ingresado.';
+  else {
+    try {
+      if ($apodo !== '') {
+        $dup = $pdo->prepare('SELECT 1 FROM registro_pendientes WHERE lower(apodo)=lower(:apodo) AND id<>:id LIMIT 1');
+        $dup->execute(array(':apodo' => $apodo, ':id' => $usuarioId));
+        if ($dup->fetchColumn()) $flashErr = 'Ese Tickex ID ya está siendo utilizado.';
+      }
+      if ($flashErr === '') {
+        $update = $pdo->prepare('UPDATE registro_pendientes SET nombre=:nombre,apellido=:apellido,apodo=:apodo,dni=:dni,genero=:genero WHERE id=:id');
+        $update->execute(array(':nombre'=>$nombre, ':apellido'=>$apellido, ':apodo'=>$apodo, ':dni'=>$dni, ':genero'=>$genero, ':id'=>$usuarioId));
+        $u['nombre']=$nombre; $u['apellido']=$apellido; $u['apodo']=$apodo; $u['dni']=$dni; $u['genero']=$genero;
+        $_SESSION['usuario_nombre']=trim($nombre.' '.$apellido); $_SESSION['nombre']=$_SESSION['usuario_nombre'];
+        $_SESSION['first_name']=$nombre; $_SESSION['last_name']=$apellido; $_SESSION['dni']=$dni;
+        $flashOk = 'Datos personales actualizados.';
+      }
+    } catch (Exception $e) { $flashErr = 'No pudimos actualizar tus datos.'; }
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'change_password') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  if (!tickex_csrf_verify($provided)) {
+    $flashErr = 'La sesión venció. Actualizá la página.';
+  } else {
+    list($passwordOk, $passwordMessage) = tickex_customer_portal_change_password(
+      $pdo,
+      $usuarioId,
+      isset($_POST['pass_actual']) ? (string)$_POST['pass_actual'] : '',
+      isset($_POST['pass_nueva']) ? (string)$_POST['pass_nueva'] : '',
+      isset($_POST['pass_repite']) ? (string)$_POST['pass_repite'] : ''
+    );
+    if ($passwordOk) { $flashOk = $passwordMessage; $u = tickex_customer_portal_user($pdo, $usuarioId); }
+    else $flashErr = $passwordMessage;
+  }
 }
 
 // --- Invitación de staff (admin -> cliente) ---
@@ -328,28 +378,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 include __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="card" style="max-width:600px;margin:0 auto 16px auto;">
-  <h2>Mi perfil</h2>
-  <div style="display:grid;grid-template-columns:120px 1fr;row-gap:6px;column-gap:8px;font-size:14px;margin-top:8px;">
-    <div style="color:var(--muted);">Nombre</div>
-    <div><?php echo htmlspecialchars($u['nombre'], ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">Apellido</div>
-    <div><?php echo htmlspecialchars($u['apellido'], ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">Mi Tickex ID</div>
-    <div><?php echo htmlspecialchars(($u['apodo'] && $u['apodo'] !== '') ? (string)$u['apodo'] : ('#' . (int)$u['id']), ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">Género</div>
-    <div><?php echo htmlspecialchars($u['genero'], ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">Email</div>
-    <div><?php echo htmlspecialchars($u['email'], ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">DNI</div>
-    <div><?php echo htmlspecialchars($u['dni'], ENT_QUOTES, 'UTF-8'); ?></div>
-    <div style="color:var(--muted);">Creado</div>
-    <div><?php echo htmlspecialchars($u['creado_en'], ENT_QUOTES, 'UTF-8'); ?></div>
-  </div>
+<div class="card" style="max-width:760px;margin:0 auto 16px auto;">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap;"><div><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;">Cuenta de comprador</div><h2 style="margin:5px 0;">Mi perfil</h2><p class="muted" style="margin:0;">Actualizá tus datos y administrá la seguridad de tu cuenta.</p></div><a class="btn secondary" href="panel_usuario.php">Mis entradas</a></div>
 </div>
 
 <?php if ($flashErr !== '' || $flashOk !== ''): ?>
-  <div class="card" style="max-width:600px;margin:0 auto 16px auto;">
+  <div class="card" style="max-width:760px;margin:0 auto 16px auto;">
     <?php if ($flashErr !== ''): ?>
       <div class="flash err" style="margin:0;"><?php echo htmlspecialchars($flashErr, ENT_QUOTES, 'UTF-8'); ?></div>
     <?php endif; ?>
@@ -398,8 +432,22 @@ try {
 }
 ?>
 
+<div class="card" style="max-width:760px;margin:0 auto 16px auto;">
+  <h3 style="margin-top:0;">Datos personales</h3>
+  <form method="post" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+    <input type="hidden" name="action" value="update_profile"><input type="hidden" name="csrf" value="<?php echo htmlspecialchars(tickex_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+    <label>Nombre<input name="nombre" required maxlength="80" value="<?php echo htmlspecialchars($u['nombre'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+    <label>Apellido<input name="apellido" required maxlength="80" value="<?php echo htmlspecialchars($u['apellido'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+    <label>Tickex ID<input name="apodo" minlength="3" maxlength="32" value="<?php echo htmlspecialchars($u['apodo'], ENT_QUOTES, 'UTF-8'); ?>"><small class="muted">Letras, números, guiones y guiones bajos.</small></label>
+    <label>DNI<input name="dni" inputmode="numeric" maxlength="9" value="<?php echo htmlspecialchars($u['dni'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+    <label>Género<input name="genero" maxlength="40" value="<?php echo htmlspecialchars($u['genero'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+    <label>Email<input value="<?php echo htmlspecialchars($u['email'], ENT_QUOTES, 'UTF-8'); ?>" disabled><small class="muted">El email identifica tus entradas. Su cambio requiere soporte.</small></label>
+    <div style="grid-column:1/-1;"><button class="btn" type="submit">Guardar datos</button></div>
+  </form>
+</div>
+
 <?php if (!empty($staffInvites)): ?>
-  <div class="card" style="max-width:600px;margin:0 auto 16px auto;">
+  <div class="card" id="invitaciones" style="max-width:760px;margin:0 auto 16px auto;">
     <h3>Invitaciones de staff</h3>
     <div class="muted" style="font-size:13px;margin:6px 0 10px 0;">Un admin te invitó a ser staff. Podés aceptar o rechazar.</div>
     <div style="overflow:auto;">
@@ -440,12 +488,17 @@ try {
   </div>
 <?php endif; ?>
 
-<div class="card" style="max-width:600px;margin:0 auto 16px auto;">
+<div class="card" style="max-width:760px;margin:0 auto 16px auto;">
   <h3>Seguridad</h3>
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
     <input type="hidden" name="action" value="change_password">
+    <input type="hidden" name="csrf" value="<?php echo htmlspecialchars(tickex_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
     <div>
-      <label for="pass_nueva">Nueva contraseña (mín 6)</label>
+      <label for="pass_actual">Contraseña actual</label>
+      <input type="password" id="pass_actual" name="pass_actual" autocomplete="current-password" required>
+    </div>
+    <div>
+      <label for="pass_nueva">Nueva contraseña (mínimo 10)</label>
       <input type="password" id="pass_nueva" name="pass_nueva" autocomplete="new-password" required>
     </div>
     <div>
@@ -459,7 +512,7 @@ try {
   </form>
 </div>
 
-<div class="card" style="max-width:600px;margin:0 auto 16px auto;">
+<div class="card" style="max-width:760px;margin:0 auto 16px auto;">
   <h3>Revendedores</h3>
   <div style="font-size:13px;color:var(--muted);margin:6px 0 10px 0;">
     Para solicitar ser revendedor, ingresá el <strong>Tickex ID</strong> del administrador (ej: <strong>STR</strong> o <strong>#12</strong>). El admin recibirá tu solicitud y podrá aprobarla o rechazarla.
