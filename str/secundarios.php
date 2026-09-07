@@ -2,15 +2,15 @@
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__ . '/inc/mail.php';
 require_once __DIR__ . '/inc/staff_roles.php';
+require_once __DIR__ . '/inc/staff_operations.php';
 $title = "Mi staff – Administrador";
 
-// ===== AUTH: solo admin_evento o super_admin =====
-require_login();
-
 $cu = current_user();
-$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
-if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
-    header("Location: login.php");
+$tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($cu['rol']) ? (string)$cu['rol'] : '');
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+if (!$adminContext || !in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
+    $next = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '/secundarios.php';
+    header('Location: /login_admin.php?next=' . urlencode($next), true, 302);
     exit;
 }
 
@@ -24,6 +24,7 @@ if ($adminId <= 0) {
 }
 
 $pdo = db();
+tickex_staff_operations_ensure_schema($pdo);
 tickex_staff_roles_ensure_table($pdo);
 tickex_staff_roles_seed_defaults($pdo, $adminId);
 $staffRoles = tickex_staff_roles_get_all($pdo, $adminId);
@@ -104,6 +105,18 @@ function _tickex_is_super($tipoGlobal)
   return in_array($tipoGlobal, array('super_admin','superadmin'), true);
 }
 
+$blockedPostAction = false;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $requestedAction = isset($_POST['action']) ? (string)$_POST['action'] : '';
+  if (in_array($requestedAction, array('delete_staff', 'update_costo', 'assign_staff_event', 'remove_staff_event'), true)) {
+    $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+    if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
+      flash('err', 'CSRF inválido. Actualizá la página e intentá de nuevo.');
+      $blockedPostAction = true;
+    }
+  }
+}
+
 /* =========================================================
    INVITAR STAFF POR EMAIL (nuevo modelo) (POST)
    ========================================================= */
@@ -114,8 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   } else {
     $email = isset($_POST['email']) ? trim((string)$_POST['email']) : '';
     $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
-    $mensaje = null;
-    $rolStaff = 'puerta';
+    $mensaje = isset($_POST['mensaje']) ? trim((string)$_POST['mensaje']) : '';
+    $rolStaff = isset($_POST['rol_staff']) ? trim((string)$_POST['rol_staff']) : 'puerta';
+    if (!isset($staffRolesMap[$rolStaff])) $rolStaff = 'puerta';
 
     $clienteIdByTickex = 0;
     if ($tickexId !== '') {
@@ -255,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
               'email' => $email,
               'perfil_url' => $perfilUrl,
               'register_url' => $registerUrl,
-                'mensaje' => '',
+                'mensaje' => $mensaje,
             ),
             array(
               'context' => 'staff_invite',
@@ -346,6 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           $stUp = $pdo->prepare('UPDATE staff_admins SET rol_staff = :r WHERE owner_admin_id = :aid AND cliente_id = :cid');
           $stUp->execute(array(':r' => $rolStaff, ':aid' => $adminId, ':cid' => $clienteId));
         }
+        if ($stUp->rowCount()) tickex_staff_audit($pdo,$adminId,$adminId,'global_role_changed',$clienteId,null,array('role'=>$rolStaff));
         flash('ok', 'Rol de staff actualizado.');
       } catch (Exception $e) {
         flash('err', 'No se pudo actualizar el rol.');
@@ -357,7 +372,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 /* =========================================================
    ELIMINAR STAFF (POST)
    ========================================================= */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_staff') {
+if (!$blockedPostAction && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_staff') {
     $staffId = isset($_POST['staff_id']) ? (int)$_POST['staff_id'] : 0;
 
     if ($staffId <= 0) {
@@ -413,7 +428,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 /* =========================================================
    ACTUALIZAR COSTO SERVICIO (POST)
    ========================================================= */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_costo') {
+if (!$blockedPostAction && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_costo') {
   $staffId = isset($_POST['staff_id']) ? (int)$_POST['staff_id'] : 0;
   $costoServ = isset($_POST['costo_servicio']) ? (float)$_POST['costo_servicio'] : 0;
 
@@ -488,7 +503,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   /* =========================================================
      ASIGNAR STAFF EXISTENTE A UN EVENTO (POST)
      ========================================================= */
-  if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'assign_staff_event') {
+  if (!$blockedPostAction && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'assign_staff_event') {
     $staffIdAsign = isset($_POST['staff_id']) ? (int)$_POST['staff_id'] : 0;
     $clienteIdAsign = isset($_POST['cliente_id']) ? (int)$_POST['cliente_id'] : 0;
     if ($staffIdAsign <= 0 && $clienteIdAsign > 0) {
@@ -545,20 +560,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }
             foreach (array_keys($eventosAsign) as $eid) { $selectedIds[$eid] = true; }
 
-            $del = $pdo->prepare('DELETE FROM staff_eventos WHERE staff_id = :id');
-            $del->execute(array(':id' => $staffIdAsign));
-
             if (!empty($selectedIds)) {
-              $ins = $pdo->prepare('INSERT OR REPLACE INTO staff_eventos (staff_id, evento_id, costo_servicio) VALUES (:sid, :eid, :c)');
               foreach ($selectedIds as $eid => $v) {
-                $ins->execute(array(':sid' => $staffIdAsign, ':eid' => $eid, ':c' => $costoAsign));
+                tickex_staff_assign_event($pdo,$adminId,$adminId,$staffIdAsign,$eid,$rolEventoSet,$costoAsign);
               }
             }
 
             $upRel = $pdo->prepare('UPDATE staff_admins SET rol_staff = COALESCE(NULLIF(:r,\'\'), rol_staff), activo = 1 WHERE id = :id');
             $upRel->execute(array(':r' => $rolEventoSet, ':id' => (int)$staffRel['id']));
 
-            flash('ok', 'Staff asignado a ' . count($selectedIds) . ' evento(s).');
+            flash('ok', 'Asignación agregada o actualizada en ' . count($selectedIds) . ' evento(s). Las demás se conservaron.');
           } catch (Exception $e) {
             flash('err', 'Error al asignar: ' . $e->getMessage());
           }
@@ -588,10 +599,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             flash('err', 'No tenés permiso para asignar este staff.');
           } else {
             try {
-              // limpiar asignaciones previas
-              $del = $pdo->prepare("DELETE FROM staff_eventos WHERE staff_id = :id");
-              $del->execute(array(':id'=>$staffIdAsign));
-
               $selectedIds = array();
               if ($allEvents) {
                 $stmtEvAll = $pdo->query("SELECT id FROM eventos");
@@ -601,9 +608,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
               foreach (array_keys($eventosAsign) as $eid) { $selectedIds[$eid] = true; }
 
               if (!empty($selectedIds)) {
-                $ins = $pdo->prepare("INSERT OR REPLACE INTO staff_eventos (staff_id, evento_id, costo_servicio) VALUES (:sid, :eid, :c)");
+                $ins = $pdo->prepare("INSERT OR REPLACE INTO staff_eventos (staff_id, evento_id, costo_servicio, rol_staff) VALUES (:sid, :eid, :c, :rol)");
                 foreach ($selectedIds as $eid => $v) {
-                  $ins->execute(array(':sid'=>$staffIdAsign, ':eid'=>$eid, ':c'=>$costoAsign));
+                  $ins->execute(array(':sid'=>$staffIdAsign, ':eid'=>$eid, ':c'=>$costoAsign, ':rol'=>$rolEventoSet));
                 }
                 $first = array_key_first($selectedIds);
                 $upd = $pdo->prepare("UPDATE usuarios_admin SET evento_id = :eid, rol_evento = :rol, activo = 1 WHERE id = :id");
@@ -614,7 +621,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 ));
               }
 
-              flash('ok', 'Staff asignado a '.count($selectedIds).' evento(s).');
+              flash('ok', 'Asignación agregada o actualizada en '.count($selectedIds).' evento(s).');
             } catch (Exception $e) {
               flash('err', 'Error al asignar: '.$e->getMessage());
             }
@@ -623,6 +630,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       }
     }
   }
+
+if (!$blockedPostAction && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'remove_staff_event') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  $staffRemove = isset($_POST['cliente_id']) ? (int)$_POST['cliente_id'] : 0;
+  $eventRemove = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
+  if (!tickex_csrf_verify($provided)) {
+    flash('err','La sesión venció. Recargá la página.');
+  } elseif ($staffRemove <= 0 || $eventRemove <= 0) {
+    flash('warn','Asignación inválida.');
+  } else {
+    try {
+      if (tickex_staff_remove_event($pdo,$adminId,$adminId,$staffRemove,$eventRemove)) flash('ok','Asignación quitada. Las demás se conservaron.');
+      else flash('warn','La asignación ya no existía.');
+    } catch (Exception $e) { flash('err','No se pudo quitar la asignación.'); }
+  }
+}
 
 /* =========================================================
    CREAR STAFF (POST)
@@ -834,53 +857,7 @@ if ($tipoGlobal === 'super_admin' || $tipoGlobal === 'superadmin') {
   }
 }
 
-include __DIR__.'/inc/layout_top.php';
-?>
-
-<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
-  <?php if ($prefEventoId > 0): ?>
-    <a class="btn" href="secundarios.php" style="background:var(--ok);color:#04150a;">+ Agregar staff</a>
-  <?php endif; ?>
-  <?php if ($prefEventoId <= 0): ?>
-    <a class="btn secondary" href="<?php echo _tickex_is_super($tipoGlobal) ? 'superadmin_revendedores.php' : 'admin_revendedores.php'; ?>">Revendedores</a>
-    <a class="btn secondary" href="roles_staff.php">Roles staff</a>
-  <?php endif; ?>
-  <span style="flex:1 1 auto;"></span>
-  <a class="btn danger" href="login.php?logout=1">Salir</a>
-</div>
-
-<div class="card">
-  <h2>Mi staff</h2>
-  <div style="color:var(--muted);font-size:14px;">
-    Administrá desde acá tu equipo, sus roles y los revendedores. El staff se maneja por invitación (con aceptación obligatoria) sobre cuentas de cliente.
-  </div>
-</div>
-
-<?php if ($prefEventoId <= 0): ?>
-<div class="card" style="max-width:700px;">
-  <h3>Invitar staff</h3>
-  <div class="muted" style="margin:6px 0 10px 0;">Podés invitar por email o por Tickex ID (apodo). Si no tiene cuenta, recibe invitación para registrarse y luego aceptar.</div>
-
-  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
-    <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
-    <input type="hidden" name="action" value="staff_invite">
-
-    <label>Email (opcional)
-      <input type="email" name="email" placeholder="persona@email.com">
-    </label>
-    <label>Tickex ID (opcional)
-      <input type="text" name="tickex_id" placeholder="Ej: Senchi o #123">
-    </label>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn" type="submit">Enviar invitación</button>
-    </div>
-  </form>
-</div>
-<?php endif; ?>
-
-<?php
-// Listado nuevo: staff activo y pendientes por invitación (por admin)
+// ===== Equipo aceptado, invitaciones y asignaciones =====
 $staffNuevo = array();
 $staffPendientes = array();
 try {
@@ -898,7 +875,7 @@ try {
 }
 
 try {
-  $stP = $pdo->prepare("SELECT id, email, mensaje, created_at
+  $stP = $pdo->prepare("SELECT id, email, mensaje, rol_staff, created_at
     FROM staff_admin_invitaciones
     WHERE owner_admin_id = :aid AND estado = 'pending'
     ORDER BY id DESC
@@ -909,20 +886,98 @@ try {
   $staffPendientes = array();
 }
 
+$eventosMap = array();
+foreach ($eventos as $eventRow) {
+  $eventosMap[(int)$eventRow['id']] = $eventRow;
+}
+if ($prefEventoId > 0 && !isset($eventosMap[$prefEventoId])) {
+  http_response_code(404);
+  if (function_exists('abort_404')) abort_404('Evento no encontrado o sin permiso.');
+  echo 'Evento no encontrado o sin permiso.';
+  exit;
+}
+$staffAssignments = array();
+$totalAssignments = 0;
+$rolesInUse = array();
+foreach ($staffNuevo as $staffMember) {
+  $staffId = (int)$staffMember['cliente_id'];
+  $staffAssignments[$staffId] = array();
+  if (!empty($staffMember['rol_staff'])) $rolesInUse[(string)$staffMember['rol_staff']] = true;
+}
+if (!empty($staffAssignments)) {
+  try {
+    $staffIds = array_keys($staffAssignments);
+    $placeholders = implode(',', array_fill(0, count($staffIds), '?'));
+    $stAssignments = $pdo->prepare('SELECT staff_id, evento_id, COALESCE(costo_servicio,0) AS costo_servicio, rol_staff FROM staff_eventos WHERE staff_id IN (' . $placeholders . ') ORDER BY id DESC');
+    $stAssignments->execute($staffIds);
+    foreach ($stAssignments->fetchAll(PDO::FETCH_ASSOC) as $assignment) {
+      $staffId = (int)$assignment['staff_id'];
+      $eventId = (int)$assignment['evento_id'];
+      if (!isset($staffAssignments[$staffId]) || !isset($eventosMap[$eventId])) continue;
+      $assignment['evento_nombre'] = $eventosMap[$eventId]['nombre'];
+      $assignment['evento_slug'] = $eventosMap[$eventId]['slug'];
+      $staffAssignments[$staffId][] = $assignment;
+      $totalAssignments++;
+    }
+  } catch (Exception $e) {
+    $staffAssignments = array();
+  }
+}
+
+$prefEventoNombre = '';
+if ($prefEventoId > 0 && isset($eventosMap[$prefEventoId])) {
+  $prefEventoNombre = (string)$eventosMap[$prefEventoId]['nombre'];
+}
+
+include __DIR__.'/inc/layout_top.php';
+?>
+
+<style>
+  .staff-hero{position:relative;overflow:hidden;padding:28px;background:radial-gradient(circle at 88% 18%,rgba(43,213,164,.17),transparent 29%),linear-gradient(135deg,rgba(24,77,82,.78),rgba(30,27,77,.95))}
+  .staff-hero:after{content:"";position:absolute;width:300px;height:300px;right:-105px;bottom:-205px;border:1px solid rgba(88,226,192,.22);border-radius:50%}
+  .staff-eyebrow{color:#54e3c1;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.staff-hero h1{margin:7px 0 6px;font-size:clamp(28px,4vw,44px)}.staff-hero p{margin:0;color:var(--muted);max-width:700px}
+  .staff-toolbar{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}.staff-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .staff-stats{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:10px;margin-top:24px}.staff-stat{padding:13px 15px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(6,10,22,.38)}.staff-stat span{display:block;color:var(--muted);font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}.staff-stat strong{display:block;margin-top:3px;font-size:22px}
+  .staff-section{padding:0}.staff-section>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px}.staff-section>summary::-webkit-details-marker{display:none}.staff-section>summary:after{content:"+";display:grid;place-items:center;width:32px;height:32px;flex:0 0 auto;border:1px solid var(--line);border-radius:10px;color:#62dfc2;font-size:22px}.staff-section[open]>summary:after{content:"−"}.staff-section-title{font-size:18px;font-weight:800}.staff-section-subtitle{margin-top:3px;color:var(--muted);font-size:13px}.staff-section-body{border-top:1px solid var(--line);padding:22px}
+  .staff-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.staff-form-field.full{grid-column:1/-1}.staff-form-field label,.staff-assign-field label{display:block;margin-bottom:6px;font-size:12px;font-weight:750}.staff-form-field input,.staff-form-field select,.staff-form-field textarea,.staff-assign-field input,.staff-assign-field select{width:100%}.staff-form-hint{margin-top:5px;color:var(--muted);font-size:11px;line-height:1.45}.staff-form-actions{display:flex;justify-content:flex-end;gap:8px;grid-column:1/-1;padding-top:5px}
+  .staff-list-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:14px}.staff-list-head h2{margin:0}.staff-list-head p{margin:4px 0 0;color:var(--muted);font-size:13px}.staff-member-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:12px}
+  .staff-member{padding:17px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(145deg,rgba(18,26,43,.82),rgba(10,15,29,.78));min-width:0}.staff-member-head{display:flex;gap:12px;align-items:center}.staff-avatar{width:48px;height:48px;flex:0 0 auto;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#6f4cf4,#238f8b);color:#fff;font-size:17px;font-weight:850}.staff-member-name{font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.staff-member-email{margin-top:2px;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .staff-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}.staff-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2);font-size:11px;font-weight:750}.staff-badge.active{color:var(--ok)}.staff-badge.pending{color:var(--warn)}.staff-events{margin-top:13px;padding-top:13px;border-top:1px solid var(--line)}.staff-events-label{margin-bottom:7px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.staff-event-chips{display:flex;gap:6px;flex-wrap:wrap}.staff-event-chip{appearance:none;padding:6px 9px;border:1px solid rgba(145,126,255,.28);border-radius:8px;background:rgba(90,72,168,.22);color:#e9e5ff;font:inherit;font-size:11px;font-weight:750;line-height:1.25;cursor:pointer}.staff-event-chip:hover{border-color:rgba(145,126,255,.55);background:rgba(104,83,194,.32);color:#fff}.staff-event-empty{font-size:12px;color:var(--muted)}
+  .staff-member-controls{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:end;margin-top:14px}.staff-member-controls label{display:block;margin-bottom:5px;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.staff-member-controls select{width:100%}.staff-member-controls form{margin:0}.staff-pending-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:10px}.staff-pending-card{padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(10,16,30,.48)}.staff-pending-card strong{display:block;overflow:hidden;text-overflow:ellipsis}.staff-pending-meta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;color:var(--muted);font-size:11px}.staff-pending-message{margin-top:8px;font-size:12px;color:var(--muted)}
+  .staff-assignment-grid{display:grid;grid-template-columns:1.2fr 1fr .8fr .8fr;gap:12px;align-items:end}.staff-check{display:flex!important;gap:7px;align-items:center;margin-top:8px!important;font-weight:600!important}.staff-check input{width:auto}.staff-model{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}.staff-model h2{margin:0 0 5px}.staff-model p{margin:0;color:var(--muted);font-size:13px;max-width:720px}
+  @media(max-width:900px){.staff-assignment-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.staff-hero{padding:22px}.staff-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-actions,.staff-actions .btn,.staff-form-actions .btn{width:100%}.staff-actions .btn,.staff-form-actions .btn{text-align:center}.staff-form-grid,.staff-assignment-grid{grid-template-columns:1fr}.staff-form-field.full,.staff-form-actions{grid-column:auto}.staff-member-controls{grid-template-columns:1fr}.staff-member-controls .btn{width:100%}}
+</style>
+
+<div class="card staff-hero">
+  <div class="staff-toolbar"><div><div class="staff-eyebrow"><?php echo $prefEventoId > 0 ? 'Equipo del evento' : 'Centro de equipo'; ?></div><h1><?php echo $prefEventoNombre !== '' ? 'Staff de ' . e($prefEventoNombre) : 'Mi staff'; ?></h1><p>Invitá personas, definí qué pueden hacer y organizá su participación en cada evento.</p></div><div class="staff-actions"><a class="btn secondary" href="panel_admin.php">Volver al panel</a><?php if($prefEventoId>0): ?><a class="btn secondary" href="staff_operaciones.php?evento_id=<?php echo (int)$prefEventoId; ?>">Operaciones</a><a class="btn secondary" href="secundarios.php">Ver todo el equipo</a><?php endif; ?><a class="btn" href="#invitar-staff">Invitar persona</a></div></div>
+  <div class="staff-stats"><div class="staff-stat"><span>Equipo activo</span><strong><?php echo count($staffNuevo); ?></strong></div><div class="staff-stat"><span>Invitaciones</span><strong><?php echo count($staffPendientes); ?></strong></div><div class="staff-stat"><span>Asignaciones</span><strong><?php echo (int)$totalAssignments; ?></strong></div><div class="staff-stat"><span>Roles en uso</span><strong><?php echo count($rolesInUse); ?></strong></div></div>
+</div>
+
+<details class="card staff-section" id="invitar-staff"<?php echo empty($staffNuevo)?' open':''; ?>><summary><div><div class="staff-section-title">Invitar al equipo</div><div class="staff-section-subtitle">La persona debe aceptar la invitación antes de acceder.</div></div></summary><div class="staff-section-body">
+  <form method="post" class="staff-form-grid"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="staff_invite">
+    <div class="staff-form-field"><label for="staff_email">Email</label><input type="email" id="staff_email" name="email" placeholder="persona@email.com"><div class="staff-form-hint">Usalo si todavía no tiene Tickex ID.</div></div>
+    <div class="staff-form-field"><label for="staff_tickex_id">Tickex ID</label><input type="text" id="staff_tickex_id" name="tickex_id" placeholder="Ej: Senchi o #123"><div class="staff-form-hint">Con uno de los dos datos alcanza.</div></div>
+    <div class="staff-form-field"><label for="invite_role">Rol inicial</label><select id="invite_role" name="rol_staff"><?php foreach($staffRoles as $role): ?><option value="<?php echo e((string)$role['code']); ?>"<?php echo (string)$role['code']==='puerta'?' selected':''; ?>><?php echo e((string)$role['name']); ?></option><?php endforeach; ?></select></div>
+    <div class="staff-form-field"><label for="invite_message">Mensaje</label><input type="text" id="invite_message" name="mensaje" maxlength="300" placeholder="Ej: Te sumamos al equipo de puerta"></div>
+    <div class="staff-form-actions"><button class="btn" type="submit">Enviar invitación</button></div>
+  </form>
+</div></details>
+
+<?php
 $staffAsignadoEvento = array();
 if ($prefEventoId > 0) {
   try {
     $stAE = $pdo->prepare("SELECT DISTINCT se.staff_id AS cliente_id,
         rp.apodo, rp.email, rp.nombre, rp.apellido,
-        sa.rol_staff,
+        COALESCE(NULLIF(se.rol_staff,''),sa.rol_staff) AS rol_staff,
         se.evento_id,
         COALESCE(se.costo_servicio, 0) AS costo_servicio
       FROM staff_eventos se
       LEFT JOIN registro_pendientes rp ON rp.id = se.staff_id
-      LEFT JOIN staff_admins sa ON sa.cliente_id = se.staff_id AND sa.activo = 1
-      WHERE se.evento_id = :eid
+      LEFT JOIN staff_admins sa ON sa.cliente_id = se.staff_id AND sa.owner_admin_id = :aid AND sa.activo = 1
+      WHERE se.evento_id = :eid AND sa.id IS NOT NULL
       ORDER BY se.staff_id DESC");
-    $stAE->execute(array(':eid' => $prefEventoId));
+    $stAE->execute(array(':eid' => $prefEventoId, ':aid' => $adminId));
     $staffAsignadoEvento = $stAE->fetchAll(PDO::FETCH_ASSOC);
   } catch (Exception $e) {
     $staffAsignadoEvento = array();
@@ -930,87 +985,41 @@ if ($prefEventoId > 0) {
 }
 ?>
 
-<div class="card" style="max-width:900px;">
-  <h3>Staff</h3>
-  <?php if (empty($staffNuevo)): ?>
-    <div class="muted">No hay staff activo aún.</div>
-  <?php else: ?>
-    <div style="overflow:auto;">
-      <table class="table" style="width:100%;min-width:780px;">
-        <thead>
-          <tr>
-            <th style="width:90px;">Cliente</th>
-            <th style="width:220px;">Tickex ID</th>
-            <th>Email</th>
-            <th style="width:160px;">Rol</th>
-            <th style="width:180px;">Desde</th>
-            <th style="width:90px;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($staffNuevo as $s): ?>
-            <tr>
-              <td>#<?php echo (int)$s['cliente_id']; ?></td>
-              <td><?php echo e(($s['apodo'] && $s['apodo'] !== '') ? (string)$s['apodo'] : ('#' . (int)$s['cliente_id'])); ?></td>
-              <td><?php echo e((string)($s['email'] ?? '')); ?></td>
-              <td><?php echo e(tickex_staff_role_label($pdo, $adminId, (string)($s['rol_staff'] ?? 'puerta'))); ?></td>
-              <td><?php echo e((string)($s['created_at'] ?? '')); ?></td>
-              <td style="text-align:right;">
-                <form method="post" style="margin:0;" onsubmit="return confirm('¿Quitar este usuario del staff?');">
-                  <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
-                  <input type="hidden" name="action" value="remove_staff_link">
-                  <input type="hidden" name="cliente_id" value="<?php echo (int)$s['cliente_id']; ?>">
-                  <button class="btn danger" type="submit" title="Quitar staff" style="padding:6px 10px;font-size:14px;">🗑️</button>
-                </form>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
+<div class="card">
+  <div class="staff-list-head"><div><h2><?php echo $prefEventoId>0?'Equipo disponible':'Personas del equipo'; ?></h2><p>Revisá roles, eventos asignados y antigüedad de cada integrante.</p></div><span class="staff-badge active"><?php echo count($staffNuevo); ?> activos</span></div>
+  <?php if(empty($staffNuevo)): ?><div class="muted">Todavía no hay personas activas. Empezá enviando una invitación.</div><?php else: ?>
+  <div class="staff-member-grid">
+    <?php foreach($staffNuevo as $member): ?>
+      <?php $memberId=(int)$member['cliente_id'];$memberName=!empty($member['apodo'])?(string)$member['apodo']:trim((string)$member['nombre'].' '.(string)$member['apellido']);if($memberName==='')$memberName=!empty($member['email'])?(string)$member['email']:('#'.$memberId);$initial=function_exists('mb_substr')?mb_substr($memberName,0,1,'UTF-8'):substr($memberName,0,1);$memberEvents=isset($staffAssignments[$memberId])?$staffAssignments[$memberId]:array();$memberRole=!empty($member['rol_staff'])?(string)$member['rol_staff']:'puerta'; ?>
+      <article class="staff-member">
+        <div class="staff-member-head"><div class="staff-avatar"><?php echo e(strtoupper($initial)); ?></div><div style="min-width:0;flex:1;"><div class="staff-member-name"><?php echo e($memberName); ?></div><div class="staff-member-email"><?php echo e((string)$member['email']); ?></div></div></div>
+        <div class="staff-badges"><span class="staff-badge active">Activo</span><span class="staff-badge"><?php echo e(tickex_staff_role_label($pdo,$adminId,$memberRole)); ?></span><span class="staff-badge"><?php echo count($memberEvents); ?> evento<?php echo count($memberEvents)===1?'':'s'; ?></span></div>
+        <div class="staff-events"><div class="staff-events-label">Eventos asignados</div><div class="staff-event-chips"><?php if(empty($memberEvents)): ?><span class="staff-event-empty">Sin eventos asignados</span><?php else: ?><?php foreach($memberEvents as $memberEvent): ?><form method="post" style="display:inline-flex;margin:0;" onsubmit="return confirm('¿Quitar esta asignación?');"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="remove_staff_event"><input type="hidden" name="cliente_id" value="<?php echo $memberId; ?>"><input type="hidden" name="evento_id" value="<?php echo (int)$memberEvent['evento_id']; ?>"><button class="staff-event-chip" type="submit" title="Quitar asignación"><?php echo e((string)$memberEvent['evento_nombre']); ?> · <?php echo e(tickex_staff_role_label($pdo,$adminId,(string)($memberEvent['rol_staff']?:$memberRole))); ?> ×</button></form><?php endforeach; ?><?php endif; ?></div></div>
+        <div class="staff-member-controls">
+          <form method="post" style="display:flex;gap:7px;align-items:end;"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="update_staff_role"><input type="hidden" name="cliente_id" value="<?php echo $memberId; ?>"><div style="flex:1;"><label>Rol general</label><select name="rol_staff"><?php foreach($staffRoles as $role): ?><option value="<?php echo e((string)$role['code']); ?>"<?php echo (string)$role['code']===$memberRole?' selected':''; ?>><?php echo e((string)$role['name']); ?></option><?php endforeach; ?></select></div><button class="btn secondary" type="submit">Actualizar</button></form>
+          <form method="post" onsubmit="return confirm('¿Quitar este usuario del staff?');"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="remove_staff_link"><input type="hidden" name="cliente_id" value="<?php echo $memberId; ?>"><button class="btn danger" type="submit">Quitar</button></form>
+        </div>
+        <div class="staff-form-hint" style="margin-top:10px;">En el equipo desde <?php echo e((string)$member['created_at']); ?></div>
+      </article>
+    <?php endforeach; ?>
+  </div>
   <?php endif; ?>
 </div>
 
 <?php if ($prefEventoId <= 0): ?>
-<div class="card" style="max-width:900px;">
-  <h3>Invitaciones pendientes</h3>
-  <?php if (empty($staffPendientes)): ?>
-    <div class="muted">No hay invitaciones pendientes.</div>
-  <?php else: ?>
-    <div style="overflow:auto;">
-      <table class="table" style="width:100%;min-width:780px;">
-        <thead>
-          <tr>
-            <th style="width:80px;">ID</th>
-            <th style="width:240px;">Email</th>
-            <th>Mensaje</th>
-            <th style="width:180px;">Creada</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($staffPendientes as $p): ?>
-            <tr>
-              <td><?php echo (int)$p['id']; ?></td>
-              <td><?php echo e((string)($p['email'] ?? '')); ?></td>
-              <td><?php echo e((string)($p['mensaje'] ?? '')); ?></td>
-              <td><?php echo e((string)($p['created_at'] ?? '')); ?></td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  <?php endif; ?>
-</div>
+<details class="card staff-section"<?php echo !empty($staffPendientes)?' open':''; ?>><summary><div><div class="staff-section-title">Invitaciones pendientes</div><div class="staff-section-subtitle"><?php echo count($staffPendientes); ?> personas todavía deben aceptar.</div></div></summary><div class="staff-section-body">
+  <?php if(empty($staffPendientes)): ?><div class="muted">No hay invitaciones pendientes.</div><?php else: ?><div class="staff-pending-grid">
+    <?php foreach($staffPendientes as $pending): ?><div class="staff-pending-card"><strong><?php echo e((string)$pending['email']); ?></strong><div class="staff-pending-meta"><span><?php echo e(tickex_staff_role_label($pdo,$adminId,(string)($pending['rol_staff'] ?: 'puerta'))); ?></span><span><?php echo e((string)$pending['created_at']); ?></span></div><?php if(!empty($pending['mensaje'])): ?><div class="staff-pending-message"><?php echo e((string)$pending['mensaje']); ?></div><?php endif; ?></div><?php endforeach; ?>
+  </div><?php endif; ?>
+</div></details>
 <?php endif; ?>
 
-<div class="card" style="max-width:900px;">
-  <h3>Asignar staff existente a un evento</h3>
-
-  <form method="post" style="display:grid;grid-template-columns:1.2fr 1fr 0.8fr 0.8fr auto;gap:10px;align-items:end;">
+<details class="card staff-section" id="asignar-staff"<?php echo $prefEventoId>0?' open':''; ?>><summary><div><div class="staff-section-title">Asignar eventos y costos</div><div class="staff-section-subtitle">Elegí dónde trabaja cada persona y registrá el costo operativo.</div></div></summary><div class="staff-section-body">
+  <form method="post" class="staff-assignment-grid">
     <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <input type="hidden" name="action" value="assign_staff_event">
 
-    <div>
+    <div class="staff-assign-field">
       <label>Elegí staff</label>
       <div style="display:flex;gap:6px;flex-direction:column;">
         <input type="text" id="filterStaff" placeholder="Buscar por Tickex ID o email" oninput="filterStaffOptions()" style="width:100%;">
@@ -1030,7 +1039,7 @@ if ($prefEventoId > 0) {
       </div>
     </div>
 
-    <div>
+    <div class="staff-assign-field">
       <label>Asignar a evento</label>
       <select name="evento_id" required>
         <option value="">Elegí un evento...</option>
@@ -1040,12 +1049,12 @@ if ($prefEventoId > 0) {
           </option>
         <?php endforeach; ?>
       </select>
-      <label style="font-size:12px;display:flex;gap:4px;align-items:center;margin-top:6px;">
-        <input type="checkbox" name="all_events" value="1"> Asignar a todos los eventos
+      <label class="staff-check">
+        <input type="checkbox" name="all_events" value="1"> Todos mis eventos
       </label>
     </div>
 
-    <div>
+    <div class="staff-assign-field">
       <label>Rol en evento</label>
       <select name="rol_evento">
         <?php foreach ($staffRoles as $sr): ?>
@@ -1056,13 +1065,14 @@ if ($prefEventoId > 0) {
       </select>
     </div>
 
-    <div>
+    <div class="staff-assign-field">
       <label>Costo staff ($)</label>
       <input type="number" name="costo_servicio" min="0" step="0.01" value="0" placeholder="0.00">
     </div>
 
-    <div>
-      <button class="btn" type="submit" style="margin-top:2px;">Asignar</button>
+    <div class="staff-form-hint" style="grid-column:1/-1;">La asignación se agrega o actualiza. Los demás eventos de esta persona se conservan.</div>
+    <div class="staff-form-actions">
+      <button class="btn" type="submit"<?php echo empty($staffNuevo)||empty($eventos)?' disabled':''; ?>>Guardar asignación</button>
     </div>
   </form>
 
@@ -1081,64 +1091,27 @@ if ($prefEventoId > 0) {
       }
     }
   </script>
-</div>
+</div></details>
 
 <?php if ($prefEventoId <= 0): ?>
-<div class="card" style="max-width:900px;">
-  <h3>Roles del staff</h3>
-  <div class="muted" style="margin-bottom:8px;">Gestioná roles y permisos desde la pantalla dedicada.</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="btn" href="roles_staff.php">Abrir Roles de Staff</a>
-    <a class="btn secondary" href="<?php echo _tickex_is_super($tipoGlobal) ? 'superadmin_revendedores.php' : 'admin_revendedores.php'; ?>">Administrar revendedores</a>
-  </div>
+<div class="card staff-model">
+  <div><div class="staff-eyebrow">Organización</div><h2>Roles y revendedores</h2><p>Los roles definen permisos generales. Los eventos y costos se asignan por separado. Los revendedores forman parte del equipo comercial, pero conservan su circuito de ventas y comisiones.</p></div>
+  <div class="staff-actions"><a class="btn" href="roles_staff.php">Configurar roles</a><a class="btn secondary" href="<?php echo _tickex_is_super($tipoGlobal)?'superadmin_revendedores.php':'admin_revendedores.php'; ?>">Ver revendedores</a></div>
 </div>
 <?php endif; ?>
 
 <?php if ($prefEventoId > 0): ?>
 <div class="card">
-  <h3>Staff asignado al evento</h3>
-
-  <?php if ($prefEventoId > 0): ?>
-    <div class="muted" style="margin-bottom:8px;">Mostrando staff del evento #<?php echo (int)$prefEventoId; ?>.</div>
-  <?php endif; ?>
-
-  <?php if(empty($staffAsignadoEvento)): ?>
-    <div style="color:var(--muted);font-size:14px;">No hay staff asignado todavía.</div>
-  <?php else: ?>
-    <div style="overflow:auto;margin-top:8px;">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Cliente ID</th>
-            <th>Tickex ID</th>
-            <th>Email</th>
-            <th>Rol</th>
-            <th>Costo staff</th>
-          </tr>
-        </thead>
-        <tbody>
-        <?php foreach($staffAsignadoEvento as $s): ?>
-          <tr>
-            <td>#<?php echo (int)$s['cliente_id']; ?></td>
-            <td><?php echo e((!empty($s['apodo']) ? (string)$s['apodo'] : ('#' . (int)$s['cliente_id']))); ?></td>
-            <td><?php echo e((string)($s['email'] ?? '')); ?></td>
-            <td><?php echo e(tickex_staff_role_label($pdo, $adminId, (string)($s['rol_staff'] ?: 'puerta'))); ?></td>
-            <td>
-              <form method="post" style="display:flex;gap:6px;align-items:center;">
-                <input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>">
-                <input type="hidden" name="action" value="update_staff_event_cost">
-                <input type="hidden" name="cliente_id" value="<?php echo (int)$s['cliente_id']; ?>">
-                <input type="hidden" name="evento_id" value="<?php echo (int)$prefEventoId; ?>">
-                <input type="number" name="costo_servicio" min="0" step="0.01" value="<?php echo e((string)number_format((float)($s['costo_servicio'] ?? 0), 2, '.', '')); ?>" style="width:110px;">
-                <button class="btn secondary" type="submit" style="padding:4px 8px;">Guardar</button>
-              </form>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  <?php endif; ?>
+  <div class="staff-list-head"><div><h2>Equipo asignado</h2><p>Personas con acceso a <?php echo e($prefEventoNombre); ?> y costo registrado para este evento.</p></div><span class="staff-badge active"><?php echo count($staffAsignadoEvento); ?> asignados</span></div>
+  <?php if(empty($staffAsignadoEvento)): ?><div class="muted">Todavía no asignaste staff a este evento.</div><?php else: ?><div class="staff-pending-grid">
+    <?php foreach($staffAsignadoEvento as $assigned): ?>
+      <?php $assignedName=!empty($assigned['apodo'])?(string)$assigned['apodo']:trim((string)$assigned['nombre'].' '.(string)$assigned['apellido']);if($assignedName==='')$assignedName=(string)$assigned['email']; ?>
+      <div class="staff-pending-card"><strong><?php echo e($assignedName); ?></strong><div class="staff-pending-message"><?php echo e(tickex_staff_role_label($pdo,$adminId,(string)($assigned['rol_staff'] ?: 'puerta'))); ?> · <?php echo e((string)$assigned['email']); ?></div>
+        <form method="post" style="display:flex;gap:7px;align-items:end;margin-top:12px;"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="update_staff_event_cost"><input type="hidden" name="cliente_id" value="<?php echo (int)$assigned['cliente_id']; ?>"><input type="hidden" name="evento_id" value="<?php echo (int)$prefEventoId; ?>"><label style="flex:1;font-size:11px;color:var(--muted);">Costo en este evento<input type="number" name="costo_servicio" min="0" step="0.01" value="<?php echo e(number_format((float)$assigned['costo_servicio'],2,'.','')); ?>" style="width:100%;margin-top:5px;"></label><button class="btn secondary" type="submit">Guardar</button></form>
+        <form method="post" style="margin-top:8px;" onsubmit="return confirm('¿Quitar a esta persona del evento?');"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="remove_staff_event"><input type="hidden" name="cliente_id" value="<?php echo (int)$assigned['cliente_id']; ?>"><input type="hidden" name="evento_id" value="<?php echo (int)$prefEventoId; ?>"><button class="btn danger" type="submit">Quitar del evento</button></form>
+      </div>
+    <?php endforeach; ?>
+  </div><?php endif; ?>
 </div>
 <?php endif; ?>
 

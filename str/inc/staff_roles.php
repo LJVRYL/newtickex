@@ -10,7 +10,6 @@ if (!function_exists('tickex_staff_roles_permissions_catalog')) {
       'tickets_validate' => 'Validar entradas',
       'sales_view' => 'Ver ventas',
       'reports_view' => 'Ver reportes',
-      'staff_manage' => 'Gestionar staff',
     );
   }
 }
@@ -22,24 +21,38 @@ if (!function_exists('tickex_staff_roles_default_definitions')) {
       array(
         'code' => 'puerta',
         'name' => 'Puerta',
-        'permissions' => array('dashboard_view', 'checkin_scan', 'tickets_validate')
+        'description' => 'Opera el ingreso, valida QR y registra ventas presenciales.',
+        'permissions' => array('dashboard_view', 'checkin_scan', 'tickets_validate', 'sales_view')
       ),
       array(
         'code' => 'acreditacion',
         'name' => 'Acreditación',
+        'description' => 'Busca invitados y valida entradas sin acceso a ventas.',
         'permissions' => array('dashboard_view', 'tickets_validate')
       ),
       array(
         'code' => 'caja',
         'name' => 'Caja',
+        'description' => 'Consulta y registra la actividad comercial del evento.',
         'permissions' => array('dashboard_view', 'sales_view')
       ),
       array(
         'code' => 'staff_evento',
         'name' => 'General',
+        'description' => 'Acceso operativo amplio para responsables del evento.',
         'permissions' => array('dashboard_view', 'checkin_scan', 'tickets_validate', 'sales_view', 'reports_view')
       ),
     );
+  }
+}
+
+if (!function_exists('tickex_staff_role_description')) {
+  function tickex_staff_role_description($roleCode)
+  {
+    foreach (tickex_staff_roles_default_definitions() as $role) {
+      if ((string)$role['code'] === (string)$roleCode) return isset($role['description']) ? (string)$role['description'] : '';
+    }
+    return 'Rol personalizado con los permisos seleccionados por el administrador.';
   }
 }
 
@@ -81,9 +94,10 @@ if (!function_exists('tickex_staff_roles_seed_defaults')) {
       if ($code === '') continue;
 
       try {
-        $st = $pdo->prepare('SELECT id FROM staff_roles WHERE owner_admin_id = :oid AND code = :c LIMIT 1');
+        $st = $pdo->prepare('SELECT id,permissions_json,is_system FROM staff_roles WHERE owner_admin_id = :oid AND code = :c LIMIT 1');
         $st->execute(array(':oid' => $oid, ':c' => $code));
-        if (!$st->fetchColumn()) {
+        $existing = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$existing) {
           $ins = $pdo->prepare('INSERT INTO staff_roles (owner_admin_id, code, name, permissions_json, is_system, activo, created_at) VALUES (:oid,:c,:n,:p,1,1,datetime(\'now\'))');
           $ins->execute(array(
             ':oid' => $oid,
@@ -91,6 +105,13 @@ if (!function_exists('tickex_staff_roles_seed_defaults')) {
             ':n' => $name,
             ':p' => json_encode(array_values($perms)),
           ));
+        } elseif ($code === 'puerta' && (int)$existing['is_system'] === 1) {
+          $current = json_decode((string)$existing['permissions_json'], true);
+          $legacy = array('dashboard_view','checkin_scan','tickets_validate');
+          if (is_array($current) && $current === $legacy) {
+            $up = $pdo->prepare('UPDATE staff_roles SET permissions_json=:p,updated_at=datetime(\'now\') WHERE id=:id');
+            $up->execute(array(':p'=>json_encode(array('dashboard_view','checkin_scan','tickets_validate','sales_view')),':id'=>(int)$existing['id']));
+          }
         }
       } catch (Exception $e) {
         // ignore

@@ -4,6 +4,7 @@ tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
+require_once __DIR__ . '/inc/staff_operations.php';
 
 if (!function_exists('e')) {
   function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -15,6 +16,7 @@ if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
 }
 
 $pdo = db();
+tickex_staff_operations_ensure_schema($pdo);
 $usuarioId = (int)$_SESSION['usuario_id'];
 $title = 'Actividad de check-ins';
 
@@ -37,6 +39,11 @@ foreach ($eventosStaff as $ev) $staffEventIds[] = (int)$ev['id'];
 $activeEventId = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 if ($activeEventId <= 0 && !empty($staffEventIds)) $activeEventId = $staffEventIds[0];
 if ($activeEventId > 0 && !in_array($activeEventId, $staffEventIds, true)) $activeEventId = 0;
+$accessProfile=$activeEventId>0?tickex_staff_event_access_profile($pdo,$usuarioId,$activeEventId):null;
+if($activeEventId>0 && (!$accessProfile || !in_array('reports_view',$accessProfile['permissions'],true))){
+  http_response_code(403);
+  exit('Tu rol no permite ver reportes de este evento.');
+}
 
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
 if ($limit < 20) $limit = 20;
