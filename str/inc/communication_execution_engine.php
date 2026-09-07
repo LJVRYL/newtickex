@@ -116,9 +116,22 @@ if (!function_exists('communication_execution_ensure_schema')) {
             permanent_error_count INTEGER NOT NULL DEFAULT 0,
             skipped_duplicate_count INTEGER NOT NULL DEFAULT 0,
             last_error TEXT,
+            removed_at TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )');
+
+        $runColumns = $pdo->query('PRAGMA table_info(communication_campaign_runs)')->fetchAll(PDO::FETCH_ASSOC);
+        $hasRemovedAt = false;
+        foreach ($runColumns as $runColumn) {
+            if (isset($runColumn['name']) && (string)$runColumn['name'] === 'removed_at') {
+                $hasRemovedAt = true;
+                break;
+            }
+        }
+        if (!$hasRemovedAt) {
+            $pdo->exec('ALTER TABLE communication_campaign_runs ADD COLUMN removed_at TEXT');
+        }
 
         $pdo->exec('CREATE TABLE IF NOT EXISTS communication_campaign_run_recipients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,7 +197,7 @@ if (!function_exists('communication_execution_enqueue_campaign')) {
 
         $scopeSql = communication_campaigns_scope_sql($isSuper);
         $scopeParams = communication_campaigns_scope_params($organizationId, $adminId, $isSuper);
-        $st = $pdo->prepare('SELECT * FROM communication_campaigns WHERE id = :id AND ' . $scopeSql . ' LIMIT 1');
+        $st = $pdo->prepare('SELECT * FROM communication_campaigns WHERE id = :id AND removed_at IS NULL AND ' . $scopeSql . ' LIMIT 1');
         $st->execute(array(':id' => $campaignId) + $scopeParams);
         $campaign = $st->fetch(PDO::FETCH_ASSOC);
 

@@ -19,7 +19,7 @@ if (!function_exists('communication_ops_scope_sql')) {
         $campaignAlias = trim((string)$campaignAlias);
         if ($campaignAlias === '') $campaignAlias = 'c';
 
-        $sql = $campaignAlias . '.organization_id = :org';
+        $sql = $campaignAlias . '.organization_id = :org AND ' . $campaignAlias . '.removed_at IS NULL';
         if (!$isSuper) {
             $sql .= ' AND ' . $campaignAlias . '.created_by_admin_id = :aid';
         }
@@ -106,7 +106,7 @@ if (!function_exists('communication_ops_validate_campaign_scope')) {
     {
         $scopeSql = communication_ops_scope_sql($isSuper, 'c');
         $params = communication_ops_scope_params($organizationId, $adminId, $isSuper);
-        $st = $pdo->prepare('SELECT c.* FROM communication_campaigns c WHERE c.id = :id AND ' . $scopeSql . ' LIMIT 1');
+        $st = $pdo->prepare('SELECT c.* FROM communication_campaigns c WHERE c.id = :id AND c.removed_at IS NULL AND ' . $scopeSql . ' LIMIT 1');
         $st->execute(array(':id' => (int)$campaignId) + $params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ? $row : null;
@@ -174,7 +174,7 @@ if (!function_exists('communication_ops_fetch_engine_state')) {
         $sqlActiveRuns = 'SELECT COUNT(*)
                           FROM communication_campaign_runs r
                           JOIN communication_campaigns c ON c.id = r.campaign_id
-                          WHERE r.status IN (\'requested\',\'preparing\',\'running\',\'finalizing\') AND ' . $scopeSql;
+                          WHERE r.removed_at IS NULL AND r.status IN (\'requested\',\'preparing\',\'running\',\'finalizing\') AND ' . $scopeSql;
         $stActiveRuns = $pdo->prepare($sqlActiveRuns);
         $stActiveRuns->execute($scopeParams);
         $counts['active_runs'] = (int)$stActiveRuns->fetchColumn();
@@ -212,7 +212,7 @@ if (!function_exists('communication_ops_fetch_engine_state')) {
                     FROM communication_campaign_runs r
                     JOIN communication_campaigns c ON c.id = r.campaign_id
                     LEFT JOIN communication_execution_commands cmd ON cmd.id = r.command_id
-                    WHERE ' . $scopeSql . '
+                    WHERE r.removed_at IS NULL AND ' . $scopeSql . '
                     ORDER BY CASE WHEN r.status IN (\'requested\',\'preparing\',\'running\',\'finalizing\') THEN 0 ELSE 1 END, r.id DESC
                     LIMIT 25';
         $stRuns = $pdo->prepare($sqlRuns);
@@ -256,7 +256,7 @@ if (!function_exists('communication_ops_fetch_campaigns')) {
         $scopeParams = communication_ops_scope_params($organizationId, $adminId, $isSuper);
         $sql = 'SELECT c.id, c.name, c.slug, c.status, c.updated_at
                 FROM communication_campaigns c
-                WHERE ' . $scopeSql . '
+                WHERE c.removed_at IS NULL AND ' . $scopeSql . '
                 ORDER BY c.updated_at DESC, c.id DESC
                 LIMIT 200';
         $st = $pdo->prepare($sql);
@@ -348,7 +348,7 @@ if (!function_exists('communication_ops_fetch_run_history')) {
         $st = $pdo->prepare('SELECT r.*, cmd.status AS command_status
                              FROM communication_campaign_runs r
                              LEFT JOIN communication_execution_commands cmd ON cmd.id = r.command_id
-                             WHERE r.campaign_id = :cid
+                             WHERE r.campaign_id = :cid AND r.removed_at IS NULL
                              ORDER BY r.id DESC');
         $st->execute(array(':cid' => (int)$campaignId));
         $runs = array();
@@ -400,7 +400,7 @@ if (!function_exists('communication_ops_fetch_run_detail')) {
     function communication_ops_fetch_run_detail($pdo, $organizationId, $adminId, $isSuper, $runId, $limit, $offset)
     {
         $run = communication_ops_validate_run_scope($pdo, $runId, $organizationId, $adminId, $isSuper);
-        if (!$run) {
+        if (!$run || !empty($run['removed_at'])) {
             return array('run' => null, 'recipients' => array(), 'total' => 0, 'metrics' => communication_tracking_run_metrics($pdo, 0));
         }
 
@@ -425,6 +425,37 @@ if (!function_exists('communication_ops_fetch_run_detail')) {
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         return array('run' => $run, 'recipients' => $rows, 'total' => $total, 'metrics' => communication_tracking_run_metrics($pdo, (int)$runId));
+    }
+}
+
+if (!function_exists('communication_ops_action_remove_run')) {
+    function communication_ops_action_remove_run($pdo, $organizationId, $adminId, $isSuper, $runId, $source)
+    {
+        communication_execution_ensure_schema($pdo);
+        $run = communication_ops_validate_run_scope($pdo, $runId, $organizationId, $adminId, $isSuper);
+        if (!$run || !empty($run['removed_at'])) {
+            return array('ok' => false, 'error' => 'La ejecucion no existe o ya fue eliminada de la vista.');
+        }
+
+        $runStatus = strtolower(trim(isset($run['status']) ? (string)$run['status'] : ''));
+        if (!in_array($runStatus, array('completed', 'done', 'failed', 'cancelled'), true)) {
+            return array('ok' => false, 'error' => 'Solo se pueden eliminar ejecuciones finalizadas, fallidas o canceladas.');
+        }
+
+        $st = $pdo->prepare('UPDATE communication_campaign_runs SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND removed_at IS NULL');
+        $st->execute(array(':id' => (int)$runId));
+        if ($st->rowCount() < 1) {
+            return array('ok' => false, 'error' => 'La ejecucion ya no estaba visible.');
+        }
+
+        communication_ops_log($pdo, $organizationId, 'engine', 'run.removed_from_view', 'info', 'Ejecucion eliminada de las vistas operativas.', array(
+            'campaign_id' => isset($run['campaign_id']) ? (int)$run['campaign_id'] : 0,
+            'run_id' => (int)$runId,
+            'source' => (string)$source,
+            'removed_by_admin_id' => (int)$adminId,
+        ), 'run.removed_from_view|' . (int)$runId);
+
+        return array('ok' => true);
     }
 }
 

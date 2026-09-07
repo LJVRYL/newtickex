@@ -2,12 +2,13 @@
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/communication_templates.php';
 require_once __DIR__ . '/inc/communication_template_renderer.php';
+require_once __DIR__ . '/inc/communication_template_management.php';
 
-require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -21,10 +22,7 @@ $flashOk = '';
 $flashErr = '';
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $organizationId = 1;
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $fType = isset($_GET['f_type']) ? trim((string)$_GET['f_type']) : '';
@@ -122,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
                         if ($id > 0) {
                             $scopeSql = communication_templates_scope_sql($isSuper);
                             $scopeParams = communication_templates_scope_params($organizationId, $adminId, $isSuper);
-                            $stCheck = $pdo->prepare('SELECT id, source_type, is_system_locked FROM communication_templates WHERE id = :id AND ' . $scopeSql . ' LIMIT 1');
+                            $stCheck = $pdo->prepare('SELECT id, source_type, is_system_locked FROM communication_templates WHERE id = :id AND ' . $scopeSql . ' AND status <> "deleted" LIMIT 1');
                             $paramsCheck = array(':id' => $id) + $scopeParams;
                             $stCheck->execute($paramsCheck);
                             $current = $stCheck->fetch(PDO::FETCH_ASSOC);
@@ -184,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
                 try {
                     $scopeSql = communication_templates_scope_sql($isSuper);
                     $scopeParams = communication_templates_scope_params($organizationId, $adminId, $isSuper);
-                    $stGet = $pdo->prepare('SELECT * FROM communication_templates WHERE id = :id AND ' . $scopeSql . ' LIMIT 1');
+                    $stGet = $pdo->prepare('SELECT * FROM communication_templates WHERE id = :id AND ' . $scopeSql . ' AND status <> "deleted" LIMIT 1');
                     $paramsGet = array(':id' => $id) + $scopeParams;
                     $stGet->execute($paramsGet);
                     $row = $stGet->fetch(PDO::FETCH_ASSOC);
@@ -225,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
                 try {
                     $scopeSql = communication_templates_scope_sql($isSuper);
                     $scopeParams = communication_templates_scope_params($organizationId, $adminId, $isSuper);
-                    $stCheck = $pdo->prepare('SELECT id, is_system_locked FROM communication_templates WHERE id = :id AND ' . $scopeSql . ' LIMIT 1');
+                    $stCheck = $pdo->prepare('SELECT id, is_system_locked FROM communication_templates WHERE id = :id AND ' . $scopeSql . ' AND status <> "deleted" LIMIT 1');
                     $paramsCheck = array(':id' => $id) + $scopeParams;
                     $stCheck->execute($paramsCheck);
                     $row = $stCheck->fetch(PDO::FETCH_ASSOC);
@@ -244,12 +242,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $flashErr === '') {
                 }
             }
         }
+
+        if ($action === 'delete') {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            try {
+                $deleteScope = communication_templates_scope_sql($isSuper);
+                $deleteParams = communication_templates_scope_params($organizationId, $adminId, $isSuper);
+                $result = communication_template_delete($pdo, $id, $deleteScope, $deleteParams);
+                if (!empty($result['ok'])) {
+                    $flashOk = (string)$result['message'];
+                    if ($editId === $id) $editId = 0;
+                    if ($previewId === $id) $previewId = 0;
+                } else {
+                    $flashErr = (string)$result['message'];
+                }
+            } catch (Exception $e) {
+                $flashErr = 'No se pudo eliminar la plantilla: ' . $e->getMessage();
+            }
+        }
     }
 }
 
 $scopeSql = communication_templates_scope_sql($isSuper);
 $scopeParams = communication_templates_scope_params($organizationId, $adminId, $isSuper);
-$sql = 'SELECT * FROM communication_templates WHERE ' . $scopeSql;
+$sql = 'SELECT * FROM communication_templates WHERE ' . $scopeSql . ' AND status <> "deleted"';
 
 if ($q !== '') {
     $sql .= ' AND (name LIKE :q OR slug LIKE :q OR subject_template LIKE :q)';
@@ -262,8 +278,8 @@ if ($fType !== '' && isset($allowedTypes[$fType])) {
     $scopeParams[':tt'] = $fType;
 }
 
-if ($fStatus !== '') {
-    $fStatusN = communication_templates_normalize_status($fStatus);
+if ($fStatus !== '' && in_array($fStatus, communication_templates_allowed_status(), true)) {
+    $fStatusN = $fStatus;
     $sql .= ' AND status = :fs';
     $scopeParams[':fs'] = $fStatusN;
 }
@@ -277,7 +293,7 @@ $editRow = null;
 if ($editId > 0) {
     $scopeSqlE = communication_templates_scope_sql($isSuper);
     $scopeParamsE = communication_templates_scope_params($organizationId, $adminId, $isSuper);
-    $stE = $pdo->prepare('SELECT * FROM communication_templates WHERE id = :id AND ' . $scopeSqlE . ' LIMIT 1');
+    $stE = $pdo->prepare('SELECT * FROM communication_templates WHERE id = :id AND ' . $scopeSqlE . ' AND status <> "deleted" LIMIT 1');
     $paramsE = array(':id' => $editId) + $scopeParamsE;
     $stE->execute($paramsE);
     $editRow = $stE->fetch(PDO::FETCH_ASSOC);
@@ -302,7 +318,7 @@ $previewRow = null;
 if ($previewId > 0) {
     $scopeSqlP = communication_templates_scope_sql($isSuper);
     $scopeParamsP = communication_templates_scope_params($organizationId, $adminId, $isSuper);
-    $stP = $pdo->prepare('SELECT * FROM communication_templates WHERE id = :id AND ' . $scopeSqlP . ' LIMIT 1');
+    $stP = $pdo->prepare('SELECT * FROM communication_templates WHERE id = :id AND ' . $scopeSqlP . ' AND status <> "deleted" LIMIT 1');
     $paramsP = array(':id' => $previewId) + $scopeParamsP;
     $stP->execute($paramsP);
     $previewRow = $stP->fetch(PDO::FETCH_ASSOC);
@@ -322,6 +338,19 @@ if ($livePreview) {
 
 $title = 'Comunicacion - Plantillas';
 include __DIR__ . '/inc/layout_top.php';
+$templateReferenceMap = communication_template_reference_map($pdo, $rows);
+$templateTotal = count($rows);
+$templateActive = 0;
+$templateDraft = 0;
+$templateArchived = 0;
+foreach ($rows as $templateStatRow) {
+    if ((string)$templateStatRow['status'] === 'active') $templateActive++;
+    elseif ((string)$templateStatRow['status'] === 'draft') $templateDraft++;
+    elseif ((string)$templateStatRow['status'] === 'archived') $templateArchived++;
+}
+include __DIR__ . '/inc/template_manager_view.php';
+include __DIR__ . '/inc/layout_bottom.php';
+return;
 ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">

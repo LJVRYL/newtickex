@@ -2,11 +2,11 @@
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/event_newsletters.php';
 
-require_login();
 $cu = current_user();
 $role = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = event_newsletters_is_super($role);
-if (!is_admin() || (!$isSuper && $role !== 'admin_evento')) {
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+if (!$adminContext || !is_admin() || (!$isSuper && $role !== 'admin_evento')) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
     echo '<div class="card"><h2>Acceso restringido</h2><p>Solo para administradores.</p></div>';
@@ -15,7 +15,7 @@ if (!is_admin() || (!$isSuper && $role !== 'admin_evento')) {
 }
 
 $pdo = db();
-$adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0));
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $ok = '';
 $error = '';
@@ -187,6 +187,8 @@ if ($event && isset($_GET['preview']) && (int)$_GET['preview'] === 1) {
 $title = 'Mi newsletter';
 include __DIR__ . '/inc/layout_top.php';
 ?>
+<?php include __DIR__ . '/inc/newsletter_builder_view.php'; ?>
+<?php if (false): // Vista anterior mantenida como referencia temporal. ?>
 <style>
 .nl-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:16px;align-items:start}.nl-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.nl-artist{border:1px solid var(--line);background:var(--panel-2);border-radius:12px;padding:14px;margin-top:12px}.nl-preview{width:100%;min-height:720px;border:1px solid var(--line);border-radius:12px;background:#05050b}@media(max-width:900px){.nl-grid{grid-template-columns:1fr}.nl-form-grid{grid-template-columns:1fr}.nl-preview{min-height:560px}}
 </style>
@@ -210,5 +212,6 @@ include __DIR__ . '/inc/layout_top.php';
 </div><div class="card" style="position:sticky;top:12px;"><h3 style="margin-top:0;">Vista previa</h3><?php if($preview): ?><iframe class="nl-preview" title="Preview" srcdoc="<?php echo e($preview['body_html']); ?>"></iframe><?php elseif($newsletter): ?><iframe class="nl-preview" title="Preview" src="comunicacion_newsletter.php?event_id=<?php echo $eventId; ?>&preview=1"></iframe><?php else: ?><div class="muted">Guardá el borrador para generar la vista previa.</div><?php endif; ?></div></div></form>
 <template id="artistTemplate"><div class="nl-artist"><div style="display:flex;justify-content:space-between;"><strong class="artist-role"></strong><button type="button" class="btn danger remove-artist">Quitar</button></div><div style="margin-top:10px;"><label>Nombre</label><input name="artist_name[]" maxlength="160"><label style="margin-top:10px;">Descripción / reseña</label><textarea name="artist_review[]" rows="5" maxlength="5000"></textarea></div></div></template>
 <script>(function(){var list=document.getElementById('artistList'),add=document.getElementById('addArtist');function renumber(){var b=list.querySelectorAll('.nl-artist');for(var i=0;i<b.length;i++){b[i].querySelector('.artist-role').textContent=i===0?'DJ principal':'DJ secundario '+i;}}add.addEventListener('click',function(){if(list.querySelectorAll('.nl-artist').length>=8){alert('Máximo 8 DJs.');return;}list.appendChild(document.getElementById('artistTemplate').content.cloneNode(true));renumber();});list.addEventListener('click',function(e){var btn=e.target.closest('.remove-artist');if(!btn)return;btn.closest('.nl-artist').remove();if(!list.querySelector('.nl-artist'))add.click();renumber();});renumber();})();</script>
+<?php endif; ?>
 <?php endif; ?>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
