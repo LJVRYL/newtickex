@@ -1,57 +1,22 @@
 <?php
-// facturacion_admin.php
-// Página de facturación para admin y superadmin
-
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/arca.php';
-
+require_once __DIR__ . '/inc/billing_financials.php';
 $title = 'Facturación';
-
 require_login();
-$cu = current_user();
-
-$tg = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
-$rol = isset($cu['rol']) ? $cu['rol'] : (isset($_SESSION['rol']) ? $_SESSION['rol'] : '');
-
-$isSuper = in_array($tg, array('super_admin','superadmin'), true);
-$isAdmin = in_array($tg, array('admin_evento'), true) || $rol === 'admin' || is_admin();
-
-if (!$isSuper && !$isAdmin) {
-  header('Location: panel_admin.php');
-  exit;
-}
-
-// Intentar login con ARCA/AFIP
-$arcaStatus = '';
-$config = arca_get_config();
-if ($config && !empty($config['cuit']) && !empty($config['cert']) && !empty($config['key'])) {
-  try {
-    require_once __DIR__ . '/../vendor/autoload.php';
-    $afip = new \Afip\Afip([
-      'CUIT' => $config['cuit'],
-      'cert' => $config['cert'],
-      'key'  => $config['key'],
-      'production' => ($config['modo'] ?? 'homologacion') === 'produccion',
-    ]);
-    $ta = $afip->ElectronicBilling->GetLastVoucher(1, 1, 1);
-    $arcaStatus = '<span style="color:green;">Conexión exitosa con ARCA/AFIP ✔️</span>';
-  } catch (Exception $e) {
-    $arcaStatus = '<span style="color:red;">Error de autenticación con ARCA/AFIP: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</span>';
-  }
-} else {
-  $arcaStatus = '<span style="color:orange;">Faltan datos de configuración de ARCA/AFIP.</span>';
-}
-
+$pdo = db(); $cu = current_user();
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
+$role = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : '';
+$isSuper = in_array($role, array('super_admin','superadmin'), true);
+if ($adminId <= 0 || ($role !== 'admin_evento' && !$isSuper)) abort_404('No tenes permiso.');
+$filters = array('event_id'=>isset($_GET['event_id'])?(int)$_GET['event_id']:0,'provider'=>isset($_GET['provider'])?(string)$_GET['provider']:'','status'=>isset($_GET['status'])?(string)$_GET['status']:'','date_from'=>isset($_GET['date_from'])?(string)$_GET['date_from']:'','date_to'=>isset($_GET['date_to'])?(string)$_GET['date_to']:'');
+$events = tickex_billing_events($pdo, $adminId, $isSuper);
+$allowedEventIds = array(); foreach ($events as $eventRow) $allowedEventIds[(int)$eventRow['id']] = true;
+if ($filters['event_id'] > 0 && !isset($allowedEventIds[$filters['event_id']])) $filters['event_id'] = 0;
+$report = tickex_billing_report($pdo, $adminId, $isSuper, $filters); $summary = $report['summary'];
+$arcaConfig = arca_get_config();
+$arcaConfigured = is_array($arcaConfig) && !empty($arcaConfig['cuit']) && !empty($arcaConfig['cert']) && !empty($arcaConfig['key']);
+$arcaMode = $arcaConfigured && isset($arcaConfig['modo']) && $arcaConfig['modo'] === 'produccion' ? 'Producción' : 'Homologación';
 include __DIR__ . '/inc/layout_top.php';
-?>
-<div class="card">
-  <h2>Facturación</h2>
-  <div style="margin-bottom:10px;">Estado de conexión ARCA/AFIP: <?php echo $arcaStatus; ?></div>
-  <ul>
-    <li><a href="config_arca.php">Configurar API ARCA/AFIP</a></li>
-    <li><a href="#">Ver facturas emitidas (próximamente)</a></li>
-    <li><a href="#">Emitir factura manualmente (próximamente)</a></li>
-  </ul>
-</div>
-<?php
+include __DIR__ . '/inc/facturacion_admin_view.php';
 include __DIR__ . '/inc/layout_bottom.php';
