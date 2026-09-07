@@ -10,6 +10,12 @@ require_login();
 
 header('Content-Type: application/json; charset=utf-8');
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    echo json_encode(array('error' => 'Solicitud vencida o inválida'));
+    exit;
+}
+
 $cu = current_user();
 $rol = isset($cu['tipo_global']) && $cu['tipo_global'] !== ''
   ? $cu['tipo_global']
@@ -39,7 +45,7 @@ if (!in_array(strtolower($tipo), array('ingreso','egreso'), true)) {
 }
 
 $pdo = db();
-$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id'])?(int)$cu['id']:0);
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 if (!tickex_can_access_event($pdo, $evento_id, $cu)) {
     http_response_code(404);
     echo json_encode(array('error' => 'Evento no encontrado'));

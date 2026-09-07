@@ -1,5 +1,7 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  # Los secretos existen para uso interno de PHP y nunca deben responder por HTTP.
+  RewriteRule (^|/)\.secrets(?:/|$) - [F,L]
   # Si el archivo/folder no existe, redirige todo a app.php
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d

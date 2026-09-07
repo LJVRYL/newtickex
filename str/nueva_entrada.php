@@ -4,6 +4,7 @@ $title = "Nueva entrada (Puerta)";
 
 require_login();
 $pdo = db();
+$cu = current_user();
 
 function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -22,6 +23,8 @@ if (isset($_GET['evento_id'])) {
     $eventoId = (int)$_SESSION['evento_id'];
 }
 if ($eventoId<=0) abort_404("Evento no definido.");
+tickex_require_event_access($pdo, $eventoId, $cu);
+$csrf = tickex_csrf_token();
 
 // ===== Detectar columnas opcionales en entradas =====
 $colsEnt = $pdo->query("PRAGMA table_info(entradas)")->fetchAll(PDO::FETCH_ASSOC);
@@ -58,6 +61,10 @@ $tipoSel = 0;
 $pagoRaw = '';
 
 if ($_SERVER['REQUEST_METHOD']==='POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud vencida o inválida.');
+    }
 
     $nombre = trim(isset($_POST['nombre']) ? $_POST['nombre'] : '');
     $tipoSel = (int)(isset($_POST['tipo_id']) ? $_POST['tipo_id'] : 0);
@@ -193,6 +200,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php else: ?>
 
     <form method="post" style="margin-top:10px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <label>Nombre / alias</label>
       <input name="nombre" required value="<?php echo e($nombre); ?>">
 

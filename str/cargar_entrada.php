@@ -118,9 +118,14 @@ function gen_codigo($eventoId){
 
 $errors = array();
 $created = array();
+$csrf = tickex_csrf_token();
 
 /* POST */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    exit('Solicitud vencida o inválida.');
+  }
   $nombre = trim((string)($_POST['nombre'] ?? ''));
   $email  = trim((string)($_POST['email'] ?? ''));
   $plantilla   = trim((string)($_POST['plantilla'] ?? ''));
@@ -248,6 +253,7 @@ if ($isEmbed) {
   <h3 style="margin-top:0;">Formulario</h3>
 
   <form method="post" action="cargar_entrada.php">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>"/>
     <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>"/>
     <?php if ($isEmbed): ?>
       <input type="hidden" name="embed" value="1"/>

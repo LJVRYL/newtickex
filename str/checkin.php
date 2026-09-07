@@ -15,7 +15,7 @@ function get_staff_event_ids($pdo, $staffId) {
   return $rows ? array_map('intval', $rows) : array();
 }
 
-$codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
+$codigo = isset($_GET['c']) ? trim($_GET['c']) : (isset($_POST['c']) ? trim((string)$_POST['c']) : '');
 // Soporte para URL segura ?t=TOKEN (generada por el engine de pago)
 if ($codigo === '' && !empty($_GET['t'])) {
   require_once __DIR__ . '/inc/secure_links.php';
@@ -28,7 +28,7 @@ if ($codigo === '' && !empty($_GET['t'])) {
     if ($codRow !== false) $codigo = (string)$codRow;
   }
 }
-$eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+$eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : (isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0);
 $eventoId = $eventoIdGet;
 
 // Si está logueado, saco rol
@@ -289,6 +289,12 @@ if ($ticket && $isLogged && $tipoGlobal === 'admin_evento') {
 
 $hizoCheckinAhora = false;
 $mensaje = '';
+$csrf = tickex_csrf_token();
+$checkinSubmission = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_checkin';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!$checkinSubmission || !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : ''))) {
+  http_response_code(403);
+  exit('Solicitud vencida o inválida.');
+}
 
 if ($ticket && $ticket['source'] === 'TICKEX') {
   $uses = get_bridge_checkin_used_counts($pdo, array((int)$ticket['id']));
@@ -299,7 +305,7 @@ if ($ticket && $ticket['source'] === 'TICKEX') {
   $ticket['checked_in'] = ($used >= (int)$ticket['multiplier']) ? 1 : 0;
 }
 
-if ($ticket && $puedeCheckin && $eventoOk) {
+if ($ticket && $puedeCheckin && $eventoOk && $checkinSubmission) {
   $canConsume = true;
   if ($ticket['source'] === 'TICKEX') {
     $usedNow = isset($ticket['used_count']) ? (int)$ticket['used_count'] : 0;
@@ -412,6 +418,8 @@ if ($ticket && $puedeCheckin && $eventoOk) {
       ));
     }
   }
+} elseif ($ticket && $puedeCheckin && $eventoOk) {
+  $mensaje = 'Entrada válida. Confirmá el ingreso para registrar el check-in.';
 } elseif ($ticket && $puedeCheckin && !$eventoOk) {
   $mensaje = "Este ticket no pertenece a tu evento.";
   tickex_log_qr_attempt($pdo, array(
@@ -425,25 +433,29 @@ if ($ticket && $puedeCheckin && $eventoOk) {
   ));
 } elseif ($ticket && !$puedeCheckin) {
   $mensaje = "Entrada válida. Para hacer check-in, iniciá sesión en Puerta.";
-  tickex_log_qr_attempt($pdo, array(
-    'evento_id' => (int)($ticket['evento_id'] ?? 0),
-    'source' => (string)($ticket['source'] ?? 'UNKNOWN'),
-    'source_ticket_id' => (int)($ticket['id'] ?? 0),
-    'ticket_ref' => (string)($ticket['codigo'] ?? $codigo),
-    'attendee_name' => (string)($ticket['nombre'] ?? ''),
-    'result' => 'denied',
-    'detail' => 'sin_permiso_checkin',
-  ));
+  if ($isLogged) {
+    tickex_log_qr_attempt($pdo, array(
+      'evento_id' => (int)($ticket['evento_id'] ?? 0),
+      'source' => (string)($ticket['source'] ?? 'UNKNOWN'),
+      'source_ticket_id' => (int)($ticket['id'] ?? 0),
+      'ticket_ref' => (string)($ticket['codigo'] ?? $codigo),
+      'attendee_name' => (string)($ticket['nombre'] ?? ''),
+      'result' => 'denied',
+      'detail' => 'sin_permiso_checkin',
+    ));
+  }
 } elseif (!$ticket && $codigo !== '') {
-  tickex_log_qr_attempt($pdo, array(
-    'evento_id' => (int)$eventoId,
-    'source' => 'UNKNOWN',
-    'source_ticket_id' => 0,
-    'ticket_ref' => (string)$codigo,
-    'attendee_name' => '',
-    'result' => 'error',
-    'detail' => 'codigo_no_valido',
-  ));
+  if ($isLogged) {
+    tickex_log_qr_attempt($pdo, array(
+      'evento_id' => (int)$eventoId,
+      'source' => 'UNKNOWN',
+      'source_ticket_id' => 0,
+      'ticket_ref' => (string)$codigo,
+      'attendee_name' => '',
+      'result' => 'error',
+      'detail' => 'codigo_no_valido',
+    ));
+  }
 }
 
 $baseUrl    = 'https://str.tickex.com.ar';
@@ -507,6 +519,16 @@ $qrUrl      = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' .
           <div class="flash <?php echo ($eventoOk && $puedeCheckin) ? 'ok' : 'warn'; ?>">
             <?php echo e($mensaje); ?>
           </div>
+        <?php endif; ?>
+
+        <?php if($puedeCheckin && $eventoOk && (int)$ticket['checked_in'] === 0): ?>
+          <form method="post" action="checkin.php" style="margin:14px 0;">
+            <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+            <input type="hidden" name="action" value="confirm_checkin">
+            <input type="hidden" name="c" value="<?php echo e($codigo); ?>">
+            <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
+            <button class="btn" type="submit" style="width:100%;background:var(--ok);color:#04150a;">Confirmar ingreso</button>
+          </form>
         <?php endif; ?>
 
         <p>

@@ -18,6 +18,12 @@ $okMsg = '';
 $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 tickex_require_event_access($pdo, $eventoId, $cu);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+  http_response_code(403);
+  exit('Solicitud vencida o inválida.');
+}
+$csrf = tickex_csrf_token();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_event_capacity') {
   try {
     $capacity = isset($_POST['capacidad_total']) ? (int)$_POST['capacidad_total'] : 0;
@@ -129,8 +135,8 @@ try {
 // =======================
 // ELIMINAR TIPO DEL EVENTO (tachito)
 // =======================
-if (isset($_GET['del_te'])) {
-    $teId = (int)$_GET['del_te'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_type') {
+    $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 
     $st = $pdo->prepare("SELECT id FROM tipos_entrada WHERE id = ? AND evento_id = ?");
     $st->execute(array($teId, $eventoId));
@@ -309,7 +315,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card tx-ticket-nav" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
   <a class="btn secondary" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">✏ Editar datos del evento</a>
-  <a class="btn secondary" href="plantillas_entrada.php">⚙ Mis entradas (plantillas)</a>
+  <a class="btn secondary" href="mis_entradas.php">⚙ Mis entradas (plantillas)</a>
   <span style="flex:1 1 auto;"></span>
 </div>
 
@@ -353,6 +359,7 @@ include __DIR__.'/inc/layout_top.php';
   <h3>Cupo global del evento</h3>
   <p class="muted">Es el límite físico total de personas. Todas las entradas —checkout, promociones, cortesías, puerta y manuales— consumen este mismo cupo.</p>
   <form method="post" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="update_event_capacity">
     <div style="min-width:220px;">
       <label for="capacidad_total">Capacidad total</label>
@@ -369,9 +376,10 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card tx-ticket-templates">
   <h3>Agregar tipos desde Mis Entradas</h3>
   <?php if (empty($plantillas)): ?>
-    <div class="muted">No tenés plantillas activas. Crealas en <a href="plantillas_entrada.php">Mis Entradas</a>.</div>
+    <div class="muted">No tenés plantillas activas. Crealas en <a href="mis_entradas.php">Mis Entradas</a>.</div>
   <?php else: ?>
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <label for="tpl_id" class="muted">Plantilla:</label>
       <select name="tpl_id" id="tpl_id">
         <?php foreach ($plantillas as $tpl): ?>
@@ -427,6 +435,7 @@ include __DIR__.'/inc/layout_top.php';
             <td data-label="Total"><?php echo (int)$te['cantidad_total']; ?></td>
             <td data-label="Disponible">
               <form method="post" id="type-config-<?php echo (int)$te['id']; ?>" style="margin:0;display:inline;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="update_disponible">
                 <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
                 <input type="number" name="cantidad_disponible" value="<?php echo (int)$te['cantidad_disponible']; ?>" min="0" style="width:60px;">
@@ -446,6 +455,7 @@ include __DIR__.'/inc/layout_top.php';
             <td data-label="Visible">
               <?php $visOn = isset($te[$visCol]) ? (int)$te[$visCol] === 1 : true; ?>
               <form method="post" style="margin:0;display:inline;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="toggle_vis">
                 <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
                 <input type="hidden" name="val" value="<?php echo $visOn ? 0 : 1; ?>">
@@ -458,11 +468,12 @@ include __DIR__.'/inc/layout_top.php';
             </td>
             <?php endif; ?>
             <td data-label="Acciones">
-              <a class="btn secondary"
-                 href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>&del_te=<?php echo (int)$te['id']; ?>"
-                 onclick="return confirm('¿Eliminar este tipo de entrada del evento?');">
-                🗑
-              </a>
+              <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este tipo de entrada del evento?');">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+                <input type="hidden" name="action" value="delete_type">
+                <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
+                <button class="btn secondary" type="submit" aria-label="Eliminar tipo de entrada">🗑</button>
+              </form>
             </td>
           </tr>
         <?php endforeach; ?>

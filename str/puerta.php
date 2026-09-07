@@ -5,8 +5,8 @@ $title = "Puerta – Check-in";
 require_login();
 
 $cu = current_user();
-$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : (isset($cu['rol'])?$cu['rol']:'');
-$rolEvento  = isset($_SESSION['rol_evento']) ? $_SESSION['rol_evento'] : (isset($cu['rol_evento'])?$cu['rol_evento']:'');
+$tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : '';
+$rolEvento  = isset($cu['rol_evento']) ? (string)$cu['rol_evento'] : '';
 $hideNav = ($tipoGlobal === 'staff_evento');
 
 // Permitidos: staff puerta (principal). También dejamos super/admin por si querés usarlo.
@@ -67,6 +67,8 @@ if ($tipoGlobal === 'staff_evento' && $eventoId <= 0) {
 }
 
 if ($eventoId <= 0) abort_404("ID de evento inválido.");
+tickex_require_event_access($pdo, $eventoId, $cu);
+$_SESSION['evento_id'] = $eventoId;
 
 // Datos del evento
 $eventoNombre = '';
