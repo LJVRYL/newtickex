@@ -1,469 +1,137 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
-session_start();
+require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/notificaciones.php';
+require_once __DIR__ . '/inc/secure_links.php';
+require_once __DIR__ . '/inc/customer_portal.php';
+require_once __DIR__ . '/inc/mail.php';
 
-$flashOk = '';
-$flashError = '';
-
-if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
-  exit;
-}
-
-$dbFile = __DIR__ . '/save_the_rave.sqlite';
-
-try {
-  $pdo = new PDO('sqlite:' . $dbFile);
-  $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (Exception $e) {
-  header('Content-Type: text/plain; charset=utf-8');
-  echo "Error al conectar a la base de datos: " . $e->getMessage();
-  exit;
-}
-
-// Garantizar tabla de registros pendientes (fuente de datos de clientes)
-$pdo->exec("CREATE TABLE IF NOT EXISTS registro_pendientes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL,
-  token TEXT NOT NULL,
-  nombre TEXT,
-  apellido TEXT,
-  apodo TEXT,
-  dni TEXT,
-  cbu TEXT,
-  genero TEXT,
-  foto_path TEXT,
-  next_url TEXT,
-  creado_en TEXT,
-  completado_en TEXT,
-  password_hash TEXT
-)");
-
-// Backfill columna password_hash si falta
-try {
-  $cols = $pdo->query("PRAGMA table_info(registro_pendientes)")->fetchAll(PDO::FETCH_ASSOC);
-  $hasPass = false;
-  $hasCbu = false;
-  foreach ($cols as $c) {
-    if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
-  }
-  if (!$hasPass) {
-    $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT");
-  }
-
-  foreach ($cols as $c) {
-    if (isset($c['name']) && $c['name'] === 'cbu') { $hasCbu = true; break; }
-  }
-  if (!$hasCbu) {
-    $pdo->exec("ALTER TABLE registro_pendientes ADD COLUMN cbu TEXT");
-  }
-} catch (Exception $e) {
-  // ignore
-}
-
-$pdo->exec("CREATE TABLE IF NOT EXISTS entradas_ocultas_usuario (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  entrada_id INTEGER NOT NULL,
-  email TEXT NOT NULL,
-  creado_en TEXT
-)");
-
-$usuarioId = (int)$_SESSION['usuario_id'];
-
-// Asegurar tablas mínimas para staff (nuevo modelo: staff como rol adicional de cliente)
-try {
-  $pdo->exec("CREATE TABLE IF NOT EXISTS staff_admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_admin_id INTEGER NOT NULL,
-    cliente_id INTEGER NOT NULL,
-    rol_staff TEXT,
-    activo INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(owner_admin_id, cliente_id)
-  )");
-  $pdo->exec("CREATE INDEX IF NOT EXISTS idx_staff_admins_cliente ON staff_admins(cliente_id)");
-} catch (Exception $e) {
-  // ignore
-}
-
-$revendedorActivo = false;
-try {
-  $stRev = $pdo->prepare("SELECT id FROM revendedores WHERE cliente_id = :cid AND activo = 1 ORDER BY id DESC LIMIT 1");
-  $stRev->execute(array(':cid' => $usuarioId));
-  $revendedorActivo = (bool)$stRev->fetchColumn();
-} catch (Exception $e) {
-  $revendedorActivo = false;
-}
-
-$staffActivo = false;
-try {
-  $stStaff = $pdo->prepare("SELECT 1 FROM staff_admins WHERE cliente_id = :cid AND activo = 1 LIMIT 1");
-  $stStaff->execute(array(':cid' => $usuarioId));
-  $staffActivo = (bool)$stStaff->fetchColumn();
-} catch (Exception $e) {
-  $staffActivo = false;
-}
-
-$staffInvitesPend = array();
-try {
-  $stInvP = $pdo->prepare("SELECT id, owner_admin_id, mensaje, created_at
-                           FROM staff_admin_invitaciones
-                           WHERE estado = 'pending' AND (cliente_id = :cid OR lower(email) = lower(:e))
-                           ORDER BY id DESC LIMIT 20");
-  $stInvP->execute(array(':cid' => $usuarioId, ':e' => isset($_SESSION['usuario_email']) ? (string)$_SESSION['usuario_email'] : ''));
-  $staffInvitesPend = $stInvP->fetchAll(PDO::FETCH_ASSOC);
-
-  if (!empty($staffInvitesPend) && function_exists('add_notification_once_by_key')) {
-    foreach ($staffInvitesPend as $sip) {
-      $invIdS = isset($sip['id']) ? (int)$sip['id'] : 0;
-      if ($invIdS <= 0) continue;
-      add_notification_once_by_key(
-        $usuarioId,
-        'staff_invite_' . $invIdS,
-        'Tenés una invitación pendiente para sumarte al staff. Entrá a Mi Perfil para aceptarla o rechazarla.',
-        'staff_invite',
-        array('inv_id' => $invIdS, 'admin_id' => (int)$sip['owner_admin_id']),
-        $pdo
-      );
-    }
-  }
-} catch (Exception $e) {
-  $staffInvitesPend = array();
-}
-
-try {
-    // Datos del usuario desde registro_pendientes (clientes)
-    $stmt = $pdo->prepare("
-      SELECT id, nombre, apellido, email, dni, 'cliente' AS rol, 1 AS email_confirmado, creado_en, completado_en, apodo, genero, password_hash
-      FROM registro_pendientes
-      WHERE id = :id
-      LIMIT 1
-    ");
-    $stmt->execute(array(':id' => $usuarioId));
-    $u = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$u) {
-        // El usuario ya no existe -> limpiar sesión
-        $_SESSION = array();
-        session_destroy();
-        header('Location: login.php');
-        exit;
-    }
-
-    $nombreCompleto  = trim($u['nombre'] . ' ' . $u['apellido']);
-    $emailConfirmado = ((int)$u['email_confirmado'] === 1);
-    $rol             = $u['rol'];
-    $rolDisplay       = $rol;
-    if ($staffActivo) {
-      $rolDisplay = $rol . ' + staff';
-    }
-    $emailUsuario    = $u['email'];
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'hide_ticket') {
-      $ticketId = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
-      if ($ticketId > 0) {
-        $stmtChk = $pdo->prepare("SELECT id FROM entradas WHERE id = :id AND email = :email LIMIT 1");
-        $stmtChk->execute(array(':id' => $ticketId, ':email' => $emailUsuario));
-        if ($stmtChk->fetch(PDO::FETCH_ASSOC)) {
-          $stmtHide = $pdo->prepare("INSERT INTO entradas_ocultas_usuario (entrada_id, email, creado_en) VALUES (:id, :email, datetime('now'))");
-          $stmtHide->execute(array(':id' => $ticketId, ':email' => $emailUsuario));
-        }
-      }
-      header('Location: panel_usuario.php');
-      exit;
-    }
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'change_password') {
-      $passActual = isset($_POST['pass_actual']) ? trim($_POST['pass_actual']) : '';
-      $passNueva  = isset($_POST['pass_nueva']) ? trim($_POST['pass_nueva']) : '';
-      $passRepite = isset($_POST['pass_repite']) ? trim($_POST['pass_repite']) : '';
-
-      if ($passNueva === '' || $passRepite === '') {
-        $flashError = 'La nueva contraseña es obligatoria.';
-      } elseif (strlen($passNueva) < 6) {
-        $flashError = 'La nueva contraseña debe tener al menos 6 caracteres.';
-      } elseif ($passNueva !== $passRepite) {
-        $flashError = 'La nueva contraseña y su repeticion no coinciden.';
-      } else {
-        $hashActual = isset($u['password_hash']) ? (string)$u['password_hash'] : '';
-        $needsOld   = ($hashActual !== '');
-
-        // Validar contraseña actual solo si ya había una definida
-        if ($needsOld) {
-          $okOld = false;
-          if (function_exists('password_verify') && strpos($hashActual, '$2') === 0) {
-            $okOld = password_verify($passActual, $hashActual);
-          }
-          if (!$okOld && strlen($hashActual) === 32 && ctype_xdigit($hashActual)) {
-            $okOld = (md5($passActual) === strtolower($hashActual));
-          }
-          if (!$okOld && $hashActual !== '') {
-            $okOld = ($passActual !== '' && $passActual === $hashActual);
-          }
-
-          if (!$okOld) {
-            $flashError = 'La contraseña actual no es correcta.';
-          }
-        }
-
-        if ($flashError === '') {
-          $newHash = function_exists('password_hash') ? password_hash($passNueva, PASSWORD_DEFAULT) : md5($passNueva);
-          $stmtPwd = $pdo->prepare("UPDATE registro_pendientes SET password_hash = :h WHERE id = :id");
-          $stmtPwd->execute(array(':h' => $newHash, ':id' => (int)$u['id']));
-          $u['password_hash'] = $newHash;
-          $flashOk = 'Contraseña actualizada. Usala para iniciar sesión desde ahora.';
-        }
-      }
-    }
-
-    // Últimas entradas asociadas a su email
-    $showAll = isset($_GET['ver_todas']) && $_GET['ver_todas'] === '1';
-
-    // Detectar columnas disponibles en eventos
-    $evCols = $pdo->query("PRAGMA table_info(eventos)")->fetchAll(PDO::FETCH_ASSOC);
-    $colMap = array();
-    foreach ($evCols as $c) { $colMap[$c['name']] = true; }
-    $hasFlyer = isset($colMap['flyer']);
-    $hasFlyerFile = isset($colMap['flyer_filename']);
-    $hasFechaDesde = isset($colMap['fecha_desde']);
-    $hasLugar = isset($colMap['lugar']);
-    $hasUbic = isset($colMap['ubicacion']);
-
-    $selectEv = array('ev.nombre AS evento_nombre');
-    if ($hasFlyerFile) $selectEv[] = 'ev.flyer_filename';
-    if ($hasFlyer) $selectEv[] = 'ev.flyer';
-    if ($hasFechaDesde) $selectEv[] = 'ev.fecha_desde';
-    if ($hasLugar) $selectEv[] = 'ev.lugar';
-    if ($hasUbic) $selectEv[] = 'ev.ubicacion';
-    $selStr = implode(",\n            ", $selectEv);
-
-    $sqlT = "
-      SELECT
-        e.id,
-        e.codigo,
-        e.evento_id,
-        e.fecha_registro,
-        e.tipo,
-        e.monto_pagado,
-        e.checked_in,
-        $selStr
-      FROM entradas e
-      LEFT JOIN eventos ev ON ev.id = e.evento_id
-      LEFT JOIN entradas_ocultas_usuario eo ON eo.entrada_id = e.id AND eo.email = :email
-      WHERE e.email = :email
-        " . ($showAll ? "" : "AND (e.checked_in IS NULL OR e.checked_in = 0) AND eo.id IS NULL") . "
-      ORDER BY e.fecha_registro DESC, e.id DESC
-      LIMIT 50
-    ";
-    $stmtT = $pdo->prepare($sqlT);
-    $stmtT->execute(array(':email' => $emailUsuario));
-    $tickets = $stmtT->fetchAll(PDO::FETCH_ASSOC);
-
-} catch (Exception $e) {
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "Error al cargar datos del usuario: " . $e->getMessage();
+require_login();
+$cu = current_user();
+$usuarioId = isset($_SESSION['auth_context'], $_SESSION['usuario_id']) && $_SESSION['auth_context'] === 'user'
+    ? (int)$_SESSION['usuario_id'] : 0;
+if ($usuarioId <= 0) {
+    header('Location: login.php?next=' . urlencode('/panel_usuario.php'));
     exit;
 }
 
+$pdo = db();
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+tickex_customer_portal_ensure_schema($pdo);
+$user = tickex_customer_portal_user($pdo, $usuarioId);
+if (!$user) {
+    tickex_clear_identity_session();
+    header('Location: login.php');
+    exit;
+}
+
+$email = (string)$user['email'];
+$csrf = tickex_csrf_token();
+$allowedFilters = array('vigentes', 'utilizadas', 'vencidas', 'canceladas', 'ocultas', 'todas');
+$filter = isset($_GET['estado']) && in_array((string)$_GET['estado'], $allowedFilters, true)
+    ? (string)$_GET['estado'] : 'vigentes';
+$flashError = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
+    $returnFilter = isset($_POST['estado']) && in_array((string)$_POST['estado'], $allowedFilters, true)
+        ? (string)$_POST['estado'] : 'vigentes';
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $flashError = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    } else {
+        $ticketId = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
+        if ($action === 'hide_ticket' || $action === 'restore_ticket') {
+            $ok = tickex_customer_portal_set_hidden($pdo, $email, $ticketId, $action === 'hide_ticket');
+            if ($ok) {
+                flash('ok', $action === 'hide_ticket' ? 'Entrada archivada.' : 'Entrada restaurada.');
+                header('Location: panel_usuario.php?estado=' . urlencode($returnFilter));
+                exit;
+            }
+            $flashError = 'No encontramos esa entrada dentro de tu cuenta.';
+        } elseif ($action === 'resend_ticket') {
+            $own = $pdo->prepare('SELECT id,codigo FROM entradas WHERE id=:id AND lower(trim(email))=lower(trim(:email)) LIMIT 1');
+            $own->execute(array(':id' => $ticketId, ':email' => $email));
+            $entry = $own->fetch(PDO::FETCH_ASSOC);
+            if (!$entry) {
+                $flashError = 'No encontramos esa entrada dentro de tu cuenta.';
+            } else {
+                $scheme = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http';
+                $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : 'str.tickex.com.ar';
+                $ticketUrl = tickex_secure_ticket_url($pdo, $scheme . '://' . $host, (int)$entry['id'], (string)$entry['codigo']);
+                $sender = function ($ticket, $url) {
+                    $subject = 'Tu entrada para ' . $ticket['evento_nombre'];
+                    $body = "Hola " . $ticket['nombre'] . ",\n\nTe reenviamos tu entrada para " . $ticket['evento_nombre'] . ".\n\n";
+                    $body .= "Abrila desde este enlace seguro:\n" . $url . "\n\nTickex\n";
+                    return tickex_send_mail_template($ticket['email'], 'entrada_registro', array(
+                        'id' => $ticket['id'], 'nombre' => $ticket['nombre'], 'email' => $ticket['email'],
+                        'tipo' => $ticket['tipo'], 'fecha_registro' => $ticket['fecha_registro'],
+                        'ticket_url' => $url, 'codigo' => $ticket['codigo'],
+                    ), array(
+                        'context' => 'customer_ticket_resend', 'related_table' => 'entradas', 'related_id' => (int)$ticket['id'],
+                    ), array(
+                        'subject' => $subject, 'body' => $body, 'from_email' => 'servicio@tickex.com.ar',
+                        'from_name' => 'Tickex', 'reply_to' => 'servicio@tickex.com.ar',
+                        'extra_params' => '-f servicio@tickex.com.ar', 'is_html' => 0,
+                    ));
+                };
+                list($ok, $message) = tickex_customer_portal_resend($pdo, $usuarioId, $email, $ticketId, $ticketUrl, $sender);
+                if ($ok) {
+                    flash('ok', $message);
+                    header('Location: panel_usuario.php?estado=' . urlencode($returnFilter));
+                    exit;
+                }
+                $flashError = $message;
+            }
+        }
+    }
+}
+
+$tickets = tickex_customer_portal_load_tickets($pdo, $email);
+$counts = tickex_customer_portal_counts($tickets);
+$visibleTickets = tickex_customer_portal_filter_tickets($tickets, $filter);
+$flashes = flash_get_all();
+$staffActive = false;
+$resellerActive = false;
+$pendingInvitations = 0;
+try { $st = $pdo->prepare('SELECT 1 FROM staff_admins WHERE cliente_id=:id AND activo=1 LIMIT 1'); $st->execute(array(':id' => $usuarioId)); $staffActive = (bool)$st->fetchColumn(); } catch (Exception $e) {}
+try { $st = $pdo->prepare('SELECT 1 FROM revendedores WHERE cliente_id=:id AND activo=1 LIMIT 1'); $st->execute(array(':id' => $usuarioId)); $resellerActive = (bool)$st->fetchColumn(); } catch (Exception $e) {}
+try { $st = $pdo->prepare("SELECT COUNT(*) FROM staff_admin_invitaciones WHERE estado='pending' AND (cliente_id=:id OR lower(email)=lower(:email))"); $st->execute(array(':id' => $usuarioId, ':email' => $email)); $pendingInvitations = (int)$st->fetchColumn(); } catch (Exception $e) {}
+
+function tickex_customer_date_label($value)
+{
+    $value = trim((string)$value);
+    if ($value === '') return 'Fecha a confirmar';
+    $ts = strtotime($value);
+    return $ts === false ? $value : date('d/m/Y', $ts);
+}
+
+$statusLabels = array('vigente' => 'Disponible', 'utilizada' => 'Utilizada', 'vencida' => 'Evento finalizado', 'cancelada' => 'Cancelada');
+$filterLabels = array('vigentes' => 'Próximas', 'utilizadas' => 'Utilizadas', 'vencidas' => 'Anteriores', 'canceladas' => 'Canceladas', 'ocultas' => 'Archivadas', 'todas' => 'Todas');
+$displayName = trim((string)$user['nombre'] . ' ' . (string)$user['apellido']);
+if ($displayName === '') $displayName = $email;
+$title = 'Mis entradas – Tickex';
 include __DIR__ . '/inc/layout_top.php';
-$isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '1');
 ?>
-<div class="card" style="max-width:900px;margin:0 auto 16px auto;">
-  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-    <div>
-      <img src="tickex-logo_sobre_oscuro.svg"
-           alt="Tickex"
-           style="height:80px;display:block;">
-    </div>
-    <div>
-      <?php if (!$isApp): ?>
-        <h2 style="margin:0;">Mi cuenta Tickex</h2>
-      <?php endif; ?>
-      <?php if ($isApp): ?>
-        <?php
-          $nombreHola = '';
-          if (isset($u['nombre']) && trim((string)$u['nombre']) !== '') {
-            $nombreHola = trim((string)$u['nombre']);
-          } elseif ($nombreCompleto !== '') {
-            $nombreHola = $nombreCompleto;
-          } else {
-            $nombreHola = $emailUsuario;
-          }
-          $tickexId = ($u['apodo'] && $u['apodo'] !== '') ? $u['apodo'] : ('#'.$u['id']);
-        ?>
-        <div class="app-profile">
-          <div class="app-hello">Hola, <strong><?php echo htmlspecialchars($nombreHola, ENT_QUOTES, 'UTF-8'); ?></strong></div>
-          <div class="app-email">
-            <?php if ($emailConfirmado): ?>
-              <span class="app-badge app-badge-ok">✔ Email verificado</span>
-            <?php else: ?>
-              <span class="app-badge app-badge-err">✖ Email pendiente de verificación</span>
-            <?php endif; ?>
-            <span class="app-email-text"><?php echo htmlspecialchars($emailUsuario, ENT_QUOTES, 'UTF-8'); ?></span>
-          </div>
-          <div class="app-meta">Rol: <?php echo htmlspecialchars($rol, ENT_QUOTES, 'UTF-8'); ?></div>
-          <?php if ($staffActivo): ?>
-            <div class="app-meta">Staff: sí</div>
-          <?php endif; ?>
-          <div class="app-meta">Tickex ID: <?php echo htmlspecialchars($tickexId, ENT_QUOTES, 'UTF-8'); ?></div>
-        </div>
-      <?php else: ?>
-        <div style="color:var(--muted);margin-top:4px;">
-          Hola,
-          <strong>
-            <?php
-            echo htmlspecialchars(
-                $nombreCompleto !== '' ? $nombreCompleto : $emailUsuario,
-                ENT_QUOTES,
-                'UTF-8'
-            );
-            ?>
-          </strong>
-        </div>
-        <div style="margin-top:6px;font-size:13px;">
-          <?php if ($emailConfirmado): ?>
-            <span style="background:#1b8a3a;color:white;padding:2px 8px;border-radius:999px;font-size:12px;">
-              ✔ Email verificado
-            </span>
-          <?php else: ?>
-            <span style="background:#b34747;color:white;padding:2px 8px;border-radius:999px;font-size:12px;">
-              ✖ Email pendiente de verificación
-            </span>
-          <?php endif; ?>
-          <span style="margin-left:8px;color:var(--muted);">
-            Rol: <?php echo htmlspecialchars($rolDisplay, ENT_QUOTES, 'UTF-8'); ?>
-          </span>
-        </div>
-      <?php endif; ?>
-    </div>
-  </div>
-</div>
-
-<?php if ($flashOk !== ''): ?>
-  <div class="card" style="max-width:900px;margin:0 auto 12px auto;">
-    <div class="flash ok"><?php echo e($flashOk); ?></div>
-  </div>
-<?php endif; ?>
-
-<?php if ($flashError !== ''): ?>
-  <div class="card" style="max-width:900px;margin:0 auto 12px auto;">
-    <div class="flash err"><?php echo e($flashError); ?></div>
-  </div>
-<?php endif; ?>
-
-<?php if (!empty($staffInvitesPend)): ?>
-  <div class="card" style="max-width:900px;margin:0 auto 12px auto;border:1px solid rgba(255,255,255,.18);">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-      <div>
-        <div style="font-weight:700;">Tenés <?php echo (int)count($staffInvitesPend); ?> invitación(es) pendiente(s) de staff</div>
-        <div class="muted" style="font-size:13px;margin-top:4px;">Podés aceptarlas o rechazarlas desde tu perfil.</div>
-      </div>
-      <a class="btn" href="panel_usuario_mi_perfil.php">Ver invitaciones</a>
-    </div>
-  </div>
-<?php endif; ?>
-
-<div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
-
-  <style>
-    .tickex-ticket-row { min-width: 0; }
-    .tickex-ticket-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    @media (max-width: 520px) { .tickex-ticket-title { white-space: normal; overflow: visible; text-overflow: clip; } }
-  </style>
-
-    <!-- Mis últimos Tickex -->
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;<?php echo $isApp ? 'justify-content:flex-start;' : ''; ?>">
-        <?php if (!$isApp): ?>
-          <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Mis Tickex <span class="pill" style="background:var(--panel-2);border:1px solid var(--line);">Tickex ID: <?php echo htmlspecialchars(($u['apodo'] && $u['apodo']!=='') ? $u['apodo'] : ('#'.$u['id']), ENT_QUOTES, 'UTF-8'); ?></span></h3>
-        <?php endif; ?>
-        <div class="app-row-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
-          <?php if ($revendedorActivo): ?>
-            <a class="btn" href="panel_revendedor.php">Dashboard revendedor</a>
-          <?php endif; ?>
-          <?php if ($staffActivo): ?>
-            <a class="btn" href="panel_staff.php">Dashboard staff</a>
-          <?php endif; ?>
-          <a class="btn secondary" href="panel_usuario.php?ver_todas=1">Ver todas</a>
-          <a class="btn secondary" href="panel_usuario.php">Solo pendientes</a>
-        </div>
-      </div>
-      <?php if (!empty($tickets)): ?>
-        <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px;margin-top:10px;">
-          <?php foreach ($tickets as $t): ?>
-            <?php
-              $flyer = null;
-              if (isset($t['flyer_filename']) && $t['flyer_filename'] && file_exists(__DIR__.'/'.$t['flyer_filename'])) {
-                $flyer = $t['flyer_filename'];
-              } elseif (isset($t['flyer']) && $t['flyer']) {
-                $flyer = $t['flyer'];
-              }
-              $eventName = isset($t['evento_nombre']) && $t['evento_nombre'] ? $t['evento_nombre'] : ('Evento #'.$t['evento_id']);
-              $loc = '';
-              if (isset($t['lugar']) && $t['lugar']) $loc = $t['lugar'];
-              elseif (isset($t['ubicacion']) && $t['ubicacion']) $loc = $t['ubicacion'];
-              $ticketUrl = 'ticket.php?c=' . urlencode($t['codigo']);
-            ?>
-            <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;gap:12px;align-items:stretch;width:100%;">
-              <div style="flex:0 0 140px;height:140px;display:flex;align-items:center;justify-content:center;background:var(--panel-3);border-radius:8px;margin:12px 0 12px 12px;overflow:hidden;">
-                <?php if ($flyer): ?>
-                  <img src="<?php echo e($flyer); ?>" alt="Flyer" style="width:100%;height:100%;max-width:140px;max-height:140px;object-fit:cover;aspect-ratio:1/1;display:block;margin:auto;">
-                <?php else: ?>
-                  <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">Sin flyer</div>
-                <?php endif; ?>
-              </div>
-              <div class="tickex-ticket-row" style="padding:12px;display:flex;flex-direction:column;gap:6px;flex:1;min-width:0;">
-                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
-                  <span class="tickex-ticket-title" style="font-weight:700;"><?php echo e($eventName); ?></span>
-                  <span class="pill" style="border:1px solid var(--line);">Entrada <?php echo e($t['tipo']); ?></span>
-                </div>
-                <div style="font-size:13px;color:var(--muted);display:grid;grid-template-columns:1fr;gap:4px;">
-                  <?php if (!empty($t['fecha_desde'])): ?><span>📅 <?php echo e($t['fecha_desde']); ?></span><?php endif; ?>
-                  <?php if ($loc): ?><span>📍 <?php echo e($loc); ?></span><?php endif; ?>
-                  <span>Emitida: <?php echo e($t['fecha_registro']); ?></span>
-                </div>
-                <div style="font-size:18px;font-weight:700;">
-                  <?php
-                    $m = (int)$t['monto_pagado'];
-                    echo $m > 0 ? '$'.number_format($m/100,2,',','.') : 'Cortesía';
-                  ?>
-                </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                  <a class="btn secondary" style="padding:6px 10px;" href="<?php echo e($ticketUrl); ?>" target="_blank" rel="noopener" title="Ver Tickex" aria-label="Ver Tickex">👁</a>
-                  <?php if (!$showAll): ?>
-                    <form method="post" style="margin:0;" onsubmit="return confirm('¿Ocultar este Tickex de tu lista?');">
-                      <input type="hidden" name="action" value="hide_ticket">
-                      <input type="hidden" name="ticket_id" value="<?php echo (int)$t['id']; ?>">
-                      <button class="btn danger" style="padding:6px 10px;" type="submit" title="Ocultar" aria-label="Ocultar">🗑</button>
-                    </form>
-                  <?php endif; ?>
-                </div>
-              </div>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      <?php else: ?>
-        <p style="margin-top:8px;font-size:14px;">
-          Todavía no tenés Tickex asociados a este email.
-        </p>
-        <p style="font-size:13px;color:var(--muted);">
-          Cuando compres entradas con este correo, van a aparecer acá automáticamente.
-        </p>
-      <?php endif; ?>
-    </div>
-
-  </div>
-
-  <!-- Columna derecha eliminada: solo cards de Tickex -->
-</div>
-
-<footer style="max-width:900px;margin:32px auto 0 auto;text-align:center;font-size:13px;color:var(--muted);">
-  <a href="#" style="color:var(--muted);text-decoration:underline;">Centro de Ayuda / FAQ</a> ·
-  <a href="#" style="color:var(--muted);text-decoration:underline;">Contactar soporte</a>
-</footer>
-
+<style>
+.customer-portal{max-width:1120px;margin:0 auto;display:grid;gap:18px}.customer-hero{position:relative;overflow:hidden;padding:30px;background:radial-gradient(circle at 90% 10%,rgba(55,207,236,.14),transparent 30%),linear-gradient(135deg,rgba(25,29,57,.98),rgba(54,31,105,.96));border-color:rgba(139,92,246,.3)}.customer-hero h1{margin:7px 0 5px;font-size:clamp(30px,5vw,48px);letter-spacing:-.04em}.customer-hero p{margin:0;color:#b9bdd0}.customer-kicker{color:#57d9ed;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.14em}.customer-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.customer-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:24px}.customer-stat{padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(5,9,24,.32)}.customer-stat span{display:block;color:#aeb2c7;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.customer-stat strong{display:block;margin-top:3px;font:800 24px/1.1 Manrope,Inter,sans-serif}.customer-tabs{display:flex;gap:8px;overflow:auto;padding:4px}.customer-tab{display:flex;align-items:center;gap:7px;padding:10px 13px;border:1px solid var(--line);border-radius:12px;color:var(--muted);text-decoration:none;white-space:nowrap;font-weight:750}.customer-tab.active{color:#fff;border-color:#7f63ff;background:rgba(117,82,235,.2)}.customer-tab b{display:grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:rgba(255,255,255,.08);font-size:11px}.ticket-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.customer-ticket{display:grid;grid-template-columns:132px minmax(0,1fr);min-height:190px;overflow:hidden;padding:0}.ticket-art{background:linear-gradient(145deg,#151b32,#2f2261);min-height:190px;display:grid;place-items:center;overflow:hidden}.ticket-art img{width:100%;height:100%;object-fit:cover}.ticket-art span{font:900 26px Manrope;color:#8169ff}.ticket-content{padding:18px;display:flex;flex-direction:column;gap:11px;min-width:0}.ticket-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.ticket-top h2{margin:0;font-size:18px;line-height:1.25}.ticket-status{flex:0 0 auto;padding:5px 8px;border-radius:999px;border:1px solid var(--line);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}.ticket-status.vigente{color:#65e6a5}.ticket-status.utilizada{color:#63c7ff}.ticket-status.vencida{color:#aeb2c7}.ticket-status.cancelada{color:#ff8e9d}.ticket-meta{display:grid;gap:4px;color:var(--muted);font-size:12px}.ticket-price{font:800 18px Manrope}.ticket-buttons{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}.ticket-buttons form{margin:0}.customer-empty{text-align:center;padding:42px 20px}.customer-empty h2{margin:0 0 7px}.customer-empty p{margin:0;color:var(--muted)}.customer-notice{display:flex;justify-content:space-between;gap:15px;align-items:center}.customer-notice p{margin:4px 0 0;color:var(--muted)}
+@media(max-width:820px){.ticket-list{grid-template-columns:1fr}.customer-summary{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.customer-portal{gap:12px}.customer-hero{padding:22px}.customer-actions .btn{flex:1;text-align:center}.customer-ticket{grid-template-columns:92px minmax(0,1fr);min-height:180px}.ticket-art{min-height:180px}.ticket-content{padding:14px}.ticket-top{display:grid}.ticket-status{width:max-content}.ticket-buttons .btn{padding:7px 9px;font-size:12px}.customer-notice{align-items:flex-start;display:grid}}
+</style>
+<main class="customer-portal">
+  <section class="card customer-hero">
+    <div class="customer-kicker">Tu cuenta Tickex</div><h1>Hola, <?php echo e($displayName); ?></h1>
+    <p>Encontrá tus entradas, revisá su estado y abrí el QR cuando llegues al evento.</p>
+    <div class="customer-actions"><a class="btn" href="panel_usuario_mi_perfil.php">Mi perfil</a><?php if ($staffActive): ?><a class="btn secondary" href="panel_staff.php">Panel de staff</a><?php endif; ?><?php if ($resellerActive): ?><a class="btn secondary" href="panel_revendedor.php">Panel de revendedor</a><?php endif; ?><a class="btn secondary" href="logout_usuario.php">Cerrar sesión</a></div>
+    <div class="customer-summary"><div class="customer-stat"><span>Disponibles</span><strong><?php echo (int)$counts['vigentes']; ?></strong></div><div class="customer-stat"><span>Utilizadas</span><strong><?php echo (int)$counts['utilizadas']; ?></strong></div><div class="customer-stat"><span>Anteriores</span><strong><?php echo (int)$counts['vencidas']; ?></strong></div><div class="customer-stat"><span>Total</span><strong><?php echo (int)$counts['todas']; ?></strong></div></div>
+  </section>
+  <?php foreach ($flashes as $flash): ?><div class="flash <?php echo e($flash['type']); ?>"><?php echo e($flash['msg']); ?></div><?php endforeach; ?>
+  <?php if ($flashError !== ''): ?><div class="flash err"><?php echo e($flashError); ?></div><?php endif; ?>
+  <?php if ($pendingInvitations > 0): ?><section class="card customer-notice"><div><strong>Tenés <?php echo $pendingInvitations; ?> invitación<?php echo $pendingInvitations === 1 ? '' : 'es'; ?> de staff pendiente<?php echo $pendingInvitations === 1 ? '' : 's'; ?></strong><p>Podés revisarlas sin perder tu perfil de comprador.</p></div><a class="btn" href="panel_usuario_mi_perfil.php#invitaciones">Revisar</a></section><?php endif; ?>
+  <nav class="card customer-tabs" aria-label="Filtrar entradas"><?php foreach ($filterLabels as $filterKey => $filterLabel): ?><a class="customer-tab<?php echo $filter === $filterKey ? ' active' : ''; ?>" href="panel_usuario.php?estado=<?php echo e($filterKey); ?>"><?php echo e($filterLabel); ?><b><?php echo (int)$counts[$filterKey]; ?></b></a><?php endforeach; ?></nav>
+  <?php if (!$visibleTickets): ?><section class="card customer-empty"><h2>No hay entradas en esta sección</h2><p>Cuando tengas una entrada con este email, aparecerá automáticamente acá.</p></section><?php else: ?>
+  <section class="ticket-list">
+    <?php foreach ($visibleTickets as $ticket): $ticketUrl = tickex_secure_ticket_url($pdo, '', (int)$ticket['id'], (string)$ticket['codigo']); $flyer = trim((string)$ticket['flyer_filename']); $flyerExists = $flyer !== '' && is_file(__DIR__ . '/' . ltrim($flyer, '/\\')); $state = (string)$ticket['portal_state']; ?>
+    <article class="card customer-ticket"><div class="ticket-art"><?php if ($flyerExists): ?><img src="<?php echo e($flyer); ?>" alt="Flyer de <?php echo e($ticket['evento_nombre']); ?>"><?php else: ?><span>TX</span><?php endif; ?></div><div class="ticket-content"><div class="ticket-top"><h2><?php echo e($ticket['evento_nombre']); ?></h2><span class="ticket-status <?php echo e($state); ?>"><?php echo e(isset($statusLabels[$state]) ? $statusLabels[$state] : $state); ?></span></div><div class="ticket-meta"><span><?php echo e($ticket['tipo']); ?></span><span><?php echo e(tickex_customer_date_label($ticket['fecha_desde'])); ?></span><span>Emitida <?php echo e(tickex_customer_date_label($ticket['fecha_registro'])); ?></span></div><div class="ticket-price"><?php echo (float)$ticket['monto_pagado'] > 0 ? '$' . number_format((float)$ticket['monto_pagado'], 2, ',', '.') : 'Sin cargo'; ?></div><div class="ticket-buttons"><?php if ($state !== 'cancelada'): ?><a class="btn" href="<?php echo e($ticketUrl); ?>" target="_blank" rel="noopener">Ver QR</a><?php endif; ?><?php if (empty($ticket['oculta_usuario']) && $state !== 'cancelada'): ?><form method="post"><input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="action" value="resend_ticket"><input type="hidden" name="ticket_id" value="<?php echo (int)$ticket['id']; ?>"><input type="hidden" name="estado" value="<?php echo e($filter); ?>"><button class="btn secondary" type="submit">Reenviar</button></form><?php endif; ?><form method="post"><input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>"><input type="hidden" name="action" value="<?php echo !empty($ticket['oculta_usuario']) ? 'restore_ticket' : 'hide_ticket'; ?>"><input type="hidden" name="ticket_id" value="<?php echo (int)$ticket['id']; ?>"><input type="hidden" name="estado" value="<?php echo e($filter); ?>"><button class="btn secondary" type="submit"><?php echo !empty($ticket['oculta_usuario']) ? 'Restaurar' : 'Archivar'; ?></button></form></div></div></article>
+    <?php endforeach; ?>
+  </section><?php endif; ?>
+</main>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

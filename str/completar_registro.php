@@ -83,6 +83,7 @@ $okMsg = '';
 
 $token = isset($_GET['token']) ? trim($_GET['token']) : '';
 $sessionId = isset($_SESSION['usuario_id']) ? (int)$_SESSION['usuario_id'] : 0;
+$csrf = tickex_csrf_token();
 
 $pdo = db();
 ensure_registro_pendientes($pdo);
@@ -96,7 +97,7 @@ if ($token === '' && $sessionId > 0) {
     $errores[] = 'No encontramos tu registro. Pedí otro email de registro.';
   }
 } elseif ($token !== '') {
-  $st = $pdo->prepare('SELECT * FROM registro_pendientes WHERE token = :t LIMIT 1');
+  $st = $pdo->prepare("SELECT * FROM registro_pendientes WHERE token = :t AND creado_en >= datetime('now','-24 hours') LIMIT 1");
   $st->execute(array(':t' => $token));
   $row = $st->fetch(PDO::FETCH_ASSOC);
   if (!$row) {
@@ -128,6 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
   $passNueva  = isset($_POST['pass_nueva']) ? trim($_POST['pass_nueva']) : '';
   $passRepite = isset($_POST['pass_repite']) ? trim($_POST['pass_repite']) : '';
 
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $errores[] = 'La sesión venció. Volvé a abrir el enlace de registro.';
+    }
     if ($nombre === '' || $apellido === '') {
         $errores[] = 'Nombre y apellido son obligatorios.';
     }
@@ -174,8 +178,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
   // Validar contraseña obligatoria en este paso
   if ($passNueva === '' || $passRepite === '') {
     $errores[] = 'Debés definir una contraseña para tu cuenta.';
-  } elseif (strlen($passNueva) < 6) {
-    $errores[] = 'La contraseña debe tener al menos 6 caracteres.';
+  } elseif (strlen($passNueva) < 10) {
+    $errores[] = 'La contraseña debe tener al menos 10 caracteres.';
   } elseif ($passNueva !== $passRepite) {
     $errores[] = 'Las contraseñas no coinciden.';
   }
@@ -246,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
 
         $okMsg = 'Registro completado. Ya podés continuar con tu compra.';
 
-        $dest = $nextUrl !== '' ? $nextUrl : 'panel_usuario.php';
+        $dest = ($nextUrl !== '' && strpos($nextUrl, '://') === false && substr($nextUrl, 0, 2) !== '//') ? $nextUrl : 'panel_usuario.php';
         header('Location: ' . $dest);
         exit;
     }
@@ -284,6 +288,7 @@ include __DIR__.'/inc/layout_top.php';
 <?php if ($row): ?>
 <div class="card" style="max-width:640px;margin:0 auto 24px auto;">
   <form method="post" enctype="multipart/form-data" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+    <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
     <div style="grid-column:1 / -1;">
       <label>Email</label>
       <input type="email" value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>" disabled>
@@ -315,7 +320,7 @@ include __DIR__.'/inc/layout_top.php';
       </select>
     </div>
     <div>
-      <label>Contraseña (mín 6)</label>
+      <label>Contraseña (mínimo 10)</label>
       <input type="password" name="pass_nueva" required autocomplete="new-password" value="<?php echo htmlspecialchars($passNueva, ENT_QUOTES, 'UTF-8'); ?>">
     </div>
     <div>

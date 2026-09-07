@@ -46,6 +46,7 @@ try {
 $errores = array();
 $email   = '';
 $pass    = '';
+$csrf = tickex_csrf_token();
 
 // Soporte para volver a una URL específica (ej: checkout) luego del login.
 $next = '';
@@ -108,6 +109,9 @@ if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
 // Manejo del POST (login)
 // ---------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+      $errores[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    }
     // Rate limit básico por sesión: evita brute force casual
     $now = time();
     $windowSec = 10 * 60;
@@ -454,6 +458,7 @@ include __DIR__ . '/inc/layout_top.php';
 
 <div class="card tx-login-card">
   <form method="post">
+    <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
     <?php if ($nextSafe !== ''): ?>
       <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextSafe, ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>

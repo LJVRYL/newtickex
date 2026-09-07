@@ -46,6 +46,11 @@ $errores   = array();
 $mensajeOk = '';
 $email     = '';
 $nextUrl   = isset($_GET['next']) ? $_GET['next'] : '';
+$csrf      = tickex_csrf_token();
+
+if ($nextUrl !== '' && (strpos($nextUrl, '://') !== false || substr($nextUrl, 0, 2) === '//')) {
+  $nextUrl = '';
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['email'])) {
   $email = trim($_GET['email']);
@@ -89,10 +94,13 @@ function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
 
 // ---------- POST: procesar email ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $email = isset($_POST['email']) ? trim($_POST['email']) : '';
+  $email = isset($_POST['email']) ? strtolower(trim($_POST['email'])) : '';
   $nextUrl = isset($_POST['next']) ? $_POST['next'] : $nextUrl;
+  if ($nextUrl !== '' && (strpos($nextUrl, '://') !== false || substr($nextUrl, 0, 2) === '//')) $nextUrl = '';
 
-  if ($email === '') {
+  if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    $errores[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+  } elseif ($email === '') {
     $errores[] = 'El email es obligatorio.';
   } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $errores[] = 'El email no tiene un formato válido.';
@@ -253,6 +261,7 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card" style="max-width:480px;margin:0 auto 32px auto;">
   <form method="post" autocomplete="off">
+    <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
     <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <label for="email" style="margin-top:8px;display:block;">Email</label>
     <input type="email" id="email" name="email" required
