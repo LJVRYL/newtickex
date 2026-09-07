@@ -1,0 +1,27 @@
+<?php
+require_once __DIR__.'/../inc/subscriptions.php';
+function sub_ok($condition,$message){if(!$condition){fwrite(STDERR,'FAIL: '.$message.PHP_EOL);exit(1);}echo 'PASS: '.$message.PHP_EOL;}
+$db=tempnam(sys_get_temp_dir(),'tickex-sub-');$pdo=new PDO('sqlite:'.$db);$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE usuarios_admin(id INTEGER PRIMARY KEY,email TEXT,nombre TEXT,apellido TEXT,tipo_global TEXT,activo INTEGER)');
+$pdo->exec('CREATE TABLE eventos(id INTEGER PRIMARY KEY,creado_por_admin_id INTEGER)');
+$pdo->exec('CREATE TABLE entradas(id INTEGER PRIMARY KEY,evento_id INTEGER,fecha_registro TEXT,oculto INTEGER)');
+$pdo->exec("INSERT INTO usuarios_admin VALUES(2,'str@test','STR','Owner','admin_evento',1),(9,'client@test','Cliente','Uno','admin_evento',1),(8,'super@test','Super','Admin','super_admin',1)");
+$pdo->exec('INSERT INTO eventos VALUES(15,2),(18,9)');
+$pdo->exec("INSERT INTO entradas VALUES(1,18,CURRENT_TIMESTAMP,0),(2,18,CURRENT_TIMESTAMP,0),(3,15,CURRENT_TIMESTAMP,0),(4,18,'2020-01-01',0),(5,18,CURRENT_TIMESTAMP,1)");
+tickex_subscriptions_ensure_schema($pdo);
+$plans=tickex_subscription_plans($pdo,true);sub_ok(count($plans)===3,'three editable default plans are created');
+sub_ok($plans[0]['code']==='initial'&&(float)$plans[0]['service_fee_percent']===15.0&&(int)$plans[0]['qr_limit_monthly']===300,'initial plan starts at fifteen percent and 300 monthly QR');
+$client=tickex_subscription_for_admin($pdo,9);sub_ok($client&&$client['plan_code']==='initial','organizers receive the initial plan automatically');
+$usage=tickex_subscription_usage($pdo,9);sub_ok($usage['used']===2,'usage counts current visible QR owned by the organizer');
+$access=tickex_subscription_access($pdo,9,1000);sub_ok($access['allowed']&&$access['observing'],'limits are measured without blocking while observation mode is active');
+sub_ok(tickex_subscription_service_fee($pdo,9,10)===10.0,'observation mode preserves the existing Mercado Pago fee');
+tickex_subscription_set_enforcement($pdo,true,8);sub_ok(tickex_subscription_service_fee($pdo,9,10)===15.0,'active subscription supplies the Mercado Pago service fee');
+$access=tickex_subscription_access($pdo,9,299);sub_ok(!$access['allowed'],'active monthly limit blocks excess QR');
+$pdo->exec("UPDATE subscription_plans SET qr_limit_monthly=2 WHERE code='initial'");$triggerBlocked=false;try{$pdo->exec("INSERT INTO entradas VALUES(6,18,CURRENT_TIMESTAMP,0)");}catch(Exception $e){$triggerBlocked=strpos($e->getMessage(),'Límite mensual')!==false;}sub_ok($triggerBlocked,'central database guard blocks QR creation through any issuance path');
+$initialId=(int)$pdo->query("SELECT id FROM subscription_plans WHERE code='initial'")->fetchColumn();tickex_subscription_assign($pdo,2,$initialId,'active','','Internal account',8,true);$pdo->exec("INSERT INTO entradas VALUES(7,15,CURRENT_TIMESTAMP,0)");sub_ok((int)$pdo->query('SELECT COUNT(*) FROM entradas WHERE id=7')->fetchColumn()===1,'internal organizer can be explicitly exempted from QR limits');
+$growthId=(int)$pdo->query("SELECT id FROM subscription_plans WHERE code='growth'")->fetchColumn();tickex_subscription_assign($pdo,9,$growthId,'trial','2099-12-31','Prueba comercial',8);
+$changed=tickex_subscription_for_admin($pdo,9);sub_ok($changed['plan_code']==='growth'&&$changed['status']==='trial','superadministrator can change plan and subscription status');
+sub_ok((int)$pdo->query('SELECT COUNT(*) FROM subscription_change_log WHERE admin_id=9')->fetchColumn()===1,'plan changes leave an audit trail');
+$rejected=false;try{tickex_subscription_assign($pdo,8,$growthId,'active','','',8);}catch(Exception $e){$rejected=true;}sub_ok($rejected,'non-organizer accounts cannot receive organizer plans');
+$rows=tickex_subscription_admin_rows($pdo,'client');sub_ok(count($rows)===1&&(int)$rows[0]['id']===9,'subscriber search is scoped to matching organizers');
+@unlink($db);echo 'ALL SUBSCRIPTION TESTS PASSED'.PHP_EOL;
