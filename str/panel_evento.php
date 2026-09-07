@@ -7,6 +7,7 @@ require_once __DIR__.'/inc/venues.php';
 require_once __DIR__.'/inc/senforms.php';
 require_once __DIR__.'/inc/event_trash.php';
 require_once __DIR__.'/inc/event_capacity.php';
+require_once __DIR__.'/inc/event_lifecycle.php';
 
 require_login();
 $csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
@@ -27,7 +28,7 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
     exit;
 }
 
-$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id'])?(int)$cu['id']:0);
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
 // aceptar id o evento_id
 $eventoId = 0;
@@ -145,6 +146,13 @@ function get_staff_cost_by_event($pdo, $eventoId) {
   } catch (Exception $e) {
     return 0;
   }
+}
+
+// La portada de “Mis eventos” tiene su propia vista de gestión. El panel
+// operativo de un evento continúa debajo cuando se recibe evento_id.
+if ($eventoId <= 0) {
+  include __DIR__.'/inc/event_management_list.php';
+  exit;
 }
 
 // Lista de eventos (vista general)
@@ -500,6 +508,7 @@ include __DIR__.'/inc/layout_top.php';
       </div>
       <div class="tx-action-group-links">
         <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
+        <a class="btn pe-action-btn" href="staff_operaciones.php?evento_id=<?php echo (int)$eventoId; ?>">Operación de staff</a>
         <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
         <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
       </div>
@@ -667,6 +676,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <!-- Formulario para agregar ingreso -->
   <form id="formManualIncome" style="margin-bottom:16px;">
+    <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
     
     <div class="pe-manual-form-grid" style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
@@ -903,6 +913,7 @@ document.querySelectorAll('.btn-delete-income').forEach(btn => {
         const incomeId = this.dataset.id;
         const formData = new FormData();
         formData.append('id', incomeId);
+        formData.append('_csrf', <?php echo json_encode(tickex_csrf_token()); ?>);
         fetch('delete_manual_income.php', { method: 'POST', body: formData })
           .then(r => r.json())
           .then(data => {
@@ -932,6 +943,7 @@ if (btnEditBridge) {
       const fd = new FormData();
       fd.append('evento_id', '<?php echo (int)$eventoId; ?>');
       fd.append('bridge_slug', s);
+      fd.append('_csrf', <?php echo json_encode($csrf); ?>);
 
       fetch('set_bridge_mapping.php', { method: 'POST', body: fd })
         .then(r => r.json())

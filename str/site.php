@@ -3,6 +3,7 @@
 // URL: site.php?slug=mi-slug
 
 session_start();
+require_once __DIR__ . '/inc/event_lifecycle.php';
 
 if (!function_exists('e')) {
     function e($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'); }
@@ -152,18 +153,9 @@ if ($hasCreadoPor) {
 $eventos = $stmtE ? $stmtE->fetchAll(PDO::FETCH_ASSOC) : array();
 
 // Filtrar por fecha (auto inactivos si ya pasaron)
-$now = time();
 $eventosVigentes = array();
 foreach ($eventos as $ev) {
-    $fdTs = ($hasFechaDesde && !empty($ev['fecha_desde'])) ? strtotime($ev['fecha_desde']) : false;
-    $fhTs = ($hasFechaHasta && !empty($ev['fecha_hasta'])) ? strtotime($ev['fecha_hasta']) : false;
-    $vigente = true;
-    if ($fhTs !== false) {
-        $vigente = ($fhTs >= $now);
-    } elseif ($fdTs !== false) {
-        $vigente = ($fdTs >= $now) || ($fdTs <= $now);
-    }
-    if ($vigente) {
+    if (tickex_event_is_current($ev)) {
         $eventosVigentes[] = $ev;
     }
 }
