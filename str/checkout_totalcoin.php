@@ -12,6 +12,7 @@ require_once __DIR__ . '/inc/ticket_packages.php';
 require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
 require_once __DIR__ . '/inc/event_capacity.php';
+require_once __DIR__ . '/inc/legal_center.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -76,6 +77,8 @@ $defaults = array(
 );
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
 $freeCheckoutTypeId = 0;
+$legalCheckoutDocs = array();
+$legalCheckoutRequired = false;
 
 // Si venimos de un redirect interno (POST-Redirect-GET), cargar el payment_url desde DB
 // y dejar que el browser navegue a TotalCoin con JS.
@@ -572,6 +575,15 @@ if (empty($entryOptions)) {
   );
 }
 
+try {
+  $legalCheckoutDocs = tickex_legal_documents(db(), false);
+  $legalCheckoutRequired = isset($legalCheckoutDocs['terms']) && isset($legalCheckoutDocs['privacy']);
+} catch (Exception $e) {
+  // La ausencia del módulo legal no debe bloquear ventas antes de su publicación.
+  $legalCheckoutDocs = array();
+  $legalCheckoutRequired = false;
+}
+
 // Ninguna categoría puede ofrecer más lugares que el cupo físico global.
 try {
   $globalCapacity = tickex_event_capacity_status($pdoLocal, $eventId);
@@ -779,6 +791,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $preview['create_account'] = $createAccount;
 
     _tickex_validate_buyer_fields($dni, $last, $first, $email, $errors);
+    if ($legalCheckoutRequired && empty($_POST['legal_acceptance'])) {
+      $errors[] = 'Tenés que aceptar los Términos y la Política de privacidad para continuar.';
+    }
 
     if (!empty($errors) && $lastDebugId !== '') {
       // Asegurar correlación si falla antes del gateway
@@ -1049,6 +1064,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':mp_cost_percent' => $paymentProvider === 'mercadopago' ? (float)$checkoutMpCostPercent : 0,
                 ':rid' => $requestId,
               ));
+              if ($legalCheckoutRequired) {
+                tickex_legal_record_acceptance(
+                  $pdoSave,
+                  'buyer',
+                  isset($_SESSION['usuario_id']) ? (int)$_SESSION['usuario_id'] : null,
+                  $email,
+                  'checkout:' . $requestId,
+                  $_SERVER,
+                  array('terms','privacy','refunds')
+                );
+              }
               try {
                 $evPdo = db();
                 $stOrdId = $evPdo->prepare("SELECT id FROM tc_orders WHERE request_id = :rid LIMIT 1");
@@ -1347,6 +1373,13 @@ include __DIR__.'/inc/layout_top.php';
             </div>
           <?php endif; ?>
 
+          <?php if ($legalCheckoutRequired): ?>
+            <label style="grid-column:1 / -1;display:flex;gap:10px;align-items:flex-start;">
+              <input type="checkbox" name="legal_acceptance" value="1" style="margin-top:4px;" required>
+              <span>Acepto los <a href="legal.php?doc=terms" target="_blank">Términos y condiciones</a> y la <a href="legal.php?doc=privacy" target="_blank">Política de privacidad</a>.</span>
+            </label>
+          <?php endif; ?>
+
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn" type="submit">Confirmar y pagar</button>
             <a class="btn secondary" href="<?php echo e($_SERVER['REQUEST_URI']); ?>">Volver</a>
@@ -1468,6 +1501,13 @@ include __DIR__.'/inc/layout_top.php';
             </div>
           <?php endif; ?>
 
+          <?php if ($legalCheckoutRequired): ?>
+            <label style="grid-column:1 / -1;display:flex;gap:10px;align-items:flex-start;">
+              <input type="checkbox" name="legal_acceptance" value="1" style="margin-top:4px;" id="chkLegal" disabled>
+              <span>Acepto los <a href="legal.php?doc=terms" target="_blank">Términos y condiciones</a> y la <a href="legal.php?doc=privacy" target="_blank">Política de privacidad</a>.</span>
+            </label>
+          <?php endif; ?>
+
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn" type="submit" id="btnPay">Confirmar y pagar</button>
             <button class="btn secondary" type="button" id="btnBack">Volver</button>
@@ -1501,6 +1541,7 @@ include __DIR__.'/inc/layout_top.php';
     const inpLast = document.getElementById('inpLast');
     const inpEmail = document.getElementById('inpEmail');
     const chkCreate = document.getElementById('chkCreate');
+    const chkLegal = document.getElementById('chkLegal');
 
     if (!form || !totalDisplay || !qtySelects.length) {
       return;
@@ -1538,6 +1579,7 @@ include __DIR__.'/inc/layout_top.php';
       if (inpLast) { inpLast.disabled = !on; inpLast.required = on; }
       if (inpEmail) { inpEmail.disabled = !on; inpEmail.required = on; }
       if (chkCreate) { chkCreate.disabled = !on; }
+      if (chkLegal) { chkLegal.disabled = !on; chkLegal.required = on; }
     }
 
     function goConfirm() {

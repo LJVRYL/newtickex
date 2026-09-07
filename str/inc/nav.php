@@ -28,6 +28,7 @@ $navClass = function ($pages) use ($navCurrent) {
     <a<?php echo $navClass(array('secundarios.php')); ?> href="secundarios.php">Staff</a>
     <a<?php echo $navClass(array('superadmin_soporte.php')); ?> href="superadmin_soporte.php">Soporte de clientes</a>
     <a<?php echo $navClass(array('superadmin_suscripciones.php')); ?> href="superadmin_suscripciones.php">Planes y suscripciones</a>
+    <a<?php echo $navClass(array('superadmin_legales.php')); ?> href="superadmin_legales.php">Legales</a>
 
     <span class="tx-nav-label">Soporte interno</span>
     <a<?php echo $navClass(array('ingresos_totalcoin.php')); ?> href="ingresos_totalcoin.php">Ingresos TotalCoin</a>
