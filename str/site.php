@@ -243,6 +243,7 @@ function flyer_url($ev) {
     .footer-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); grid-gap:16px; margin-bottom:16px; }
     .footer-col-title { font-weight:bold; margin-bottom:8px; font-size:14px; }
     .footer-link { display:block; margin-bottom:4px; opacity:0.85; }
+    .footer-withdrawal { display:inline-block;padding:8px 10px;border:1px solid rgba(255,255,255,.28);border-radius:8px;font-weight:800;opacity:1; }
     .footer-bottom { opacity:0.7; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
     .btn-wa { display:inline-flex; align-items:center; gap:8px; }
     .btn-wa svg { width:18px; height:18px; display:block; }
@@ -359,12 +360,13 @@ function flyer_url($ev) {
       <div>
         <div class="footer-col-title">Tickex</div>
         <span class="footer-link">Ayuda</span>
-        <span class="footer-link">Términos y condiciones</span>
-        <span class="footer-link">Política de privacidad</span>
+        <a class="footer-link" href="legal.php?doc=terms">Términos y condiciones</a>
+        <a class="footer-link" href="legal.php?doc=privacy">Política de privacidad</a>
       </div>
       <div>
         <div class="footer-col-title">Información</div>
-        <span class="footer-link">Botón de arrepentimiento</span>
+        <a class="footer-link footer-withdrawal" href="arrepentimiento.php">BOTÓN DE ARREPENTIMIENTO</a>
+        <a class="footer-link" href="datos_personales.php">Mis datos personales</a>
         <span class="footer-link">Contacto</span>
       </div>
       <?php if (!empty($socials)): ?>
