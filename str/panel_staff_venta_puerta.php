@@ -5,6 +5,8 @@ tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
 require_once __DIR__ . '/inc/event_capacity.php';
+require_once __DIR__ . '/inc/staff_roles.php';
+require_once __DIR__ . '/inc/staff_operations.php';
 
 if (!function_exists('e')) {
   function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -16,14 +18,17 @@ if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
 }
 
 $pdo = db();
+tickex_staff_operations_ensure_schema($pdo);
 $usuarioId = (int)$_SESSION['usuario_id'];
 $title = 'Venta en puerta';
 
 $eventosStaff = array();
 try {
-  $stE = $pdo->prepare("SELECT e.id, e.nombre, e.slug
+  $stE = $pdo->prepare("SELECT e.id, e.nombre, e.slug,sa.owner_admin_id,
+      COALESCE(NULLIF(se.rol_staff,''),sa.rol_staff,'puerta') AS event_role
     FROM staff_eventos se
     JOIN eventos e ON e.id = se.evento_id
+    JOIN staff_admins sa ON sa.cliente_id=se.staff_id AND sa.owner_admin_id=e.creado_por_admin_id AND sa.activo=1
     WHERE se.staff_id = :sid
     ORDER BY e.id DESC");
   $stE->execute(array(':sid' => $usuarioId));
@@ -46,6 +51,11 @@ foreach ($eventosStaff as $ev) {
 if (!$activeEvent && !empty($eventosStaff)) {
   $activeEvent = $eventosStaff[0];
   $activeEventId = (int)$activeEvent['id'];
+}
+$canSell = $activeEvent && in_array('sales_view',tickex_staff_role_permissions($pdo,(int)$activeEvent['owner_admin_id'],(string)$activeEvent['event_role']),true);
+if ($activeEventId > 0 && !$canSell) {
+  http_response_code(403);
+  exit('Tu rol no permite registrar ventas en este evento.');
 }
 
 $tiposPuerta = array();

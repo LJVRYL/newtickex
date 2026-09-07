@@ -4,6 +4,7 @@ tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/staff_roles.php';
+require_once __DIR__ . '/inc/staff_operations.php';
 require_once __DIR__ . '/inc/notificaciones.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
 
@@ -14,6 +15,7 @@ if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
 
 $usuarioId = (int)$_SESSION['usuario_id'];
 $pdo = db();
+tickex_staff_operations_ensure_schema($pdo);
 $title = 'Panel staff';
 
 $staffUser = array('nombre' => '', 'email' => (string)($_SESSION['usuario_email'] ?? ''), 'apodo' => '');
@@ -103,9 +105,11 @@ function _staff_log_checkin($pdo, $usuarioId, $eventoId, $source, $sourceTicketI
 
 $eventosStaff = array();
 try {
-  $stE = $pdo->prepare("SELECT e.id, e.nombre, e.slug
+  $stE = $pdo->prepare("SELECT e.id, e.nombre, e.slug,sa.owner_admin_id,
+      COALESCE(NULLIF(se.rol_staff,''),sa.rol_staff,'puerta') AS event_role
     FROM staff_eventos se
     JOIN eventos e ON e.id = se.evento_id
+    JOIN staff_admins sa ON sa.cliente_id=se.staff_id AND sa.owner_admin_id=e.creado_por_admin_id AND sa.activo=1
     WHERE se.staff_id = :sid
     ORDER BY e.id DESC");
   $stE->execute(array(':sid' => $usuarioId));
@@ -141,10 +145,35 @@ if (!$activeEvent && !empty($eventosStaff)) {
   $activeEvent = $eventosStaff[0];
   $activeEventId = (int)$activeEvent['id'];
 }
+$activePerms = $activeEvent ? tickex_staff_role_permissions($pdo,(int)$activeEvent['owner_admin_id'],(string)$activeEvent['event_role']) : array();
+$canScan = in_array('checkin_scan',$activePerms,true);
+$canSell = in_array('sales_view',$activePerms,true);
+$canReports = in_array('reports_view',$activePerms,true);
+$canValidate = in_array('tickets_validate',$activePerms,true);
+if ($activeEvent && !in_array('dashboard_view',$activePerms,true)) {
+  http_response_code(403);
+  exit('Tu rol no permite abrir el panel operativo de este evento.');
+}
 
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $flashOk = '';
 $flashErr = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'staff_task_toggle') {
+  $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
+  $taskId = isset($_POST['task_id']) ? (int)$_POST['task_id'] : 0;
+  $eventPost = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
+  if (!tickex_csrf_verify($provided)) {
+    $flashErr = 'CSRF inválido.';
+  } elseif ($eventPost !== $activeEventId || $taskId <= 0 || !$activeEvent) {
+    $flashErr = 'Tarea inválida.';
+  } else {
+    $stTask = $pdo->prepare("UPDATE staff_tasks SET status=CASE status WHEN 'done' THEN 'pending' ELSE 'done' END,completed_at=CASE status WHEN 'done' THEN NULL ELSE CURRENT_TIMESTAMP END,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND owner_admin_id=:owner AND evento_id=:event AND (assigned_staff_id=:staff OR (assigned_staff_id IS NULL AND role_code=:role) OR (assigned_staff_id IS NULL AND COALESCE(role_code,'')=''))");
+    $stTask->execute(array(':id'=>$taskId,':owner'=>(int)$activeEvent['owner_admin_id'],':event'=>$activeEventId,':staff'=>$usuarioId,':role'=>(string)$activeEvent['event_role']));
+    $flashOk = $stTask->rowCount() ? 'Tarea actualizada.' : '';
+    if (!$stTask->rowCount()) $flashErr = 'No tenés acceso a esa tarea.';
+  }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'staff_checkin') {
   $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
@@ -160,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if ($eidPost <= 0 || ($entryId <= 0 && !($entrySource === 'TICKEX' && $entryRefPost !== ''))) {
       $flashErr = 'Entrada inválida.';
       _staff_log_checkin($pdo, $usuarioId, $eidPost, $entrySource, $entryId, $entryRefPost, $entryNamePost, 'error', 'entrada_invalida');
-    } elseif (!in_array($eidPost, $staffEventIds, true)) {
+    } elseif (!in_array($eidPost, $staffEventIds, true) || !$canScan) {
       $flashErr = 'No tenés permiso para operar ese evento.';
       _staff_log_checkin($pdo, $usuarioId, $eidPost, $entrySource, $entryId, $entryRefPost, $entryNamePost, 'error', 'sin_permiso_evento');
     } else {
@@ -238,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 $rowsEntradas = array();
-if ($activeEventId > 0) {
+if ($activeEventId > 0 && $canValidate) {
   try {
     $filters = array();
     $rowsEntradas = get_unified_entries($pdo, $activeEventId, $filters);
@@ -265,15 +294,17 @@ if ($activeEventId > 0) {
     $rowsEntradas = array();
   }
 }
-
-$canScan = false;
-foreach ($asignaciones as $a) {
-  $roleCode = isset($a['rol_staff']) ? (string)$a['rol_staff'] : 'puerta';
-  $permKeys = tickex_staff_role_permissions($pdo, (int)$a['owner_admin_id'], $roleCode);
-  if (in_array('checkin_scan', $permKeys, true)) {
-    $canScan = true;
-    break;
-  }
+$myTasks = array();
+$myShifts = array();
+if ($activeEvent) {
+  try {
+    $stTasks=$pdo->prepare("SELECT * FROM staff_tasks WHERE owner_admin_id=:owner AND evento_id=:event AND (assigned_staff_id=:staff OR (assigned_staff_id IS NULL AND role_code=:role) OR (assigned_staff_id IS NULL AND COALESCE(role_code,'')='')) ORDER BY CASE status WHEN 'done' THEN 1 ELSE 0 END,due_at,id DESC");
+    $stTasks->execute(array(':owner'=>(int)$activeEvent['owner_admin_id'],':event'=>$activeEventId,':staff'=>$usuarioId,':role'=>(string)$activeEvent['event_role']));
+    $myTasks=$stTasks->fetchAll(PDO::FETCH_ASSOC);
+    $stShifts=$pdo->prepare('SELECT * FROM staff_shifts WHERE owner_admin_id=:owner AND evento_id=:event AND staff_id=:staff ORDER BY starts_at');
+    $stShifts->execute(array(':owner'=>(int)$activeEvent['owner_admin_id'],':event'=>$activeEventId,':staff'=>$usuarioId));
+    $myShifts=$stShifts->fetchAll(PDO::FETCH_ASSOC);
+  } catch(Exception $e) {}
 }
 
 $helloName = trim((string)($staffUser['nombre'] ?? ''));
@@ -348,6 +379,7 @@ include __DIR__ . '/inc/layout_top.php';
   .roles-mini summary{cursor:pointer;font-size:13px;color:var(--muted)}
   .roles-mini-list{margin-top:8px;display:grid;gap:8px}
   .roles-mini-item{font-size:12px;color:var(--muted)}
+  .staff-work{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.staff-work-card{padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.staff-work-card h3{margin:0 0 9px}.staff-work-row{display:flex;justify-content:space-between;gap:9px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.staff-work-row:first-of-type{border-top:0}.staff-work-row.done{opacity:.55;text-decoration:line-through}@media(max-width:680px){.staff-work{grid-template-columns:1fr}}
   @media (min-width:1024px){.staff-bottom-nav{max-width:860px;left:50%;right:auto;transform:translateX(-50%);width:100%}}
 </style>
 
@@ -391,7 +423,7 @@ include __DIR__ . '/inc/layout_top.php';
     <?php endif; ?>
 
     <div class="staff-hero">
-      <h2 style="margin:0;">Dashboard de Puerta</h2>
+      <h2 style="margin:0;">Panel de <?php echo $activeEvent ? e(tickex_staff_role_label($pdo,(int)$activeEvent['owner_admin_id'],(string)$activeEvent['event_role'])) : 'Staff'; ?></h2>
       <div class="muted" style="margin-top:4px;">
         <?php if ($activeEvent): ?>Evento actual: <strong><?php echo e($activeEvent['nombre']); ?></strong><?php else: ?>Sin evento seleccionado<?php endif; ?>
       </div>
@@ -425,6 +457,11 @@ include __DIR__ . '/inc/layout_top.php';
         </details>
       </div>
     </div>
+
+    <?php if($activeEvent): ?><div class="staff-work">
+      <section class="staff-work-card"><h3>Mis turnos</h3><?php if(!$myShifts): ?><div class="muted">No tenés turnos cargados.</div><?php endif; ?><?php foreach($myShifts as $shift): ?><div class="staff-work-row"><div><strong><?php echo e($shift['area']?:'Turno'); ?></strong><div class="muted"><?php echo e($shift['starts_at']); ?><?php echo $shift['ends_at']?' → '.e($shift['ends_at']):''; ?></div></div></div><?php endforeach; ?></section>
+      <section class="staff-work-card"><h3>Mis tareas</h3><?php if(!$myTasks): ?><div class="muted">No tenés tareas pendientes.</div><?php endif; ?><?php foreach($myTasks as $task): ?><form method="post" class="staff-work-row <?php echo $task['status']==='done'?'done':''; ?>"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="staff_task_toggle"><input type="hidden" name="task_id" value="<?php echo (int)$task['id']; ?>"><input type="hidden" name="evento_id" value="<?php echo (int)$activeEventId; ?>"><div><strong><?php echo e($task['title']); ?></strong><?php if($task['due_at']): ?><div class="muted">Hasta <?php echo e($task['due_at']); ?></div><?php endif; ?></div><button class="btn secondary" type="submit"><?php echo $task['status']==='done'?'Reabrir':'Listo'; ?></button></form><?php endforeach; ?></section>
+    </div><?php endif; ?>
 
     <div class="staff-list">
       <div class="staff-list-head">
@@ -487,22 +524,22 @@ include __DIR__ . '/inc/layout_top.php';
 <nav class="staff-bottom-nav" aria-label="Navegación staff">
   <a href="panel_usuario.php"><span class="i">🏠</span><span>Inicio</span></a>
   <a href="panel_staff.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
-  <a href="staff_scan_qr.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" id="btnOpenScan" class="center" aria-label="QR" title="QR">
+  <?php if($canScan): ?><a href="staff_scan_qr.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" id="btnOpenScan" class="center" aria-label="QR" title="QR">
     <span class="qr-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
         <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zm9-2h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zm11-2h2v2h-2v-2zm-2 2h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm2-2h2v2h-2v-2zm4 0h2v2h-2v-2z"></path>
       </svg>
     </span>
     <span>QR</span>
-  </a>
-  <a href="panel_staff_venta_puerta.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
+  </a><?php else: ?><span class="center"><span>QR</span></span><?php endif; ?>
+  <?php if($canSell): ?><a href="panel_staff_venta_puerta.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a><?php else: ?><span><span>Sin venta</span></span><?php endif; ?>
   <button type="button" id="btnMore"><span class="i">☰</span><span>Más</span></button>
 </nav>
 
 <div id="staffSheet" class="staff-sheet" aria-hidden="true">
   <div class="staff-sheet-box">
     <div class="staff-sheet-links">
-      <a href="panel_staff_checkin_log.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>">Actividad check-ins</a>
+      <?php if($canReports): ?><a href="panel_staff_checkin_log.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>">Actividad check-ins</a><?php endif; ?>
       <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
       <a href="panel_usuario.php">Dashboard usuario</a>
       <a href="logout_usuario.php">Cerrar sesión</a>

@@ -3,6 +3,7 @@ require_once __DIR__ . '/inc/security.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/staff_operations.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
   header('Location: login.php');
@@ -11,6 +12,7 @@ if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
 
 $usuarioId = (int)$_SESSION['usuario_id'];
 $pdo = db();
+tickex_staff_operations_ensure_schema($pdo);
 
 $eventoId = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
 if ($eventoId <= 0) {
@@ -21,6 +23,11 @@ if ($eventoId <= 0) {
   } catch (Exception $e) {
     $eventoId = 0;
   }
+}
+$accessProfile=$eventoId>0?tickex_staff_event_access_profile($pdo,$usuarioId,$eventoId):null;
+if(!$accessProfile || !in_array('checkin_scan',$accessProfile['permissions'],true)){
+  http_response_code(403);
+  exit('Tu rol no permite escanear entradas en este evento.');
 }
 
 $title = 'Escanear QR';

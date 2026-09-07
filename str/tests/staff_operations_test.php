@@ -1,0 +1,51 @@
+<?php
+require_once __DIR__ . '/../inc/staff_operations.php';
+
+function staff_ops_assert($condition,$message){if(!$condition){fwrite(STDERR,'FAIL: '.$message.PHP_EOL);exit(1);}echo 'PASS: '.$message.PHP_EOL;}
+$pdo=new PDO('sqlite::memory:');
+$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE usuarios_admin (id INTEGER PRIMARY KEY,email TEXT,nombre TEXT,apellido TEXT,apodo TEXT)');
+$pdo->exec('CREATE TABLE eventos (id INTEGER PRIMARY KEY,nombre TEXT,creado_por_admin_id INTEGER)');
+$pdo->exec('CREATE TABLE staff_admins (id INTEGER PRIMARY KEY AUTOINCREMENT,owner_admin_id INTEGER,cliente_id INTEGER,rol_staff TEXT,activo INTEGER,created_at TEXT)');
+$pdo->exec('CREATE TABLE staff_eventos (id INTEGER PRIMARY KEY AUTOINCREMENT,staff_id INTEGER,evento_id INTEGER,costo_servicio REAL)');
+$pdo->exec('CREATE TABLE entradas (id INTEGER PRIMARY KEY AUTOINCREMENT,evento_id INTEGER,tipo TEXT,monto_pagado REAL,checked_in INTEGER,issuance_key TEXT)');
+$pdo->exec("INSERT INTO usuarios_admin VALUES (2,'owner@test','Owner','',''),(10,'door@test','Ana','Puerta','Ani')");
+$pdo->exec("INSERT INTO eventos VALUES (18,'Evento propio',2),(19,'Segundo evento',2),(20,'Evento ajeno',99)");
+$pdo->exec("INSERT INTO staff_admins(owner_admin_id,cliente_id,rol_staff,activo) VALUES (2,10,'puerta',1)");
+tickex_staff_operations_ensure_schema($pdo);
+tickex_staff_roles_seed_defaults($pdo,2);
+$roles=tickex_staff_roles_get_all($pdo,2);
+staff_ops_assert(count($roles)===4,'four predefined roles are available');
+staff_ops_assert(in_array('sales_view',tickex_staff_role_permissions($pdo,2,'puerta'),true),'door role can operate in-person sales');
+tickex_staff_assign_event($pdo,2,2,10,18,'puerta',15000);
+tickex_staff_assign_event($pdo,2,2,10,19,'acreditacion',9000);
+staff_ops_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_eventos')->fetchColumn()===2,'assignments are additive');
+tickex_staff_assign_event($pdo,2,2,10,18,'caja',16000);
+staff_ops_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_eventos')->fetchColumn()===2,'updating one assignment preserves the other');
+staff_ops_assert($pdo->query("SELECT rol_staff FROM staff_eventos WHERE evento_id=18")->fetchColumn()==='caja','role is stored per event');
+$blocked=false;try{tickex_staff_assign_event($pdo,2,2,10,20,'puerta',0);}catch(Exception $e){$blocked=true;}
+staff_ops_assert($blocked,'foreign events cannot be assigned');
+staff_ops_assert(tickex_staff_remove_event($pdo,2,2,10,18),'one event assignment can be removed');
+staff_ops_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_eventos')->fetchColumn()===1,'removing one event preserves remaining assignments');
+tickex_staff_assign_event($pdo,2,2,10,18,'puerta',15000);
+$pdo->exec("INSERT INTO staff_shifts(owner_admin_id,staff_id,evento_id,starts_at,ends_at,area) VALUES(2,10,18,'2026-09-07 20:00','2026-09-08 03:00','Ingreso')");
+$pdo->exec("INSERT INTO staff_tasks(owner_admin_id,evento_id,assigned_staff_id,role_code,title) VALUES(2,18,10,'puerta','Preparar pulseras')");
+$pdo->exec("UPDATE staff_tasks SET status='done',completed_at=CURRENT_TIMESTAMP WHERE evento_id=18");
+$pdo->exec("UPDATE staff_eventos SET attendance_status='present',checked_in_at=CURRENT_TIMESTAMP,settlement_status='paid',settled_amount=15000,settled_at=CURRENT_TIMESTAMP WHERE staff_id=10 AND evento_id=18");
+$summary=tickex_staff_operations_summary($pdo,2,18);
+staff_ops_assert((int)$summary['present']===1,'attendance is recorded');
+staff_ops_assert((int)$summary['tasks_done']===1,'task completion is summarized');
+staff_ops_assert((float)$summary['paid_cost']===15000.0,'staff settlement is summarized');
+$pdo->exec("INSERT INTO entradas(evento_id,tipo,monto_pagado,checked_in,issuance_key) VALUES(18,'PUERTA',10000,1,NULL),(18,'General',20000,1,NULL)");
+$door=tickex_staff_door_summary($pdo,2,18);
+staff_ops_assert((int)$door['door_staff']===1,'door team count uses the event role');
+staff_ops_assert((int)$door['door_sales']===1 && (float)$door['door_revenue']===10000.0,'door sales are separated from other sales');
+staff_ops_assert((int)$door['checkins']===2,'door dashboard reports total check-ins');
+staff_ops_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_audit_log')->fetchColumn()>=5,'assignment changes keep an audit trail');
+$page=file_get_contents(__DIR__.'/../staff_operaciones.php');
+staff_ops_assert(strpos($page,'Puerta en vivo')!==false,'event operations page includes the live door summary');
+staff_ops_assert(strpos(file_get_contents(__DIR__.'/../panel_evento.php'),'staff_operaciones.php?evento_id=')!==false,'event panel links to staff operations');
+staff_ops_assert(strpos(file_get_contents(__DIR__.'/../staff_scan_qr.php'),'tickex_staff_event_access_profile')!==false,'QR scanner enforces the event role');
+staff_ops_assert(strpos(file_get_contents(__DIR__.'/../panel_staff_venta_puerta.php'),"in_array('sales_view'")!==false,'door sales enforce the event role');
+staff_ops_assert(strpos(file_get_contents(__DIR__.'/../panel_staff_checkin_log.php'),"in_array('reports_view'")!==false,'staff reports enforce the event role');
+echo 'ALL STAFF OPERATIONS TESTS PASSED'.PHP_EOL;
