@@ -26,6 +26,7 @@ $navClass = function ($pages) use ($navCurrent) {
     <a<?php echo $navClass(array('facturacion_admin.php')); ?> href="facturacion_admin.php">Facturación</a>
     <a<?php echo $navClass(array('mercadopago_config.php')); ?> href="mercadopago_config.php">Mercado Pago</a>
     <a<?php echo $navClass(array('secundarios.php')); ?> href="secundarios.php">Staff</a>
+    <a<?php echo $navClass(array('superadmin_soporte.php')); ?> href="superadmin_soporte.php">Soporte de clientes</a>
 
     <span class="tx-nav-label">Soporte interno</span>
     <a<?php echo $navClass(array('ingresos_totalcoin.php')); ?> href="ingresos_totalcoin.php">Ingresos TotalCoin</a>
@@ -52,5 +53,6 @@ $navClass = function ($pages) use ($navCurrent) {
     <span class="tx-nav-label">Cuenta</span>
     <a<?php echo $navClass(array('mi_sitio.php')); ?> href="mi_sitio.php">Mi sitio</a>
     <a<?php echo $navClass(array('mi_perfil.php')); ?> href="mi_perfil.php">Mi perfil</a>
+    <a<?php echo $navClass(array('soporte.php')); ?> href="soporte.php">Ayuda y soporte</a>
   <?php endif; ?>
 </nav>
