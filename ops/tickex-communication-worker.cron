@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/5 * * * * root /usr/bin/flock -n /var/lock/tickex-communication-worker.lock /opt/ferozo/php7-4/bin/php -q -f /opt/ferozo3/web/str/ops/communication_engine_worker.php >> /opt/ferozo3/web/.secrets/communication_engine_worker.log 2>&1
+

@@ -11,8 +11,9 @@ Actualizado: 8 de septiembre de 2026.
 - [ ] Ejecutar una compra mínima real de Mercado Pago con comprador, organizador y Tickex separados.
 - [ ] Verificar en las tres cuentas el precio nominal, costo al comprador, comisión de Mercado Pago y fee Tickex.
 - [ ] Validar webhooks reales: aprobado, pendiente, rechazado, reembolso y contracargo, sin duplicar QR.
-- [ ] Ensayar restauración completa de código, SQLite y secretos desde un backup del VPS.
-- [ ] Corregir `zip.so` y calendarizar la actualización de PHP 7.4, Apache y SQLite.
+- [x] Ensayar restauración completa de código y SQLite desde un backup del VPS (88 tablas e integridad OK); los secretos se conservan por separado y no se copiaron al ensayo.
+- [x] Quitar el warning operativo de `zip.so` usando el PHP 7.4 sano del hosting en los workers; producción web ya opera con PHP 8.3 y ZIP correcto.
+- [ ] Calendarizar la retirada de los PHP antiguos y la actualización controlada de SQLite del sistema sin afectar el PHP 8.3 productivo.
 - [ ] Completar textos legales y fiscales con revisión profesional: términos, privacidad, arrepentimiento, tratamiento de datos y responsabilidades de cada organizador.
 - [ ] Revisión externa de seguridad del dominio productivo, cabeceras, permisos y flujos de pago.
 - [ ] Inventariar y retirar páginas históricas duplicadas una vez confirmado que no reciben tráfico legítimo.
@@ -23,15 +24,15 @@ Actualizado: 8 de septiembre de 2026.
 - [ ] Incorporar cobro recurrente de suscripciones y gestión de mora/cancelación.
 - [ ] Conciliación diaria de órdenes Tickex contra Mercado Pago y TotalCoin, con alertas por diferencias.
 - [ ] Panel de devoluciones, cancelaciones y contracargos con trazabilidad y permisos.
-- [ ] Monitoreo y alertas: pagos, webhooks, cola de correo, base bloqueada, espacio en disco y certificados.
+- [ ] Completar alertas externas para pagos, webhooks, cola de correo y certificados. El monitor local de Apache, landing, login, base legible y disco ya quedó corregido.
 - [ ] Probar recuperación ante caída de Mercado Pago/TotalCoin sin perder órdenes ni duplicar cobros.
-- [ ] Centralizar logs con retención y limpieza automática; evitar que crezcan indefinidamente.
+- [x] Aplicar rotación diaria y retención de 14 días a logs operativos de pagos, correo, campañas y salud.
 - [ ] Sacar la base de datos y archivos operativos del directorio público, aunque Apache ya los bloquee.
 - [ ] Definir soporte operativo: severidades, tiempos de respuesta, responsables y comunicación de incidentes.
 
 ## P1 — correo y comunicación a escala
 
-- [ ] Confirmar SPF, DKIM y DMARC del dominio remitente.
+- [x] Confirmar SPF, DKIM y DMARC del dominio remitente; DMARC continúa en observación (`p=none`) hasta revisar reportes.
 - [ ] Medir límites reales del proveedor y definir lotes, pausas y horarios de envío.
 - [ ] Procesar rebotes, quejas y desuscripciones automáticamente.
 - [ ] Auditar el caso de newsletters repetidos y probar idempotencia con concurrencia real.
@@ -90,5 +91,5 @@ Actualizado: 8 de septiembre de 2026.
 - [x] Ejecutar pruebas de seguridad, aislamiento, Google Identity y contacto público en local.
 - [x] Aplicar las reglas equivalentes en el VirtualHost activo, manteniendo `AllowOverride None`.
 - [x] Verificar desde Internet que SQLite/logs devuelvan 403, que código interno devuelva 404 y que landing, login y contacto sigan operativos.
-- [ ] Auditar dependencias, versiones, permisos del filesystem, cabeceras y configuración TLS.
+- [x] Auditar dependencias, versiones, permisos del filesystem, cabeceras y configuración TLS; queda planificar la modernización de componentes heredados.
 - [ ] Completar revisión visual y de accesibilidad con sesiones reales de los cuatro perfiles.

@@ -1,0 +1,26 @@
+/opt/ferozo3/web/.secrets/communication_engine_worker.log
+/opt/ferozo3/web/.secrets/exim_delivery_reconciler.log
+/opt/ferozo3/web/.secrets/totalcoin_reconciler.log
+/var/log/health-tickex.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root webusers
+}
+
+/opt/ferozo3/web/uploads/totalcoin_debug.log
+/opt/ferozo3/web/uploads/totalcoin_callback_request.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su apache webusers
+}
+
