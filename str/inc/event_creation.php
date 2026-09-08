@@ -5,6 +5,11 @@ if (!function_exists('tickex_event_creation_length')) {
 if (!function_exists('tickex_event_creation_slugify')) {
     function tickex_event_creation_slugify($value) {
         $value=trim((string)$value); if ($value==='') return '';
+        $value=strtr($value,array(
+            'Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N',
+            'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n',
+            'º'=>'o','ª'=>'a'
+        ));
         if (function_exists('iconv')) { $ascii=@iconv('UTF-8','ASCII//TRANSLIT//IGNORE',$value); if ($ascii!==false) $value=$ascii; }
         return trim((string)preg_replace('/[^a-z0-9]+/','-',strtolower($value)),'-');
     }
