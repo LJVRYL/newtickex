@@ -32,6 +32,7 @@ $navClass = function ($pages) use ($navCurrent) {
 
     <span class="tx-nav-label">Soporte interno</span>
     <a<?php echo $navClass(array('superadmin_infraestructura.php')); ?> href="superadmin_infraestructura.php">Infraestructura</a>
+    <a<?php echo $navClass(array('superadmin_email_delivery.php')); ?> href="superadmin_email_delivery.php">Entrega de emails</a>
     <a<?php echo $navClass(array('ingresos_totalcoin.php')); ?> href="ingresos_totalcoin.php">Ingresos TotalCoin</a>
     <a<?php echo $navClass(array('superadmin_totalcoi.php')); ?> href="superadmin_totalcoi.php">TotalCoin</a>
   <?php elseif (in_array($tg, array('admin_evento'), true)): ?>
