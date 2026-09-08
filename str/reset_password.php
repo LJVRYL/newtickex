@@ -58,6 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
     if ($error === '') {
         $newHash = function_exists('password_hash') ? password_hash($pass1, PASSWORD_DEFAULT) : md5($pass1);
 
+        // El acceso es único: la nueva clave debe actualizar tanto compradores
+        // como administradores que compartan ese email.
+        tickex_password_reset_update_accounts($pdo, $emailToken, $newHash);
+
         // Actualizar en registro_pendientes (clientes)
         try {
             // asegurar columna
