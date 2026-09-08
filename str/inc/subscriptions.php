@@ -10,6 +10,8 @@ if (!function_exists('tickex_subscriptions_ensure_schema')) {
             description TEXT,
             monthly_price REAL,
             service_fee_percent REAL NOT NULL DEFAULT 15,
+            organizer_share_percent REAL NOT NULL DEFAULT 0,
+            tickex_min_checkout_percent REAL NOT NULL DEFAULT 1,
             qr_limit_monthly INTEGER,
             features_json TEXT,
             status TEXT NOT NULL DEFAULT 'draft',
@@ -53,13 +55,17 @@ if (!function_exists('tickex_subscriptions_ensure_schema')) {
         $columns=$pdo->query("PRAGMA table_info('admin_subscriptions')")->fetchAll(PDO::FETCH_ASSOC);$hasExempt=false;
         foreach($columns as $column)if($column['name']==='limit_exempt')$hasExempt=true;
         if(!$hasExempt)$pdo->exec('ALTER TABLE admin_subscriptions ADD COLUMN limit_exempt INTEGER NOT NULL DEFAULT 0');
+        $planColumns=$pdo->query("PRAGMA table_info('subscription_plans')")->fetchAll(PDO::FETCH_ASSOC);$hasOrganizerShare=false;$hasTickexMinimum=false;
+        foreach($planColumns as $column){if($column['name']==='organizer_share_percent')$hasOrganizerShare=true;if($column['name']==='tickex_min_checkout_percent')$hasTickexMinimum=true;}
+        if(!$hasOrganizerShare)$pdo->exec('ALTER TABLE subscription_plans ADD COLUMN organizer_share_percent REAL NOT NULL DEFAULT 0');
+        if(!$hasTickexMinimum)$pdo->exec('ALTER TABLE subscription_plans ADD COLUMN tickex_min_checkout_percent REAL NOT NULL DEFAULT 1');
 
         $defaults = array(
-            array('initial','Inicial','Para empezar a vender con todas las herramientas esenciales.',0,15,300,'["Eventos y check-in","Mercado Pago Split","Staff y comunicación"]','active',10),
-            array('growth','Crecimiento','Más capacidad para equipos y eventos en expansión.',null,12.5,2000,'["Todo Inicial","Mayor volumen mensual","Soporte prioritario"]','draft',20),
-            array('professional','Profesional','Operación de alto volumen con condiciones personalizadas.',null,10,null,'["Todo Crecimiento","Volumen personalizado","Acompañamiento comercial"]','draft',30),
+            array('initial','Inicial','Para empezar a vender con todas las herramientas esenciales.',0,15,0,1,300,'["Eventos y check-in","Mercado Pago Split","Staff y comunicación"]','active',10),
+            array('growth','Crecimiento','Más capacidad para equipos y eventos en expansión.',null,15,2.5,1,2000,'["Todo Inicial","Mayor participación en el costo de servicio","Soporte prioritario"]','draft',20),
+            array('professional','Profesional','Operación de alto volumen con condiciones personalizadas.',null,15,5,1,null,'["Todo Crecimiento","Tickex conserva un mínimo del 1%","Acompañamiento comercial"]','draft',30),
         );
-        $st = $pdo->prepare('INSERT OR IGNORE INTO subscription_plans (code,name,description,monthly_price,service_fee_percent,qr_limit_monthly,features_json,status,sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+        $st = $pdo->prepare('INSERT OR IGNORE INTO subscription_plans (code,name,description,monthly_price,service_fee_percent,organizer_share_percent,tickex_min_checkout_percent,qr_limit_monthly,features_json,status,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
         foreach ($defaults as $row) $st->execute($row);
 
         // Toda cuenta organizadora queda visible en el módulo desde el primer día.
@@ -95,10 +101,14 @@ if (!function_exists('tickex_subscription_apply_commercial_fees')) {
     function tickex_subscription_apply_commercial_fees($pdo)
     {
         tickex_subscriptions_ensure_schema($pdo);
-        $fees = array('initial'=>15.0, 'growth'=>12.5, 'professional'=>10.0);
-        $st = $pdo->prepare('UPDATE subscription_plans SET service_fee_percent=:fee, updated_at=CURRENT_TIMESTAMP WHERE code=:code');
-        foreach ($fees as $code=>$fee) $st->execute(array(':fee'=>$fee, ':code'=>$code));
-        return $fees;
+        $terms = array(
+            'initial'=>array('service_fee_percent'=>15.0,'organizer_share_percent'=>0.0,'tickex_min_checkout_percent'=>1.0),
+            'growth'=>array('service_fee_percent'=>15.0,'organizer_share_percent'=>2.5,'tickex_min_checkout_percent'=>1.0),
+            'professional'=>array('service_fee_percent'=>15.0,'organizer_share_percent'=>5.0,'tickex_min_checkout_percent'=>1.0),
+        );
+        $st = $pdo->prepare('UPDATE subscription_plans SET service_fee_percent=:fee,organizer_share_percent=:share,tickex_min_checkout_percent=:minimum,updated_at=CURRENT_TIMESTAMP WHERE code=:code');
+        foreach ($terms as $code=>$term) $st->execute(array(':fee'=>$term['service_fee_percent'],':share'=>$term['organizer_share_percent'],':minimum'=>$term['tickex_min_checkout_percent'],':code'=>$code));
+        return $terms;
     }
 }
 
@@ -142,7 +152,9 @@ if (!function_exists('tickex_subscription_save_plan')) {
         $code=strtolower(trim(isset($data['code'])?(string)$data['code']:''));
         $code=preg_replace('/[^a-z0-9_-]+/','-',$code);
         if($name===''||$code==='') throw new RuntimeException('Completá el nombre y código del plan.');
-        $fee=max(0,min(100,(float)str_replace(',','.',isset($data['service_fee_percent'])?$data['service_fee_percent']:0)));
+        $fee=15.0;
+        $organizerShare=max(0,min($fee,(float)str_replace(',','.',isset($data['organizer_share_percent'])?$data['organizer_share_percent']:0)));
+        $tickexMinimum=max(0,min(100,(float)str_replace(',','.',isset($data['tickex_min_checkout_percent'])?$data['tickex_min_checkout_percent']:1)));
         $limit=trim(isset($data['qr_limit_monthly'])?(string)$data['qr_limit_monthly']:'')===''
             ? null : max(0,(int)$data['qr_limit_monthly']);
         if($limit===0)$limit=null;
@@ -150,9 +162,9 @@ if (!function_exists('tickex_subscription_save_plan')) {
             ? null : max(0,(float)str_replace(',','.',(string)$data['monthly_price']));
         $status=isset($data['status'])&&$data['status']==='active'?'active':'draft';
         $features=array_values(array_filter(array_map('trim',preg_split('/\r?\n/',isset($data['features'])?(string)$data['features']:''))));
-        $params=array(':code'=>$code,':name'=>$name,':description'=>trim(isset($data['description'])?(string)$data['description']:''),':price'=>$price,':fee'=>$fee,':limit'=>$limit,':features'=>json_encode($features,JSON_UNESCAPED_UNICODE),':status'=>$status,':sort'=>isset($data['sort_order'])?(int)$data['sort_order']:100);
-        if($id>0){$params[':id']=$id;$st=$pdo->prepare('UPDATE subscription_plans SET code=:code,name=:name,description=:description,monthly_price=:price,service_fee_percent=:fee,qr_limit_monthly=:limit,features_json=:features,status=:status,sort_order=:sort,updated_at=CURRENT_TIMESTAMP WHERE id=:id');}
-        else{$st=$pdo->prepare('INSERT INTO subscription_plans(code,name,description,monthly_price,service_fee_percent,qr_limit_monthly,features_json,status,sort_order) VALUES(:code,:name,:description,:price,:fee,:limit,:features,:status,:sort)');}
+        $params=array(':code'=>$code,':name'=>$name,':description'=>trim(isset($data['description'])?(string)$data['description']:''),':price'=>$price,':fee'=>$fee,':share'=>$organizerShare,':minimum'=>$tickexMinimum,':limit'=>$limit,':features'=>json_encode($features,JSON_UNESCAPED_UNICODE),':status'=>$status,':sort'=>isset($data['sort_order'])?(int)$data['sort_order']:100);
+        if($id>0){$params[':id']=$id;$st=$pdo->prepare('UPDATE subscription_plans SET code=:code,name=:name,description=:description,monthly_price=:price,service_fee_percent=:fee,organizer_share_percent=:share,tickex_min_checkout_percent=:minimum,qr_limit_monthly=:limit,features_json=:features,status=:status,sort_order=:sort,updated_at=CURRENT_TIMESTAMP WHERE id=:id');}
+        else{$st=$pdo->prepare('INSERT INTO subscription_plans(code,name,description,monthly_price,service_fee_percent,organizer_share_percent,tickex_min_checkout_percent,qr_limit_monthly,features_json,status,sort_order) VALUES(:code,:name,:description,:price,:fee,:share,:minimum,:limit,:features,:status,:sort)');}
         $st->execute($params);
         return $id>0?$id:(int)$pdo->lastInsertId();
     }
@@ -162,7 +174,7 @@ if (!function_exists('tickex_subscription_for_admin')) {
     function tickex_subscription_for_admin($pdo, $adminId)
     {
         tickex_subscriptions_ensure_schema($pdo);
-        $st=$pdo->prepare('SELECT s.*,p.code AS plan_code,p.name AS plan_name,p.description AS plan_description,p.monthly_price,p.service_fee_percent,p.qr_limit_monthly,p.features_json,p.status AS plan_status FROM admin_subscriptions s JOIN subscription_plans p ON p.id=s.plan_id WHERE s.admin_id=:admin LIMIT 1');
+        $st=$pdo->prepare('SELECT s.*,p.code AS plan_code,p.name AS plan_name,p.description AS plan_description,p.monthly_price,p.service_fee_percent,p.organizer_share_percent,p.tickex_min_checkout_percent,p.qr_limit_monthly,p.features_json,p.status AS plan_status FROM admin_subscriptions s JOIN subscription_plans p ON p.id=s.plan_id WHERE s.admin_id=:admin LIMIT 1');
         $st->execute(array(':admin'=>(int)$adminId));
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
@@ -232,11 +244,25 @@ if (!function_exists('tickex_subscription_service_fee')) {
     }
 }
 
+if (!function_exists('tickex_subscription_commercial_terms')) {
+    function tickex_subscription_commercial_terms($pdo,$adminId,$fallbackServiceFee=15)
+    {
+        $subscription=tickex_subscription_for_admin($pdo,$adminId);
+        $valid=$subscription&&in_array($subscription['status'],array('active','trial'),true)&&($subscription['ends_at']===''||$subscription['ends_at']===null||strtotime($subscription['ends_at'])>=time());
+        return array(
+            'service_fee_percent'=>$valid?max(0,min(100,(float)$subscription['service_fee_percent'])):max(0,min(100,(float)$fallbackServiceFee)),
+            'organizer_share_percent'=>$valid?max(0,min(100,(float)$subscription['organizer_share_percent'])):0.0,
+            'tickex_min_checkout_percent'=>$valid?max(0,min(100,(float)$subscription['tickex_min_checkout_percent'])):1.0,
+            'plan_code'=>$valid?(string)$subscription['plan_code']:'initial',
+        );
+    }
+}
+
 if (!function_exists('tickex_subscription_admin_rows')) {
     function tickex_subscription_admin_rows($pdo,$query='')
     {
         tickex_subscriptions_ensure_schema($pdo);
-        $sql="SELECT a.id,a.email,a.nombre,a.apellido,a.activo,s.plan_id,s.status AS subscription_status,s.ends_at,s.limit_exempt,p.name AS plan_name,p.service_fee_percent,p.qr_limit_monthly FROM usuarios_admin a LEFT JOIN admin_subscriptions s ON s.admin_id=a.id LEFT JOIN subscription_plans p ON p.id=s.plan_id WHERE a.tipo_global='admin_evento'";
+        $sql="SELECT a.id,a.email,a.nombre,a.apellido,a.activo,s.plan_id,s.status AS subscription_status,s.ends_at,s.limit_exempt,p.name AS plan_name,p.service_fee_percent,p.organizer_share_percent,p.tickex_min_checkout_percent,p.qr_limit_monthly FROM usuarios_admin a LEFT JOIN admin_subscriptions s ON s.admin_id=a.id LEFT JOIN subscription_plans p ON p.id=s.plan_id WHERE a.tipo_global='admin_evento'";
         $params=array();if(trim($query)!==''){$sql.=" AND (lower(a.email) LIKE :q OR lower(COALESCE(a.nombre,'')||' '||COALESCE(a.apellido,'')) LIKE :q)";$params[':q']='%'.strtolower(trim($query)).'%';}
         $sql.=' ORDER BY COALESCE(a.nombre,a.email),a.id';$st=$pdo->prepare($sql);$st->execute($params);$rows=$st->fetchAll(PDO::FETCH_ASSOC);
         foreach($rows as &$row){$usage=tickex_subscription_usage($pdo,(int)$row['id']);$row['used']=$usage['used'];}unset($row);

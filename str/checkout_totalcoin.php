@@ -28,6 +28,8 @@ $paymentProviderPreferenceId = '';
 $paymentProviderFee = null;
 $checkoutServicePercent = 0;
 $checkoutMpCostPercent = 0;
+$checkoutOrganizerSharePercent = 0;
+$checkoutTickexMinimumPercent = 0;
 $checkoutBreakdown = null;
 $marketplaceSalesEnabled = true;
 $gatewayRequestId = '';
@@ -313,6 +315,8 @@ if ($eventId > 0) {
         if ($paymentProvider === 'mercadopago') {
           $checkoutServicePercent = isset($eventPaymentConfig['service_charge_percent']) ? (float)$eventPaymentConfig['service_charge_percent'] : 0;
           $checkoutMpCostPercent = isset($eventPaymentConfig['mp_cost_estimate_percent']) ? (float)$eventPaymentConfig['mp_cost_estimate_percent'] : 0;
+          $checkoutOrganizerSharePercent = isset($eventPaymentConfig['organizer_share_percent']) ? (float)$eventPaymentConfig['organizer_share_percent'] : 0;
+          $checkoutTickexMinimumPercent = isset($eventPaymentConfig['tickex_min_checkout_percent']) ? (float)$eventPaymentConfig['tickex_min_checkout_percent'] : 0;
           $marketplaceSalesEnabled = !empty($eventPaymentConfig['enforcement_enabled']);
         }
       } catch (Exception $_mpConfigError) {
@@ -739,7 +743,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $ticketSubtotal = $total;
   $serviceFeeAmount = 0;
   if ($paymentProvider === 'mercadopago' && $ticketSubtotal > 0) {
-    $checkoutBreakdown = tickex_mp_checkout_breakdown($ticketSubtotal, $checkoutServicePercent, $checkoutMpCostPercent);
+    $checkoutBreakdown = tickex_mp_checkout_breakdown($ticketSubtotal, $checkoutServicePercent, $checkoutMpCostPercent, $checkoutOrganizerSharePercent, $checkoutTickexMinimumPercent);
     $serviceFeeAmount = (float)$checkoutBreakdown['service_fee'];
     $total = (float)$checkoutBreakdown['checkout_total'];
     if (!$marketplaceSalesEnabled) {
