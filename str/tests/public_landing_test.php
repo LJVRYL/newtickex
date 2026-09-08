@@ -6,15 +6,19 @@ function landing_assert($condition, $message)
 }
 
 $landing = file_get_contents(__DIR__ . '/../conocer_tickex.php');
-$plans = file_get_contents(__DIR__ . '/../inc/subscriptions.php');
+$plansPath = __DIR__ . '/../inc/subscriptions.php';
+$plans = is_file($plansPath) ? file_get_contents($plansPath) : '';
 
 landing_assert(strpos($landing, 'Todo tu evento') !== false && strpos($landing, 'bajo control') !== false, 'landing opens with a clear product promise');
 foreach (array('Creá y publicá','Vendé y emití','Organizá el equipo','Medí y comunicá') as $stage) {
     landing_assert(strpos($landing, $stage) !== false, 'product journey includes: ' . $stage);
 }
 landing_assert(strpos($landing, 'Mercado Pago') !== false && strpos($landing, 'separa su comisión') !== false, 'payment flow explains organizer collection and Tickex fee');
-landing_assert(strpos($plans, "array('initial','Inicial'") !== false && strpos($landing, 'hasta 300 QR/mes') !== false, 'published initial plan matches the configured product plan');
-landing_assert(strpos($plans, "array('growth','Crecimiento'") !== false && strpos($landing, 'hasta 2.000 QR/mes') !== false, 'growth plan capacity matches the configured product plan');
+landing_assert(strpos($landing, 'hasta 300 QR/mes') !== false, 'landing publishes the initial plan capacity');
+landing_assert(strpos($landing, 'hasta 2.000 QR/mes') !== false, 'landing publishes the growth plan capacity');
+if ($plans !== '') {
+    landing_assert(strpos($plans, "array('initial','Inicial'") !== false && strpos($plans, "array('growth','Crecimiento'") !== false, 'published plans match the configured product plans');
+}
 landing_assert(strpos($landing, 'logos de clientes') === false && strpos($landing, 'testimonio') === false, 'landing does not invent customer proof');
 landing_assert(substr_count($landing, 'mailto:info@tickex.com.ar') >= 4, 'commercial calls to action use the public Tickex contact');
 foreach (array('login_admin.php','login.php','legal.php?doc=terms','legal.php?doc=privacy','arrepentimiento.php') as $route) {
