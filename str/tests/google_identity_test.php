@@ -41,6 +41,11 @@ google_test((int)$pdo->query("SELECT COUNT(*) FROM auth_identities WHERE account
 $adminProfile = array('sub'=>'google-admin-1','email'=>'agus@example.com','email_verified'=>true);
 list($adminType,$admin) = tickex_google_find_or_create_account($pdo,$adminProfile,'admin');
 google_test($adminType === 'admin' && (int)$admin['id'] === 10, 'Google can link an existing administrator');
+list($unifiedAdminType,$unifiedAdmin) = tickex_google_find_or_create_account($pdo,$adminProfile,'unified');
+google_test($unifiedAdminType === 'admin' && (int)$unifiedAdmin['id'] === 10, 'unified Google access routes an existing administrator to its admin account');
+$unifiedBuyerProfile = array('sub'=>'google-unified-buyer','email'=>'newbuyer@example.com','email_verified'=>true,'given_name'=>'New','family_name'=>'Buyer');
+list($unifiedBuyerType,$unifiedBuyer) = tickex_google_find_or_create_account($pdo,$unifiedBuyerProfile,'unified');
+google_test($unifiedBuyerType === 'buyer' && (int)$unifiedBuyer['id'] > 0, 'unified Google access creates a regular buyer when no administrator exists');
 $unknownAdminRejected = false;
 try { tickex_google_find_or_create_account($pdo,array('sub'=>'unknown','email'=>'unknown@example.com','email_verified'=>true),'admin'); } catch (RuntimeException $e) { $unknownAdminRejected = true; }
 google_test($unknownAdminRejected, 'Google never creates administrator privileges');
@@ -65,6 +70,7 @@ google_test($unverifiedRejected, 'unverified Google emails are rejected');
 
 $buyerLogin = file_get_contents(__DIR__ . '/../login.php');
 $adminLogin = file_get_contents(__DIR__ . '/../login_admin.php');
-google_test(strpos($buyerLogin, 'google_login.php?context=buyer') !== false && strpos($adminLogin, 'google_login.php?context=admin') !== false, 'buyer and administrator logins keep separate Google contexts');
+google_test(strpos($buyerLogin, 'google_login.php?context=unified') !== false, 'the public login uses one Google entry point for every role');
+google_test(strpos($adminLogin, "header('Location: login.php'") !== false, 'the historical administrator login redirects to the unified login');
 
 echo 'ALL GOOGLE IDENTITY TESTS PASSED'.PHP_EOL;

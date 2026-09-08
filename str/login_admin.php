@@ -7,6 +7,16 @@ require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/login_security.php';
 require_once __DIR__ . '/inc/google_identity.php';
 
+// Entrada histórica: conservamos la URL para favoritos y enlaces antiguos,
+// pero toda persona ingresa hoy desde una única pantalla.
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $params = array();
+    if (!empty($_GET['next'])) $params['next'] = (string)$_GET['next'];
+    if (!empty($_GET['google_error'])) $params['google_error'] = (string)$_GET['google_error'];
+    header('Location: login.php' . ($params ? '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986) : ''), true, 302);
+    exit;
+}
+
 $title   = 'Ingresar como administrador - Tickex';
 $errors  = array();
 $loginId = '';

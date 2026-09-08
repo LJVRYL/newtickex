@@ -56,7 +56,7 @@ if (!function_exists('tickex_google_safe_next')) {
 if (!function_exists('tickex_google_begin')) {
     function tickex_google_begin($context, $next)
     {
-        $context = $context === 'admin' ? 'admin' : 'buyer';
+        $context = in_array($context, array('admin', 'buyer'), true) ? $context : 'unified';
         $config = tickex_google_config();
         if (empty($config['client_id']) || empty($config['client_secret'])) {
             throw new RuntimeException('El acceso con Google todavía no está configurado.');
@@ -170,6 +170,11 @@ if (!function_exists('tickex_google_find_or_create_account')) {
         if ($subject === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !$verified) throw new RuntimeException('Google no pudo confirmar el email de la cuenta.');
         if (function_exists('tickex_is_email_blocked') && tickex_is_email_blocked($pdo, $email)) throw new RuntimeException('Tu acceso está suspendido. Contactá a soporte.');
         $type = $context === 'admin' ? 'admin' : 'buyer';
+        if ($context === 'unified') {
+            $adminLookup = $pdo->prepare('SELECT 1 FROM usuarios_admin WHERE lower(email)=lower(:email) AND activo=1 LIMIT 1');
+            $adminLookup->execute(array(':email'=>$email));
+            $type = $adminLookup->fetchColumn() ? 'admin' : 'buyer';
+        }
         tickex_google_ensure_schema($pdo);
         $mapped = $pdo->prepare('SELECT account_id FROM auth_identities WHERE provider=:provider AND provider_subject=:subject AND account_type=:type LIMIT 1');
         $mapped->execute(array(':provider'=>'google', ':subject'=>$subject, ':type'=>$type));

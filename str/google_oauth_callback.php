@@ -17,7 +17,9 @@ try {
     exit;
 } catch (Exception $e) {
     error_log('Tickex Google callback: ' . $e->getMessage());
-    $context = isset($request['context']) && $request['context'] === 'admin' ? 'admin' : 'buyer';
+    $context = isset($request['context']) && in_array($request['context'], array('admin', 'buyer'), true)
+        ? (string)$request['context']
+        : 'unified';
     $target = $context === 'admin' ? 'login_admin.php' : 'login.php';
     header('Location: ' . $target . '?google_error=' . rawurlencode($e->getMessage()), true, 303);
     exit;
