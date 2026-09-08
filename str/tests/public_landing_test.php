@@ -22,5 +22,7 @@ foreach (array('login_admin.php','login.php','legal.php?doc=terms','legal.php?do
 }
 landing_assert(strpos($landing, '@media(max-width:980px)') !== false && strpos($landing, '@media(max-width:680px)') !== false, 'landing includes tablet and mobile layouts');
 landing_assert(strpos($landing, 'tickex-isotipo.svg') !== false && strpos($landing, '--green:#32c864') !== false, 'landing uses the Tickex symbol and brand green');
+landing_assert(strpos($landing, 'Aplicación web disponible') !== false && strpos($landing, 'App móvil próximamente en Google Play') !== false, 'landing distinguishes the available web app from the future mobile app');
+landing_assert(strpos($landing, 'computadora, tablet o celular') !== false, 'landing presents Tickex as multi-device event software');
 
 echo "ALL PUBLIC LANDING TESTS PASSED\n";
