@@ -11,6 +11,8 @@ $pdo->exec("INSERT INTO entradas VALUES(1,18,CURRENT_TIMESTAMP,0),(2,18,CURRENT_
 tickex_subscriptions_ensure_schema($pdo);
 $plans=tickex_subscription_plans($pdo,true);sub_ok(count($plans)===3,'three editable default plans are created');
 sub_ok($plans[0]['code']==='initial'&&(float)$plans[0]['service_fee_percent']===15.0&&(int)$plans[0]['qr_limit_monthly']===300,'initial plan starts at fifteen percent and 300 monthly QR');
+sub_ok($plans[1]['code']==='growth'&&(float)$plans[1]['service_fee_percent']===12.5&&(int)$plans[1]['qr_limit_monthly']===2000,'growth plan charges twelve and a half percent and includes 2000 monthly QR');
+sub_ok($plans[2]['code']==='professional'&&(float)$plans[2]['service_fee_percent']===10.0,'professional plan keeps at least one percent after the estimated provider cost');
 $client=tickex_subscription_for_admin($pdo,9);sub_ok($client&&$client['plan_code']==='initial','organizers receive the initial plan automatically');
 $usage=tickex_subscription_usage($pdo,9);sub_ok($usage['used']===2,'usage counts current visible QR owned by the organizer');
 $access=tickex_subscription_access($pdo,9,1000);sub_ok($access['allowed']&&$access['observing'],'limits are measured without blocking while observation mode is active');

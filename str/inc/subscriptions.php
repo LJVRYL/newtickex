@@ -56,8 +56,8 @@ if (!function_exists('tickex_subscriptions_ensure_schema')) {
 
         $defaults = array(
             array('initial','Inicial','Para empezar a vender con todas las herramientas esenciales.',0,15,300,'["Eventos y check-in","Mercado Pago Split","Staff y comunicación"]','active',10),
-            array('growth','Crecimiento','Más capacidad para equipos y eventos en expansión.',null,10,2000,'["Todo Inicial","Mayor volumen mensual","Soporte prioritario"]','draft',20),
-            array('professional','Profesional','Operación de alto volumen con condiciones personalizadas.',null,7,null,'["Todo Crecimiento","Volumen personalizado","Acompañamiento comercial"]','draft',30),
+            array('growth','Crecimiento','Más capacidad para equipos y eventos en expansión.',null,12.5,2000,'["Todo Inicial","Mayor volumen mensual","Soporte prioritario"]','draft',20),
+            array('professional','Profesional','Operación de alto volumen con condiciones personalizadas.',null,10,null,'["Todo Crecimiento","Volumen personalizado","Acompañamiento comercial"]','draft',30),
         );
         $st = $pdo->prepare('INSERT OR IGNORE INTO subscription_plans (code,name,description,monthly_price,service_fee_percent,qr_limit_monthly,features_json,status,sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
         foreach ($defaults as $row) $st->execute($row);

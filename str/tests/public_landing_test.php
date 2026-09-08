@@ -19,7 +19,8 @@ landing_assert(strpos($landing, 'Mercado Pago') !== false && strpos($landing, 's
 landing_assert(strpos($landing, 'hasta 300 QR/mes') !== false, 'landing publishes the initial plan capacity');
 landing_assert(strpos($landing, 'hasta 2.000 QR/mes') !== false, 'landing publishes the growth plan capacity');
 if ($plans !== '') {
-    landing_assert(strpos($plans, "array('initial','Inicial'") !== false && strpos($plans, "array('growth','Crecimiento'") !== false, 'published plans match the configured product plans');
+landing_assert(strpos($plans, "array('initial','Inicial'") !== false && strpos($plans, "array('growth','Crecimiento'") !== false, 'published plans match the configured product plans');
+landing_assert(strpos($landing, '12,5% de costo de servicio') !== false && strpos($landing, '10% de costo de servicio · volumen a definir') !== false, 'landing publishes the approved growth and professional fees');
 }
 landing_assert(strpos($landing, 'logos de clientes') === false && strpos($landing, 'testimonio') === false, 'landing does not invent customer proof');
 landing_assert(strpos($landing, 'mailto:info@tickex.com.ar') === false && substr_count($landing, 'contacto.php') >= 4, 'commercial calls to action use the internal contact form');

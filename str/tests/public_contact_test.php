@@ -10,9 +10,13 @@ $row=$pdo->query('SELECT * FROM public_contact_requests')->fetch(PDO::FETCH_ASSO
 contact_test($row['email']==='ana@example.com'&&$row['status']==='new','contact is normalized and enters the new queue');
 list($invalid)=tickex_public_contact_create($pdo,array('name'=>'X','email'=>'no-email','message'=>'corto'));
 contact_test(!$invalid&&(int)$pdo->query('SELECT COUNT(*) FROM public_contact_requests')->fetchColumn()===1,'invalid public inquiry is rejected');
+list($briefOk,$briefMessage,$briefReference)=tickex_public_contact_create($pdo,array('name'=>'Leo','email'=>'leo@example.com','reason'=>'empezar','message'=>''));
+contact_test($briefOk&&strpos($briefReference,'CON-')===0,'contact can be sent without an optional message');
+$briefRow=$pdo->query("SELECT message FROM public_contact_requests WHERE email='leo@example.com'")->fetch(PDO::FETCH_ASSOC);
+contact_test($briefRow['message']==='Quiero empezar a usar Tickex.','landing reason supplies useful context when message is empty');
 $landing=file_get_contents(__DIR__.'/../conocer_tickex.php');$form=file_get_contents(__DIR__.'/../contacto.php');$inbox=file_get_contents(__DIR__.'/../superadmin_contactos.php');
 contact_test(strpos($landing,'contacto.php')!==false&&strpos($form,'tickex_public_contact_create')!==false,'landing opens the internal contact form');
 contact_test(strpos($form,'website')!==false&&strpos($form,'tickex_csrf_verify')!==false&&strpos($form,'tickex_turnstile_verify_post')!==false,'public form includes bot and request protections');
+contact_test(strpos($form,'Consulta enviada correctamente.')!==false&&strpos($form,'name="reason"')!==false,'public form confirms success and preserves commercial context');
 contact_test(strpos($inbox,'tickex_is_super_admin')!==false&&strpos($inbox,'public_contact_requests')!==false,'commercial inbox is restricted to superadministrators');
 echo 'ALL PUBLIC CONTACT TESTS PASSED'.PHP_EOL;
-
