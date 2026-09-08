@@ -38,10 +38,20 @@ if (!function_exists('tickex_public_contact_create')) {
         $organization = trim(isset($data['organization']) ? (string)$data['organization'] : '');
         $eventType = trim(isset($data['event_type']) ? (string)$data['event_type'] : '');
         $message = trim(isset($data['message']) ? (string)$data['message'] : '');
+        $reason = strtolower(trim(isset($data['reason']) ? (string)$data['reason'] : ''));
         if ($name === '' || strlen($name) > 100) return array(false, 'Ingresá tu nombre.', '');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) return array(false, 'Ingresá un email válido.', '');
         if (strlen($phone) > 50 || strlen($organization) > 140 || strlen($eventType) > 100) return array(false, 'Revisá los datos ingresados.', '');
-        if (strlen($message) < 10 || strlen($message) > 3000) return array(false, 'Contanos un poco más sobre tu evento.', '');
+        if (strlen($message) > 3000) return array(false, 'El detalle puede tener hasta 3000 caracteres.', '');
+        if ($message === '') {
+            $reasonLabels = array(
+                'empezar' => 'Quiero empezar a usar Tickex.',
+                'inicial' => 'Consulta por el plan Inicial.',
+                'crecimiento' => 'Consulta por el plan Crecimiento.',
+                'profesional' => 'Consulta por el plan Profesional.',
+            );
+            $message = isset($reasonLabels[$reason]) ? $reasonLabels[$reason] : 'Solicita información sobre Tickex.';
+        }
         try { $suffix = strtoupper(bin2hex(random_bytes(3))); }
         catch (Exception $e) { $suffix = strtoupper(substr(sha1(uniqid('', true)), 0, 6)); }
         $publicId = 'CON-' . date('ymd') . '-' . $suffix;
@@ -50,4 +60,3 @@ if (!function_exists('tickex_public_contact_create')) {
         return array(true, 'Recibimos tu consulta. El equipo de Tickex se va a comunicar con vos.', $publicId);
     }
 }
-
