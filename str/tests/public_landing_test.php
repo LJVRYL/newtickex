@@ -21,9 +21,10 @@ if ($plans !== '') {
 }
 landing_assert(strpos($landing, 'logos de clientes') === false && strpos($landing, 'testimonio') === false, 'landing does not invent customer proof');
 landing_assert(substr_count($landing, 'mailto:info@tickex.com.ar') >= 4, 'commercial calls to action use the public Tickex contact');
-foreach (array('login_admin.php','login.php','legal.php?doc=terms','legal.php?doc=privacy','arrepentimiento.php') as $route) {
+foreach (array('login_admin.php','login.php') as $route) {
     landing_assert(strpos($landing, $route) !== false, 'landing links to existing route: ' . $route);
 }
+landing_assert(strpos($landing, 'legal.php') === false && strpos($landing, 'arrepentimiento.php') === false, 'landing does not expose legal routes before their deployment');
 landing_assert(strpos($landing, '@media(max-width:980px)') !== false && strpos($landing, '@media(max-width:680px)') !== false, 'landing includes tablet and mobile layouts');
 landing_assert(strpos($landing, 'tickex-isotipo.svg') !== false && strpos($landing, '--green:#32c864') !== false, 'landing uses the Tickex symbol and brand green');
 landing_assert(strpos($landing, 'Aplicación web disponible') !== false && strpos($landing, 'App móvil próximamente en Google Play') !== false, 'landing distinguishes the available web app from the future mobile app');
