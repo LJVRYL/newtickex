@@ -77,7 +77,8 @@ if (!function_exists('tickex_force_logout_if_blocked')) {
 		if (session_id() !== '') {
 			@session_destroy();
 		}
-		header('Location: login.php?blocked=1');
+		$loginRoute = function_exists('tickex_route') ? tickex_route('login', array()) : '/ingresar';
+		header('Location: ' . $loginRoute . '?blocked=1');
 		exit;
 	}
 }
@@ -90,7 +91,8 @@ if (!function_exists('require_login')) {
 		$hasAdmin = !empty($_SESSION['es_admin']) || !empty($_SESSION['admin_id']) || !empty($_SESSION['user_id']);
 
 		if (!$hasUser && !$hasAdmin) {
-			header('Location: login.php');
+			$loginRoute = function_exists('tickex_route') ? tickex_route('login', array()) : '/ingresar';
+			header('Location: ' . $loginRoute);
 			exit;
 		}
 
