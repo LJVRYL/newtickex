@@ -57,11 +57,14 @@ if (!function_exists('communication_delivery_policy_save')) {
             ':uid'=>(int)$updatedByAdminId,
         );
         if ($row[':dl'] < $row[':hl']) $row[':dl'] = $row[':hl'];
-        $st = $pdo->prepare('INSERT INTO communication_delivery_policies
+        $insert = $pdo->prepare('INSERT OR IGNORE INTO communication_delivery_policies
             (admin_id,enforcement_enabled,paused,hourly_limit,daily_limit,max_attempts,retry_base_seconds,updated_by_admin_id,created_at,updated_at)
-            VALUES (:aid,:en,:pa,:hl,:dl,:ma,:rb,:uid,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-            ON CONFLICT(admin_id) DO UPDATE SET enforcement_enabled=excluded.enforcement_enabled,paused=excluded.paused,hourly_limit=excluded.hourly_limit,daily_limit=excluded.daily_limit,max_attempts=excluded.max_attempts,retry_base_seconds=excluded.retry_base_seconds,updated_by_admin_id=excluded.updated_by_admin_id,updated_at=CURRENT_TIMESTAMP');
-        $st->execute($row);
+            VALUES (:aid,:en,:pa,:hl,:dl,:ma,:rb,:uid,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)');
+        $insert->execute($row);
+        $update = $pdo->prepare('UPDATE communication_delivery_policies SET
+            enforcement_enabled=:en,paused=:pa,hourly_limit=:hl,daily_limit=:dl,max_attempts=:ma,
+            retry_base_seconds=:rb,updated_by_admin_id=:uid,updated_at=CURRENT_TIMESTAMP WHERE admin_id=:aid');
+        $update->execute($row);
         return communication_delivery_policy_get($pdo, $adminId);
     }
 }
