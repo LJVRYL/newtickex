@@ -58,7 +58,7 @@ $navClass = function ($pages) use ($navCurrent) {
     <span class="tx-nav-label">Cuenta</span>
     <a<?php echo $navClass(array('mi_sitio.php')); ?> href="mi_sitio.php">Mi sitio</a>
     <a<?php echo $navClass(array('mi_perfil.php')); ?> href="mi_perfil.php">Mi perfil</a>
-    <a<?php echo $navClass(array('soporte.php')); ?> href="soporte.php">Ayuda y soporte</a>
+    <a<?php echo $navClass(array('soporte.php','guias.php')); ?> href="soporte.php">Ayuda y soporte</a>
     <a<?php echo $navClass(array('suscripcion.php')); ?> href="suscripcion.php">Mi plan</a>
   <?php endif; ?>
 </nav>
