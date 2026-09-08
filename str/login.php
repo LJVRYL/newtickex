@@ -99,7 +99,10 @@ $nextSafe = _safe_next_url($next);
 // ---------------------------------------------------------------------
 if (!empty($_SESSION['es_admin']) && !empty($_SESSION['admin_id'])) {
     // Usuario admin ya logueado
-  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_admin.php'));
+    $defaultAdminPanel = in_array(isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '', array('super_admin','superadmin'), true)
+      ? 'panel_superadmin.php'
+      : 'panel_admin.php';
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : $defaultAdminPanel));
     exit;
 }
 
@@ -158,6 +161,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errores)) {
         try {
+            // Un único acceso: primero validamos si el email corresponde a una
+            // cuenta administrativa activa. La contraseña debe ser la propia
+            // de esa cuenta; una contraseña de comprador nunca eleva permisos.
+            $adminStmt = $pdo->prepare("SELECT id,username,email,password,rol,tipo_global,activo,evento_id FROM usuarios_admin WHERE email=:email COLLATE NOCASE LIMIT 1");
+            $adminStmt->execute(array(':email'=>$email));
+            $adminAccount = $adminStmt->fetch(PDO::FETCH_ASSOC);
+            if ($adminAccount && (int)$adminAccount['activo'] === 1) {
+              $adminPassword = tickex_password_verify_compat($pass, (string)$adminAccount['password']);
+              if (!empty($adminPassword['valid'])) {
+                if (!empty($adminPassword['needs_upgrade'])) {
+                  tickex_password_upgrade($pdo, 'usuarios_admin', 'password', (int)$adminAccount['id'], $pass);
+                }
+                $_SESSION['_login_fail_count'] = 0;
+                $_SESSION['_login_fail_ts'] = time();
+                $destination = tickex_google_establish_session($pdo, 'admin', $adminAccount);
+                header('Location: ' . ($nextSafe !== '' ? $nextSafe : $destination));
+                exit;
+              }
+            }
+
             // Detectar columnas disponibles en la vista/tabla usuarios
             $hasPwdHash = false;
             $hasLegacy  = false;
@@ -248,56 +271,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Compatibilidad con scripts legacy
                     $_SESSION['nombre']         = $_SESSION['usuario_nombre'];
                     $_SESSION['usuario']        = $u['email'];
-
-                    // -----------------------------------------------------
-                    // NUEVO: si también existe en usuarios_admin → admin
-                    // -----------------------------------------------------
-                    try {
-                        $stmtAdmin = $pdo->prepare("
-                            SELECT
-                                id,
-                                username,
-                                email,
-                                rol,
-                                tipo_global,
-                                rol_evento
-                            FROM usuarios_admin
-                            WHERE email = :email
-                              AND activo = 1
-                            LIMIT 1
-                        ");
-                        $stmtAdmin->execute(array(':email' => $u['email']));
-                        $adminRow = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
-
-                        if ($adminRow) {
-                          // Es un admin del sistema → setear sesión como admin
-                          $_SESSION['es_admin']    = true;
-                          $_SESSION['admin_id']    = (int)$adminRow['id'];
-                          $_SESSION['user_id']     = (int)$adminRow['id']; // muchos scripts usan user_id
-                          $_SESSION['auth_context'] = 'admin';
-                          $_SESSION['usuario']     = $adminRow['username'];
-                          $_SESSION['rol']         = $adminRow['rol'];
-                          $_SESSION['tipo_global'] = $adminRow['tipo_global'];
-                          $_SESSION['rol_evento']  = isset($adminRow['rol_evento']) ? $adminRow['rol_evento'] : '';
-
-                          // Si no había nombre/email en la vista usuarios, usar los de admin
-                          if (empty($_SESSION['usuario_nombre']) && isset($adminRow['nombre'])) {
-                            $_SESSION['usuario_nombre'] = $adminRow['nombre'];
-                            $_SESSION['nombre'] = $adminRow['nombre'];
-                          }
-                          if (empty($_SESSION['usuario_email']) && isset($adminRow['email'])) {
-                            $_SESSION['usuario_email'] = $adminRow['email'];
-                            $_SESSION['email'] = $adminRow['email'];
-                          }
-
-                          // Redirigimos al panel de admins
-                          header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_admin.php'));
-                          exit;
-                        }
-                    } catch (Exception $e) {
-                        // Si falla la consulta de admins, no rompemos el login de usuario común
-                        // error_log('Error consultando usuarios_admin: '.$e->getMessage());
-                    }
 
                     // Si NO es admin, seguimos con el flujo normal de usuario común:
                     header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
@@ -450,7 +423,7 @@ include __DIR__ . '/inc/layout_top.php';
     <div class="flash err" style="margin-bottom:16px;"><?php echo htmlspecialchars($googleError, ENT_QUOTES, 'UTF-8'); ?></div>
   <?php endif; ?>
   <?php if ($googleEnabled): ?>
-    <a class="tx-google-login" href="google_login.php?context=buyer<?php echo $nextSafe !== '' ? '&amp;next=' . rawurlencode($nextSafe) : ''; ?>">
+    <a class="tx-google-login" href="google_login.php?context=unified<?php echo $nextSafe !== '' ? '&amp;next=' . rawurlencode($nextSafe) : ''; ?>">
       <span class="tx-google-mark" aria-hidden="true">G</span>
       Continuar con Google
     </a>

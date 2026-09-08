@@ -27,6 +27,7 @@ $navClass = function ($pages) use ($navCurrent) {
     <a<?php echo $navClass(array('mercadopago_config.php')); ?> href="mercadopago_config.php">Mercado Pago</a>
     <a<?php echo $navClass(array('secundarios.php')); ?> href="secundarios.php">Staff</a>
     <a<?php echo $navClass(array('superadmin_soporte.php')); ?> href="superadmin_soporte.php">Soporte de clientes</a>
+    <a<?php echo $navClass(array('superadmin_contactos.php')); ?> href="superadmin_contactos.php">Consultas comerciales</a>
     <a<?php echo $navClass(array('superadmin_suscripciones.php')); ?> href="superadmin_suscripciones.php">Planes y suscripciones</a>
     <a<?php echo $navClass(array('superadmin_sites.php')); ?> href="superadmin_sites.php">Sitios y dominios</a>
     <a<?php echo $navClass(array('superadmin_legales.php')); ?> href="superadmin_legales.php">Legales</a>

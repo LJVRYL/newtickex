@@ -22,8 +22,10 @@ if ($plans !== '') {
     landing_assert(strpos($plans, "array('initial','Inicial'") !== false && strpos($plans, "array('growth','Crecimiento'") !== false, 'published plans match the configured product plans');
 }
 landing_assert(strpos($landing, 'logos de clientes') === false && strpos($landing, 'testimonio') === false, 'landing does not invent customer proof');
-landing_assert(substr_count($landing, 'mailto:info@tickex.com.ar') >= 4, 'commercial calls to action use the public Tickex contact');
-foreach (array('login_admin.php','login.php','legal.php?doc=terms','legal.php?doc=privacy','arrepentimiento.php') as $route) {
+landing_assert(strpos($landing, 'mailto:info@tickex.com.ar') === false && substr_count($landing, 'contacto.php') >= 4, 'commercial calls to action use the internal contact form');
+landing_assert(strpos($landing, 'wa.me/5491124071171') !== false && strpos($landing, 'tickex-whatsapp') !== false, 'landing includes direct WhatsApp contact with a recognizable icon');
+landing_assert(strpos($landing, 'login_admin.php') === false, 'landing exposes one login for every account type');
+foreach (array('login.php','legal.php?doc=terms','legal.php?doc=privacy','arrepentimiento.php') as $route) {
     landing_assert(strpos($landing, $route) !== false, 'landing links to existing route: ' . $route);
 }
 landing_assert(strpos($landing, '@media(max-width:980px)') !== false && strpos($landing, '@media(max-width:680px)') !== false, 'landing includes tablet and mobile layouts');
