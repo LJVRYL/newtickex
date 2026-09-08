@@ -61,6 +61,10 @@ $flashErr = '';
 
 // Acción: ocultar/publicar en el sitio (publicado_site)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_site') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud inválida.');
+    }
     $eid = isset($_POST['event_id']) ? (int)$_POST['event_id'] : 0;
     $to  = isset($_POST['to']) ? (int)$_POST['to'] : 0;
     if ($eid > 0 && ($to === 0 || $to === 1) && $hasPublicadoSite) {
@@ -281,6 +285,7 @@ include __DIR__ . '/inc/layout_top.php';
 
             <?php if ($hasPublicadoSite): ?>
               <form method="post" style="display:inline;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="toggle_site">
                 <input type="hidden" name="event_id" value="<?php echo $eid; ?>">
                 <input type="hidden" name="to" value="<?php echo $pub ? 0 : 1; ?>">

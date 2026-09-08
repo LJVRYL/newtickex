@@ -4,6 +4,7 @@ require_once __DIR__ . '/inc/turnstile.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/auth.php';
+require_once __DIR__ . '/inc/login_security.php';
 
 // Conexión directa a la misma base que usamos en registro_usuario.php
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
@@ -354,28 +355,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
 
                 $okCli = false;
-              $firstSet = false;
                 if ($cli && !empty($cli['password_hash'])) {
                     $hashCli = (string)$cli['password_hash'];
-                    if (function_exists('password_verify') && strpos($hashCli, '$2') === 0) {
-                        $okCli = password_verify($pass, $hashCli);
+                    $cliPasswordCheck = tickex_password_verify_compat($pass, $hashCli);
+                    $okCli = !empty($cliPasswordCheck['valid']);
+                    if ($okCli && !empty($cliPasswordCheck['needs_upgrade'])) {
+                        tickex_password_upgrade($pdo, 'registro_pendientes', 'password_hash', (int)$cli['id'], $pass);
                     }
-                    if (!$okCli && strlen($hashCli) === 32 && ctype_xdigit($hashCli)) {
-                        $okCli = (md5($pass) === strtolower($hashCli));
-                    }
-                    if (!$okCli && $hashCli !== '') {
-                        $okCli = ($pass === $hashCli);
-                    }
-              } elseif ($cli && (string)$cli['password_hash'] === '') {
-                // Primer seteo de contraseña: si no tenía, tomamos la enviada y la guardamos (mín 6 chars)
-                if (strlen($pass) >= 6) {
-                  $firstSet = true;
-                  $newHash = function_exists('password_hash') ? password_hash($pass, PASSWORD_DEFAULT) : md5($pass);
-                  $upd = $pdo->prepare("UPDATE registro_pendientes SET password_hash = :h WHERE id = :id");
-                  $upd->execute(array(':h' => $newHash, ':id' => (int)$cli['id']));
-                  $cli['password_hash'] = $newHash;
-                  $okCli = true;
-                }
               }
 
                 if ($cli && $okCli) {
