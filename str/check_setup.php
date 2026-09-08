@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 /**
  * check_setup.php
  * Verifica que todo esté configurado correctamente para el refactor

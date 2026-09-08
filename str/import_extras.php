@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // import_extras.php
 // Agrega entradas extra a la base con su tipo correcto,
 // sin borrar nada y sin duplicar más de la cuenta.

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // import_lista.php
 //
 // Lee lista_nombres.txt (una persona por línea)

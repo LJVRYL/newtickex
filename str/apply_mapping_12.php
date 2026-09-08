@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // Script temporal para aplicar mapping evento 12 -> savetherave7-3
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/unified_tickets.php';

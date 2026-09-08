@@ -15,8 +15,15 @@ if (!in_array($rol, array('super_admin','superadmin'), true)) {
     include __DIR__.'/inc/layout_bottom.php';
     exit;
 }
+$csrf = tickex_csrf_token();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) {
+        http_response_code(403);
+        flash('err', 'La sesión venció. Recargá la página e intentá nuevamente.');
+        header('Location: senforms_admin.php');
+        exit;
+    }
     $action = isset($_POST['action']) ? $_POST['action'] : '';
     try {
         if ($action === 'update_price') {
@@ -73,6 +80,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Crear evento</h3>
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="create_event">
     <div>
       <label>Nombre</label>
@@ -127,6 +135,7 @@ include __DIR__.'/inc/layout_top.php';
     <div class="muted" style="font-size:12px;">SiteName: <?php echo e($ev['SiteName']); ?> | Límite: <?php echo (int)$ev['TicketAmountLimit']; ?> | Activo: <?php echo $ev['Active'] ? 'Sí' : 'No'; ?></div>
 
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="update_limit">
       <input type="hidden" name="event_id" value="<?php echo (int)$ev['Id']; ?>">
       <div>
@@ -157,6 +166,7 @@ include __DIR__.'/inc/layout_top.php';
                   <div class="muted">$<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?> (bloqueado por ventas)</div>
                 <?php else: ?>
                   <form method="post" style="display:flex;gap:6px;align-items:center;">
+                    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="update_price">
                     <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
                     <input type="number" step="0.01" min="0" name="price" value="<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?>" style="width:120px;">

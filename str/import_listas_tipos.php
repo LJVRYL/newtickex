@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // import_listas_tipos.php
 // Reconstruye todas las listas con TIPOS y numeración (nombre 1, nombre 2, etc.)
 // No toca las entradas que ya existen con email distinto de vacío.
