@@ -364,14 +364,23 @@ if (!function_exists('tickex_mp_event_config')) {
         if ($policy['account_type'] !== 'str_owner') $provider = 'mercadopago';
         $row['provider'] = $provider;
         $serviceCharge = tickex_mp_effective_service_charge_percent($settings, $policy);
-        // Las excepciones comerciales individuales conservan prioridad. Si no
-        // existe una, el plan puede reemplazar la política general al activarse.
-        if ($policy['account_type'] !== 'str_owner' && $policy['platform_fee_override_percent'] === null) {
-            $serviceCharge = tickex_subscription_service_fee($pdo, $ownerId, $serviceCharge);
+        $organizerShare = 0.0;
+        $tickexMinimum = 0.0;
+        $planCode = null;
+        if ($policy['account_type'] !== 'str_owner') {
+            $terms = tickex_subscription_commercial_terms($pdo, $ownerId, 15.0);
+            $serviceCharge = 15.0;
+            $organizerShare = (float)$terms['organizer_share_percent'];
+            $tickexMinimum = (float)$terms['tickex_min_checkout_percent'];
+            $planCode = (string)$terms['plan_code'];
         }
         $serviceShareOfCheckout = $serviceCharge > 0 ? ($serviceCharge / (100 + $serviceCharge)) * 100 : 0;
+        $organizerShareOfCheckout = $serviceCharge > 0 ? ($organizerShare / (100 + $serviceCharge)) * 100 : 0;
         $row['service_charge_percent'] = $serviceCharge;
-        $row['marketplace_fee_percent'] = max(0, round($serviceShareOfCheckout - (float)$settings['mp_cost_estimate_percent'], 4));
+        $row['organizer_share_percent'] = $organizerShare;
+        $row['tickex_min_checkout_percent'] = $tickexMinimum;
+        $row['subscription_plan_code'] = $planCode;
+        $row['marketplace_fee_percent'] = max(0, round(max($tickexMinimum, $serviceShareOfCheckout - (float)$settings['mp_cost_estimate_percent'] - $organizerShareOfCheckout), 4));
         $row['total_cost_target_percent'] = (float)$settings['total_cost_target_percent'];
         $row['mp_cost_estimate_percent'] = (float)$settings['mp_cost_estimate_percent'];
         $row['account_type'] = $policy['account_type'];
@@ -419,7 +428,9 @@ if (!function_exists('tickex_mp_save_platform_settings')) {
     function tickex_mp_save_platform_settings($pdo, $totalTarget, $mpEstimate, $enabled, $updatedBy)
     {
         tickex_mp_ensure_schema($pdo);
-        $totalTarget = max(0, min(100, round((float)$totalTarget, 4)));
+        // El comprador siempre abona 15%. Los planes sólo modifican cómo se
+        // reparte ese costo, nunca el precio final que ve en el checkout.
+        $totalTarget = 15.0;
         $mpEstimate = max(0, min(100, round((float)$mpEstimate, 4)));
         if ($enabled && $mpEstimate <= 0) throw new RuntimeException('Carga una estimacion de la comision de Mercado Pago antes de activar la politica.');
         $serviceShareOfCheckout = $totalTarget > 0 ? ($totalTarget / (100 + $totalTarget)) * 100 : 0;
@@ -453,14 +464,7 @@ if (!function_exists('tickex_mp_save_admin_policy')) {
     {
         tickex_mp_ensure_schema($pdo);
         $accountType = $accountType === 'str_owner' ? 'str_owner' : 'client';
-        $override = trim((string)$feeOverride) === '' ? null : max(0, min(100, round((float)$feeOverride, 4)));
-        if ($accountType === 'client' && $override !== null) {
-            $settings = tickex_mp_platform_settings($pdo);
-            $serviceShareOfCheckout = $override > 0 ? ($override / (100 + $override)) * 100 : 0;
-            if (!empty($settings['enforcement_enabled']) && $serviceShareOfCheckout <= (float)$settings['mp_cost_estimate_percent']) {
-                throw new RuntimeException('El costo de servicio especial no alcanza para cubrir la comision estimada de Mercado Pago.');
-            }
-        }
+        $override = $accountType === 'str_owner' && trim((string)$feeOverride) !== '' ? max(0, min(100, round((float)$feeOverride, 4))) : null;
         $st = $pdo->prepare("INSERT OR REPLACE INTO mercadopago_admin_policies (admin_id,account_type,platform_fee_override_percent,updated_by_admin_id,created_at,updated_at) VALUES (:admin,:type,:fee,:updated_by,COALESCE((SELECT created_at FROM mercadopago_admin_policies WHERE admin_id=:admin),CURRENT_TIMESTAMP),CURRENT_TIMESTAMP)");
         $st->execute(array(':admin' => (int)$adminId, ':type' => $accountType, ':fee' => $override, ':updated_by' => (int)$updatedBy));
         return tickex_mp_admin_policy($pdo, $adminId);
@@ -479,7 +483,7 @@ if (!function_exists('tickex_mp_effective_platform_fee_percent')) {
 if (!function_exists('tickex_mp_effective_service_charge_percent')) {
     function tickex_mp_effective_service_charge_percent(array $settings, array $policy)
     {
-        if (array_key_exists('platform_fee_override_percent', $policy) && $policy['platform_fee_override_percent'] !== null && $policy['platform_fee_override_percent'] !== '') {
+        if (isset($policy['account_type']) && $policy['account_type'] === 'str_owner' && array_key_exists('platform_fee_override_percent', $policy) && $policy['platform_fee_override_percent'] !== null && $policy['platform_fee_override_percent'] !== '') {
             return max(0, min(100, (float)$policy['platform_fee_override_percent']));
         }
         return max(0, min(100, (float)$settings['total_cost_target_percent']));
@@ -487,15 +491,21 @@ if (!function_exists('tickex_mp_effective_service_charge_percent')) {
 }
 
 if (!function_exists('tickex_mp_checkout_breakdown')) {
-    function tickex_mp_checkout_breakdown($ticketSubtotal, $servicePercent, $mpCostPercent)
+    function tickex_mp_checkout_breakdown($ticketSubtotal, $servicePercent, $mpCostPercent, $organizerSharePercent = 0, $tickexMinCheckoutPercent = 0)
     {
         $subtotal = max(0, round((float)$ticketSubtotal, 2));
         $servicePercent = max(0, min(100, (float)$servicePercent));
         $mpCostPercent = max(0, min(100, (float)$mpCostPercent));
+        $organizerSharePercent = max(0, min($servicePercent, (float)$organizerSharePercent));
+        $tickexMinCheckoutPercent = max(0, min(100, (float)$tickexMinCheckoutPercent));
         $serviceFee = round($subtotal * $servicePercent / 100, 2);
         $checkoutTotal = round($subtotal + $serviceFee, 2);
         $mpCost = round($checkoutTotal * $mpCostPercent / 100, 2);
-        $platformFee = max(0, round($checkoutTotal - $subtotal - $mpCost, 2));
+        $availableServiceRemainder = max(0, round($serviceFee - $mpCost, 2));
+        $requestedOrganizerShare = round($subtotal * $organizerSharePercent / 100, 2);
+        $minimumPlatformFee = round($checkoutTotal * $tickexMinCheckoutPercent / 100, 2);
+        $platformFee = min($availableServiceRemainder, max($minimumPlatformFee, round($availableServiceRemainder - $requestedOrganizerShare, 2)));
+        $organizerBonus = max(0, round($availableServiceRemainder - $platformFee, 2));
         $platformPercent = $checkoutTotal > 0 ? round($platformFee * 100 / $checkoutTotal, 4) : 0;
         return array(
             'ticket_subtotal' => $subtotal,
@@ -504,9 +514,12 @@ if (!function_exists('tickex_mp_checkout_breakdown')) {
             'checkout_total' => $checkoutTotal,
             'mp_cost_estimate_percent' => $mpCostPercent,
             'mp_cost_estimate' => $mpCost,
+            'organizer_share_percent' => $organizerSharePercent,
+            'organizer_bonus' => $organizerBonus,
+            'tickex_min_checkout_percent' => $tickexMinCheckoutPercent,
             'marketplace_fee_percent' => $platformPercent,
             'marketplace_fee' => $platformFee,
-            'organizer_net_estimate' => round($checkoutTotal - $mpCost - $platformFee, 2),
+            'organizer_net_estimate' => round($subtotal + $organizerBonus, 2),
         );
     }
 }
