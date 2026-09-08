@@ -45,7 +45,17 @@ if (!function_exists('tickex_organizer_site_ensure_schema')) {
         foreach ($wanted as $name => $definition) {
             if (!isset($present[$name])) $pdo->exec('ALTER TABLE clientes_sites ADD COLUMN ' . $name . ' ' . $definition);
         }
-        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_sites_custom_domain ON clientes_sites(custom_domain) WHERE custom_domain IS NOT NULL AND custom_domain <> ''");
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_clientes_sites_custom_domain ON clientes_sites(custom_domain)');
+        $pdo->exec("CREATE TRIGGER IF NOT EXISTS trg_clientes_sites_custom_domain_insert
+            BEFORE INSERT ON clientes_sites
+            WHEN NEW.custom_domain IS NOT NULL AND NEW.custom_domain <> ''
+             AND EXISTS(SELECT 1 FROM clientes_sites WHERE custom_domain=NEW.custom_domain)
+            BEGIN SELECT RAISE(ABORT, 'custom domain already exists'); END");
+        $pdo->exec("CREATE TRIGGER IF NOT EXISTS trg_clientes_sites_custom_domain_update
+            BEFORE UPDATE OF custom_domain ON clientes_sites
+            WHEN NEW.custom_domain IS NOT NULL AND NEW.custom_domain <> ''
+             AND EXISTS(SELECT 1 FROM clientes_sites WHERE custom_domain=NEW.custom_domain AND id<>OLD.id)
+            BEGIN SELECT RAISE(ABORT, 'custom domain already exists'); END");
 
         $eventTable = (int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='eventos'")->fetchColumn() > 0;
         if ($eventTable) {
