@@ -10,6 +10,8 @@ $plansPath = __DIR__ . '/../inc/subscriptions.php';
 $plans = is_file($plansPath) ? file_get_contents($plansPath) : '';
 
 landing_assert(strpos($landing, 'Todo tu evento') !== false && strpos($landing, 'bajo control') !== false, 'landing opens with a clear product promise');
+landing_assert(strpos($landing, 'og:title" content="Tickex · Todo tu evento bajo control') !== false, 'shared preview uses the current Tickex promise');
+landing_assert(stripos($landing, 'directo a tu CBU') === false, 'shared preview never uses the legacy CBU message');
 foreach (array('Creá y publicá','Vendé y emití','Organizá el equipo','Medí y comunicá') as $stage) {
     landing_assert(strpos($landing, $stage) !== false, 'product journey includes: ' . $stage);
 }
