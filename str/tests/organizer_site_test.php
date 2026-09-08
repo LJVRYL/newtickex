@@ -14,6 +14,7 @@ $badLogo=false;try{tickex_organizer_site_asset_url('javascript:alert(1)');}catch
 site_ok(tickex_organizer_site_domain('https://entradas.productora.com/')==='entradas.productora.com','custom domains are normalized');
 $badDomain=false;try{tickex_organizer_site_domain('productora.com/eventos');}catch(Exception $e){$badDomain=true;}site_ok($badDomain,'custom domains cannot include paths');
 $pdo->exec("INSERT INTO clientes_sites(admin_id,slug_publico,nombre_publico,visible,custom_domain,custom_domain_status) VALUES(9,'productora','Productora',1,'entradas.productora.com','pending')");
+$duplicateDomain=false;try{$pdo->exec("INSERT INTO clientes_sites(admin_id,slug_publico,nombre_publico,visible,custom_domain,custom_domain_status) VALUES(10,'otra','Otra',1,'entradas.productora.com','pending')");}catch(Exception $e){$duplicateDomain=true;}site_ok($duplicateDomain,'custom domains remain unique on legacy SQLite');
 site_ok(tickex_organizer_site_slug_from_host($pdo,'productora.tickex.com.ar')==='productora','Tickex subdomain resolves its organizer slug');
 site_ok(tickex_organizer_site_slug_from_host($pdo,'entradas.productora.com')==='','pending custom domains are never routed');
 $pdo->exec("UPDATE clientes_sites SET custom_domain_status='verified'");
