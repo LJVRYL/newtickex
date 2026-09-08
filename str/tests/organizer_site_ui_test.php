@@ -9,7 +9,7 @@ site_ui_ok(strpos($public,"WHERE publicado_site=1 AND creado_por_admin_id=:admin
 site_ui_ok(strpos($public,'tickex_site_checkout($slug,$event)')!==false,'public cards preserve the existing checkout route');
 site_ui_ok(strpos($public,'BOTÓN DE ARREPENTIMIENTO')!==false&&strpos($public,'datos_personales.php')!==false,'public site preserves consumer rights links');
 site_ui_ok(strpos($public,'Powered by Tickex')!==false&&strpos($public,"white_label_enabled")!==false,'Tickex branding remains until white label is explicitly enabled');
-site_ui_ok(strpos($landing,'Plataforma para productores')!==false&&strpos($landing,'Quiero usar Tickex')!==false,'commercial landing explains the offer and provides a clear next action');
+site_ui_ok(strpos($landing,'Todo tu evento')!==false&&strpos($landing,'Quiero usar Tickex')!==false,'commercial landing explains the offer and provides a clear next action');
 site_ui_ok(strpos($landing,'@media(max-width:680px)')!==false,'commercial landing is responsive');
 site_ui_ok(strpos($super,"array('not_configured','pending','verified','rejected')")!==false&&strpos($super,'white_label_enabled')!==false,'superadministrator controls domain verification and white label');
 site_ui_ok(strpos($nav,'superadmin_sites.php')!==false,'superadministrator navigation exposes site operations');
