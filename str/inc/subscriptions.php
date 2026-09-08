@@ -91,6 +91,17 @@ if (!function_exists('tickex_subscriptions_ensure_schema')) {
     }
 }
 
+if (!function_exists('tickex_subscription_apply_commercial_fees')) {
+    function tickex_subscription_apply_commercial_fees($pdo)
+    {
+        tickex_subscriptions_ensure_schema($pdo);
+        $fees = array('initial'=>15.0, 'growth'=>12.5, 'professional'=>10.0);
+        $st = $pdo->prepare('UPDATE subscription_plans SET service_fee_percent=:fee, updated_at=CURRENT_TIMESTAMP WHERE code=:code');
+        foreach ($fees as $code=>$fee) $st->execute(array(':fee'=>$fee, ':code'=>$code));
+        return $fees;
+    }
+}
+
 if (!function_exists('tickex_subscription_statuses')) {
     function tickex_subscription_statuses() { return array('trial'=>'Prueba','active'=>'Activo','paused'=>'Pausado','cancelled'=>'Cancelado'); }
 }
