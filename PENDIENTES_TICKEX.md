@@ -5,8 +5,8 @@ Actualizado: 8 de septiembre de 2026.
 ## P0 — antes de incorporar clientes pagos
 
 - [x] Completar “Continuar con Google”: código base, configuración Google Cloud y publicación externa.
-- [ ] Desplegar y probar el acceso único local ya terminado: comprador, administrador, staff y superadmin desde `login.php`.
-- [ ] Cerrar inmediatamente la superficie técnica pública del VPS: SQLite, pruebas, migraciones, herramientas y diagnósticos. La corrección ya está preparada y probada en local; falta el bloqueo efectivo en Apache y su verificación externa.
+- [x] Desplegar y probar automáticamente el acceso único: comprador, administrador, staff y superadmin desde `login.php`.
+- [x] Cerrar la superficie técnica pública del VPS: SQLite, logs, pruebas, migraciones, herramientas y diagnósticos.
 - [ ] Rotar contraseñas/sesiones y revisar accesos después de cerrar la descarga pública de la base; conservar una copia forense y no distribuirla.
 - [ ] Ejecutar una compra mínima real de Mercado Pago con comprador, organizador y Tickex separados.
 - [ ] Verificar en las tres cuentas el precio nominal, costo al comprador, comisión de Mercado Pago y fee Tickex.
@@ -43,9 +43,9 @@ Actualizado: 8 de septiembre de 2026.
 
 - [ ] Completar revisión responsive en celulares reales de comprador, administrador, puerta y superadmin.
 - [x] Unificar en local los accesos de comprador y administrador sin mezclar identidades ni permisos.
-- [ ] Validar visualmente y desplegar el acceso unificado en producción.
+- [ ] Validar visualmente con una cuenta real cada destino del acceso unificado; el código y las pruebas automáticas ya están desplegados.
 - [x] Reemplazar los enlaces de correo de la landing por un formulario interno y acceso directo a WhatsApp.
-- [ ] Desplegar y probar el formulario público y la bandeja comercial de superadmin.
+- [x] Desplegar y probar el formulario público y la bandeja comercial de superadmin.
 - [ ] Terminar el diseño del superadmin: clientes, operaciones, planes, incidencias, salud y auditoría.
 - [ ] Ampliar panel de puerta: ventas de puerta, caja, check-ins, incidencias y cierre de turno.
 - [ ] Mejorar el perfil del comprador, historial, facturas, devoluciones y preferencias de comunicación.
@@ -88,7 +88,7 @@ Actualizado: 8 de septiembre de 2026.
 - [x] Agregar reglas de denegación para bases, logs, pruebas, migraciones, herramientas y parches.
 - [x] Incorporar verificación CSRF a operaciones antiguas de SenForms/Bridge y asignaciones artísticas.
 - [x] Ejecutar pruebas de seguridad, aislamiento, Google Identity y contacto público en local.
-- [ ] Aplicar las reglas equivalentes en el VirtualHost activo, porque producción actualmente usa `AllowOverride None`.
-- [ ] Verificar desde Internet que los recursos sensibles devuelvan 403/404 y que compra, login, webhooks y paneles sigan operativos.
+- [x] Aplicar las reglas equivalentes en el VirtualHost activo, manteniendo `AllowOverride None`.
+- [x] Verificar desde Internet que SQLite/logs devuelvan 403, que código interno devuelva 404 y que landing, login y contacto sigan operativos.
 - [ ] Auditar dependencias, versiones, permisos del filesystem, cabeceras y configuración TLS.
 - [ ] Completar revisión visual y de accesibilidad con sesiones reales de los cuatro perfiles.
