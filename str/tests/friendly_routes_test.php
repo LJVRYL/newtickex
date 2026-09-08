@@ -31,6 +31,7 @@ $apache = file_get_contents(__DIR__ . '/../../ops/apache/999-tickex.conf');
 $legacy = file_get_contents(__DIR__ . '/../entrada.php');
 friendly_assert(strpos($router, "'/mi-cuenta' => 'panel_usuario.php'") !== false, 'local router resolves the buyer panel');
 friendly_assert(strpos($apache, 'RewriteRule ^/entrada/') !== false && strpos($apache, 'https://str.tickex.com.ar/$1') === false, 'production vhost serves clean routes without redirecting to str');
+friendly_assert(strpos($apache, '"\\s/+login\\.php(?:[?\\s])"') !== false, 'legacy route matching uses executable Apache escapes');
 friendly_assert(strpos($legacy, 'tickex_secure_ticket_url') !== false && strpos($legacy, "SELECT id, codigo") !== false, 'historical ticket links migrate to opaque links');
 
 echo 'ALL FRIENDLY ROUTES TESTS PASSED' . PHP_EOL;
