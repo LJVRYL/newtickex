@@ -12,7 +12,7 @@ Actualizado: 8 de septiembre de 2026.
 - [ ] Verificar en las tres cuentas el precio nominal, costo al comprador, comisión de Mercado Pago y fee Tickex.
 - [ ] Validar webhooks reales: aprobado, pendiente, rechazado, reembolso y contracargo, sin duplicar QR.
 - [x] Ensayar restauración completa de código y SQLite desde un backup del VPS (88 tablas e integridad OK); los secretos se conservan por separado y no se copiaron al ensayo.
-- [x] Quitar el warning operativo de `zip.so` usando el PHP 7.4 sano del hosting en los workers; producción web ya opera con PHP 8.3 y ZIP correcto.
+- [x] Quitar el warning operativo de `zip.so` ejecutando el worker con PHP 8.3 CLI; producción web ya opera con PHP 8.3 y ZIP correcto.
 - [ ] Calendarizar la retirada de los PHP antiguos y la actualización controlada de SQLite del sistema sin afectar el PHP 8.3 productivo.
 - [ ] Completar textos legales y fiscales con revisión profesional: términos, privacidad, arrepentimiento, tratamiento de datos y responsabilidades de cada organizador.
 - [ ] Revisión externa de seguridad del dominio productivo, cabeceras, permisos y flujos de pago.
