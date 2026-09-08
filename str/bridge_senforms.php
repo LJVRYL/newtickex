@@ -21,8 +21,13 @@ $archiveEventId  = (int)(getenv('SENFORMS_ARCHIVE_EVENT_ID') ?: 21);
 $selectedEventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : $currentEventId;
 
 $flash = array();
+$csrf = tickex_csrf_token();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) {
+        http_response_code(403);
+        $flash[] = array('type'=>'err','msg'=>'La sesión venció. Recargá la página e intentá nuevamente.');
+    } else {
     $action = $_POST['action'] ?? '';
     try {
         if ($action === 'move_archive') {
@@ -47,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Exception $e) {
         $flash[] = array('type'=>'err','msg'=>'Error: '.$e->getMessage());
+    }
     }
 }
 
@@ -95,6 +101,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Crear TicketType</h3>
   <form method="post" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="create_tt">
     <div>
       <label>Evento</label>
@@ -140,6 +147,7 @@ include __DIR__.'/inc/layout_top.php';
               <td><?php echo (int)$tk['Id']; ?></td>
               <td>
                 <form method="post" style="display:flex;gap:6px;align-items:center;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="rename_tt">
                   <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
                   <input type="text" name="name" value="<?php echo e($tk['Name']); ?>" style="min-width:200px;">
@@ -151,6 +159,7 @@ include __DIR__.'/inc/layout_top.php';
               <td style="display:flex;gap:6px;flex-wrap:wrap;">
                 <?php if ((int)$selectedEventId !== (int)$archiveEventId): ?>
                   <form method="post" onsubmit="return confirm('Mover TicketType #<?php echo (int)$tk['Id']; ?> al evento archivo?');">
+                    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="move_archive">
                     <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
                     <input type="hidden" name="from_event_id" value="<?php echo (int)$selectedEventId; ?>">

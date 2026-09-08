@@ -34,6 +34,7 @@ function cat_sf_event_allowed($ev, $mappedSlugList, $isSuper){
 
 $selectedEvent = null;
 $searchResults = array();
+$csrf = tickex_csrf_token();
 $sfAdminUrl = getenv('SENFORMS_ADMIN_URL');
 if (!$sfAdminUrl || trim($sfAdminUrl) === '') {
   // fallback común: host local con ruta senforms (ajusta si difiere)
@@ -41,6 +42,12 @@ if (!$sfAdminUrl || trim($sfAdminUrl) === '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) {
+        http_response_code(403);
+        flash('err', 'La sesión venció. Recargá la página e intentá nuevamente.');
+        header('Location: catalogo_senforms.php' . ($eventoId > 0 ? '?evento_id=' . $eventoId : ''));
+        exit;
+    }
     $action = $_POST['action'] ?? '';
     try {
         if ($action === 'pick_event') {
@@ -164,6 +171,7 @@ include __DIR__.'/inc/layout_top.php';
   <div class="card" style="margin-top:12px;">
     <h3 style="margin-top:0;">Seleccionar evento SenForms</h3>
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="pick_event">
       <div>
         <label>SiteName (slug)</label>
@@ -175,6 +183,7 @@ include __DIR__.'/inc/layout_top.php';
     </form>
 
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="pick_by_id">
       <div>
         <label>Event Id</label>
@@ -186,6 +195,7 @@ include __DIR__.'/inc/layout_top.php';
     </form>
 
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="search">
       <div>
         <label>Buscar (nombre o slug)</label>
@@ -210,6 +220,7 @@ include __DIR__.'/inc/layout_top.php';
               </td>
               <td>
                 <form method="post" style="margin:0;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="pick_by_id">
                   <input type="hidden" name="event_id" value="<?php echo (int)$row['Id']; ?>">
                   <button class="btn secondary" type="submit">Usar</button>
@@ -253,6 +264,7 @@ include __DIR__.'/inc/layout_top.php';
           <td><?php echo (int)$t['Id']; ?></td>
           <td>
             <form method="post" style="display:flex;gap:6px;align-items:center;">
+              <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
               <input type="hidden" name="action" value="rename_ticket_type">
               <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
               <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -266,6 +278,7 @@ include __DIR__.'/inc/layout_top.php';
               <div class="muted" style="font-size:12px;">Crea un tipo nuevo para cambiar precio.</div>
             <?php else: ?>
               <form method="post" style="display:flex;gap:6px;align-items:center;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="update_price">
                 <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
                 <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -277,6 +290,7 @@ include __DIR__.'/inc/layout_top.php';
           <td><?php echo $sales; ?></td>
           <td>
             <form method="post" style="margin:0;">
+              <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
               <input type="hidden" name="action" value="toggle_active">
               <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
               <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -293,6 +307,7 @@ include __DIR__.'/inc/layout_top.php';
   <div class="card" style="margin-top:12px;">
     <h4 style="margin:0 0 6px;">Crear nuevo tipo</h4>
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="create_ticket_type">
       <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
       <div>
@@ -317,6 +332,7 @@ include __DIR__.'/inc/layout_top.php';
       <div class="muted" style="font-size:12px;margin-top:4px;">Última sync: <?php echo $cacheSummary['last_sync'] ? e($cacheSummary['last_sync']) : '—'; ?> | Filas: <?php echo (int)$cacheSummary['rows']; ?> | Pagados: <?php echo (int)$cacheSummary['paid']; ?></div>
     </div>
     <form method="post" style="justify-self:end;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="import_tickets">
       <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
       <button class="btn" type="submit">Importar ahora</button>

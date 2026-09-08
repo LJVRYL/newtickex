@@ -1,4 +1,5 @@
 ﻿<?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 session_start();
 
 // Determinar pestaña activa

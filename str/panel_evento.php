@@ -360,6 +360,16 @@ $bridgeAllowedForEvent = tickex_event_bridge_allowed($pdo, $eventoId);
 $produArtistas = get_produccion_artistas($pdo);
 $produAssigns = get_produccion_assignments($pdo, $eventoId);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['action'])
+    && in_array($_POST['action'], array('add_artist_assign', 'del_artist_assign'), true)
+    && !tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) {
+  http_response_code(403);
+  flash('err', 'La sesión venció. Recargá la página e intentá nuevamente.');
+  header('Location: panel_evento.php?evento_id='.(int)$eventoId);
+  exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_artist_assign') {
   $artistaId = isset($_POST['artista_id']) ? (int)$_POST['artista_id'] : 0;
   $precio    = isset($_POST['precio']) && $_POST['precio'] !== '' ? (float)$_POST['precio'] : null;

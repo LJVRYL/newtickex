@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // Script puntual para reenviar confirmación a savetherave3@gmail.com
 
 $dbFile = __DIR__ . '/save_the_rave.sqlite';

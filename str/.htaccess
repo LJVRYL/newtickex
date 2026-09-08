@@ -12,3 +12,9 @@
 <FilesMatch "(?i)(^arca_config\.json$|\.(?:sqlite|sqlite3|db|sql|log|env|ini|bak|save|pem|key|crt|p12|pfx|tar|gz|zip)$)">
   Require all denied
 </FilesMatch>
+
+# Código operativo que forma parte del repositorio pero no de la superficie web.
+<IfModule mod_rewrite.c>
+  RewriteRule ^(?:tests|migrations|tools|patchs)(?:/|$) - [F,L,NC]
+  RewriteRule ^(?:diag_|debug_|check_setup\.php$|apply_mapping_|import_|tmp_) - [F,L,NC]
+</IfModule>
