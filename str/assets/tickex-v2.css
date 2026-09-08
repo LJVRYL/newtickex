@@ -167,6 +167,8 @@ select option { font-family:"Inter",sans-serif; font-weight:600; }
 .tx-login-card, .tx-admin-login-card { padding:30px; border-radius:var(--tx-radius); background:var(--tx-surface); box-shadow:var(--tx-shadow); }
 .tx-login-card label, .tx-admin-login-card label { display:block; margin:14px 0 6px; color:#c8cede; font-size:12px; font-weight:700; }
 .tx-login-card .btn, .tx-admin-login-card .btn { width:100%; }
+.tx-register-login { margin:18px 0 0; color:var(--tx-muted); font-size:13px; text-align:center; }
+.tx-register-login a { color:var(--tx-cyan); font-weight:800; }
 .tx-google-login { width:100%; min-height:48px; display:flex; align-items:center; justify-content:center; gap:11px; padding:11px 16px; border:1px solid rgba(255,255,255,.16); border-radius:12px; background:#fff; color:#202124 !important; font-size:14px; font-weight:800; text-decoration:none; box-shadow:0 8px 24px rgba(0,0,0,.16); }
 .tx-google-login:hover { color:#202124 !important; border-color:#fff; transform:translateY(-1px); }
 .tx-google-mark { width:22px; height:22px; display:grid; place-items:center; border-radius:50%; color:#4285f4; font:900 17px/1 Arial,sans-serif; }

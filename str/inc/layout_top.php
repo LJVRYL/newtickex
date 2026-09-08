@@ -86,6 +86,9 @@ if ($page === 'login.php') {
 if ($page === 'login_admin.php') {
   $bodyClass .= ' page-login page-login-admin';
 }
+if ($page === 'registro_usuario.php') {
+  $bodyClass .= ' page-login page-registration';
+}
 if ($page === 'panel_admin.php') {
   $bodyClass .= ' page-panel-admin';
 }
