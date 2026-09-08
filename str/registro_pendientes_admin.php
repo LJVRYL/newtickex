@@ -59,6 +59,11 @@ function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
 }
 
 require_login();
+$csrf = tickex_csrf_token();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    exit('Solicitud inválida.');
+}
 $cu = current_user();
 $rol = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
 if (!in_array($rol, array('super_admin','superadmin'), true)) {
@@ -161,6 +166,7 @@ include __DIR__.'/inc/layout_top.php';
             <td style="max-width:180px;word-break:break-all;">&nbsp;<?php echo $r['next_url'] ? e($r['next_url']) : ''; ?></td>
             <td>
               <form method="post" style="display:flex;gap:6px;align-items:center;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="resend">
                 <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                 <button class="btn secondary" type="submit">Reenviar token</button>

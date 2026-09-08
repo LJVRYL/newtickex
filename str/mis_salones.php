@@ -3,6 +3,11 @@ require_once __DIR__.'/inc/bootstrap.php';
 $title = "Mis salones";
 
 require_login();
+$csrf = tickex_csrf_token();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+  http_response_code(403);
+  exit('Solicitud inválida.');
+}
 
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global'])
@@ -147,6 +152,7 @@ include __DIR__.'/inc/layout_top.php';
   </p>
 
   <form method="post" style="margin-top:12px;display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:flex-end;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <div>
       <label for="nombre">Nombre del salón</label>
       <input type="text" id="nombre" name="nombre" required placeholder="Ej: Teatro Principal">

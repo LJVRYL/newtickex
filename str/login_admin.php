@@ -4,18 +4,27 @@
 // Permite loguear por EMAIL (si el input tiene @) o por username.
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/login_security.php';
 
 $title   = 'Ingresar como administrador - Tickex';
 $errors  = array();
 $loginId = '';
+$csrf = tickex_csrf_token();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $loginId = isset($_POST['login_id']) ? trim($_POST['login_id']) : '';
     $password = isset($_POST['password']) ? (string)$_POST['password'] : '';
 
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    }
+    if (tickex_login_throttled('admin', 10, 600)) {
+        $errors[] = 'Demasiados intentos. Esperá unos minutos e intentá de nuevo.';
+        usleep(350000);
+    }
     if ($loginId === '' || $password === '') {
         $errors[] = 'Email/usuario y contraseña son obligatorios.';
-    } else {
+    } elseif (empty($errors)) {
         try {
             // Usar la conexión central: configura busy_timeout/WAL y evita que el
             // login compita con otra conexión SQLite durante la inicialización.
@@ -26,14 +35,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     SELECT id, username, email, password, rol, tipo_global, activo, evento_id
                     FROM usuarios_admin
-                    WHERE email = :v
+                    WHERE email = :v COLLATE NOCASE
                     LIMIT 1
                 ");
             } else {
                 $stmt = $pdo->prepare("
                     SELECT id, username, email, password, rol, tipo_global, activo, evento_id
                     FROM usuarios_admin
-                    WHERE username = :v
+                    WHERE username = :v COLLATE NOCASE
                     LIMIT 1
                 ");
             }
@@ -42,26 +51,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$admin) {
+                tickex_login_record_failure('admin');
                 $errors[] = 'Email/usuario o contraseña incorrectos.';
             } else {
                 if ((int)$admin['activo'] !== 1) {
-                    $errors[] = 'Este usuario está desactivado.';
+                    tickex_login_record_failure('admin');
+                    $errors[] = 'Email/usuario o contraseña incorrectos.';
                 } else {
                     $stored = (string)$admin['password'];
-                    $okPass = false;
-
-                    // Preferir hashes seguros y mantener compatibilidad con cuentas legacy.
-                    if (function_exists('password_verify') && password_verify($password, $stored)) {
-                        $okPass = true;
-                    } elseif ($stored === $password) {
-                        $okPass = true;
-                    } elseif ($stored === md5($password)) {
-                        $okPass = true;
-                    }
+                    $passwordCheck = tickex_password_verify_compat($password, $stored);
+                    $okPass = !empty($passwordCheck['valid']);
 
                     if (!$okPass) {
+                        tickex_login_record_failure('admin');
                         $errors[] = 'Email/usuario o contraseña incorrectos.';
                     } else {
+                        if (!empty($passwordCheck['needs_upgrade'])) {
+                            tickex_password_upgrade($pdo, 'usuarios_admin', 'password', (int)$admin['id'], $password);
+                        }
+                        tickex_login_clear_failures('admin');
                         if (session_status() !== PHP_SESSION_ACTIVE) {
                             session_start();
                         }
@@ -163,6 +171,7 @@ include __DIR__ . '/inc/layout_top.php';
     <?php endif; ?>
 
     <form method="post" autocomplete="off">
+        <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
         <div class="mb-3">
             <label for="login_id" class="form-label">Email de admin</label>
             <input

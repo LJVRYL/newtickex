@@ -18,8 +18,7 @@ $rol = isset($_SESSION['rol'])
     ? $_SESSION['rol']
     : (isset($cu['rol']) ? $cu['rol'] : '');
 
-if (!in_array($tipoGlobal, array('admin_evento', 'super_admin', 'superadmin'), true)
-    && $rol !== 'admin') {
+if (!in_array($tipoGlobal, array('super_admin', 'superadmin'), true)) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
     ?>
@@ -35,6 +34,10 @@ if (!in_array($tipoGlobal, array('admin_evento', 'super_admin', 'superadmin'), t
 
 // POST confirma la acción
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud inválida.');
+    }
     if (!isset($_POST['confirm']) || $_POST['confirm'] !== 'yes') {
         header('Location: panel_admin.php');
         exit;
@@ -82,6 +85,7 @@ include __DIR__ . '/inc/layout_top.php';
   <h1 style="margin:0;">Habilitar Claude Haiku 4.5</h1>
   <p style="color:var(--muted);margin-top:6px;">Esta acción habilitará Claude Haiku 4.5 para todos los clientes del sistema. Esta operación afecta a todos los sitios y no es reversible desde aquí (podés borrar manualmente el archivo de flag para deshabilitar).</p>
   <form method="post" style="margin-top:12px;">
+    <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <input type="hidden" name="confirm" value="yes">
     <button class="btn" type="submit">Confirmar y habilitar</button>
     <a href="panel_admin.php" class="btn secondary" style="margin-left:8px;">Cancelar</a>

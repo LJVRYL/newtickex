@@ -3,6 +3,11 @@ require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/mail.php';
 
 require_login();
+$csrf = tickex_csrf_token();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    exit('Solicitud inválida.');
+}
 $cu = current_user();
 $rol = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
 if (!in_array($rol, array('super_admin','superadmin'), true)) {
@@ -273,6 +278,7 @@ include __DIR__ . '/inc/layout_top.php';
     <h3 style="margin-top:0;">Detalle log #<?php echo (int)$viewRow['id']; ?></h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px 0;">
       <form method="post" style="margin:0;">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="share_link">
         <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
         <button class="btn secondary" type="submit">Generar link</button>
@@ -283,11 +289,13 @@ include __DIR__ . '/inc/layout_top.php';
       <?php endif; ?>
 
       <form method="post" style="margin:0;">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="resend">
         <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
         <button class="btn secondary" type="submit">Reenviar</button>
       </form>
       <form method="post" style="margin:0;">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="resend_noreply">
         <input type="hidden" name="id" value="<?php echo (int)$viewRow['id']; ?>">
         <button class="btn secondary" type="submit">Reenviar (servicio)</button>
@@ -391,6 +399,7 @@ include __DIR__ . '/inc/layout_top.php';
               <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                 <a class="btn secondary" href="superadmin_emails.php?<?php echo http_build_query(array('from'=>$from,'q'=>$q,'view_id'=>(int)$r['id'])); ?>">Ver</a>
                 <form method="post" style="margin:0;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="resend">
                   <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
                   <button class="btn secondary" type="submit">Reenviar</button>

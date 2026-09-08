@@ -49,7 +49,9 @@ $result = process_tc_order_row($pdo, $order);
 test_ok(!empty($result['processed']), 'confirmed order is processed');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'exactly requested quantity is issued');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entrada_tokens t INNER JOIN entradas e ON e.id = t.entrada_id WHERE e.tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'secure tokens are generated');
-test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE mail_ok = 1 AND context = 'entradas_compra'")->fetchColumn() === 1, 'fake transport records one consolidated email per order');
+$testOrderId = (int)$order['id'];
+$testOrderMailCountSql = "SELECT COUNT(*) FROM email_logs WHERE related_table = 'tc_orders' AND related_id = " . $testOrderId . " AND mail_ok = 1 AND context = 'entradas_compra'";
+test_ok((int)$pdo->query($testOrderMailCountSql)->fetchColumn() === 1, 'fake transport records one consolidated email per order');
 test_ok((int)$pdo->query("SELECT cantidad_disponible FROM tipos_entrada WHERE id = 7")->fetchColumn() === 8, 'normal tickets decrement one stock unit per QR');
 test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() - 200.0) < 0.001, 'normal ticket revenue is not duplicated');
 
@@ -57,7 +59,7 @@ $st->execute();
 $orderAgain = $st->fetch(PDO::FETCH_ASSOC);
 $resultAgain = process_tc_order_row($pdo, $orderAgain);
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'reprocessing does not duplicate entries');
-test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE mail_ok = 1 AND context = 'entradas_compra'")->fetchColumn() === 1, 'reprocessing does not duplicate successful emails');
+test_ok((int)$pdo->query($testOrderMailCountSql)->fetchColumn() === 1, 'reprocessing does not duplicate successful emails');
 
 $selectedTwo = json_encode(array(array('id' => 8, 'name' => 'Paquete de dos', 'qty' => 1, 'price' => 150, 'qr_quantity' => 2)));
 $pdo->prepare("INSERT INTO tc_orders (request_id, state, evento_id, ref, amount, buyer_first, buyer_last, buyer_email, selected_tickets_json, payment_status) VALUES ('bundle-two-rid', 'created', 1, 'bundle-two-ref', 150, 'Bundle', 'Two', 'two@example.invalid', :tickets, 'confirmed')")->execute(array(':tickets' => $selectedTwo));

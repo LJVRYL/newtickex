@@ -187,16 +187,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
     // Manejar foto de perfil (opcional)
     $subida = $_FILES['foto'] ?? null;
     if ($subida && isset($subida['tmp_name']) && is_uploaded_file($subida['tmp_name'])) {
-        $ext = strtolower(pathinfo($subida['name'], PATHINFO_EXTENSION));
-        $permitidos = array('jpg','jpeg','png');
-        if (!in_array($ext, $permitidos, true)) {
+        $imageInfo = @getimagesize($subida['tmp_name']);
+        $mime = is_array($imageInfo) && isset($imageInfo['mime']) ? strtolower((string)$imageInfo['mime']) : '';
+        $mimeExtensions = array('image/jpeg' => 'jpg', 'image/png' => 'png');
+        if (!isset($mimeExtensions[$mime])) {
             $errores[] = 'Formato de foto no permitido (solo JPG o PNG).';
         } elseif ($subida['size'] > 2 * 1024 * 1024) {
             $errores[] = 'La foto es muy pesada (máx 2 MB).';
         } else {
+            $ext = $mimeExtensions[$mime];
             $destDir = __DIR__ . '/uploads/perfiles';
             if (!is_dir($destDir)) {
-                @mkdir($destDir, 0777, true);
+                @mkdir($destDir, 0750, true);
             }
             $filename = 'perfil_' . (int)$row['id'] . '_' . time() . '.' . $ext;
             $destPath = $destDir . '/' . $filename;
