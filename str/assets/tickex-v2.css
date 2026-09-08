@@ -649,3 +649,7 @@ select option { font-family:"Inter",sans-serif; font-weight:600; }
   .tx-door-people-card .door-person { grid-template-columns:1fr; }
   .tx-door-people-card .door-person .btn { width:100%; }
 }
+.topbar .tx-brand-logo{display:flex;align-items:center;width:46px;height:46px;padding:3px;background:none;border:0;box-shadow:none;overflow:visible}
+.topbar .tx-brand-logo::before{display:none}
+.topbar .tx-brand-logo img{display:block;width:100%;height:100%;object-fit:contain;object-position:left center}
+@media(max-width:620px){.topbar .tx-brand-logo{width:42px;height:42px}}

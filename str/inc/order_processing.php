@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/event_capacity.php';
+require_once __DIR__ . '/routes.php';
 // Reusable helper for processing tc_orders after payment confirmation.
 
 require_once __DIR__ . '/order_events.php';
@@ -11,13 +12,13 @@ if (!function_exists('tickex_order_base_url')) {
     function tickex_order_base_url()
     {
         $env = getenv('TICKEX_SITE_URL');
-        if (is_string($env) && $env !== '') return rtrim($env, '/');
+        if (is_string($env) && $env !== '') return tickex_public_base_url($env);
         $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '';
         if ($host !== '') {
             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            return $scheme . '://' . $host;
+            return tickex_public_base_url($scheme . '://' . $host);
         }
-        return 'https://str.tickex.com.ar';
+        return tickex_public_base_url('');
     }
 }
 

@@ -50,12 +50,12 @@ $updated = tickex_customer_portal_user($pdo, 1);
 customer_assert(password_verify('clave-nueva-segura', $updated['password_hash']), 'new password is stored as a one-way hash');
 
 $sent = 0;
-$sender = function ($ticket, $url) use (&$sent) { $sent++; return $ticket['id'] == 101 && strpos($url, '/ticket.php?t=') !== false; };
-list($foreignResend) = tickex_customer_portal_resend($pdo, 1, 'buyer@example.com', 104, '/ticket.php?t=no', $sender);
+$sender = function ($ticket, $url) use (&$sent) { $sent++; return $ticket['id'] == 101 && strpos($url, '/entrada/') !== false; };
+list($foreignResend) = tickex_customer_portal_resend($pdo, 1, 'buyer@example.com', 104, '/entrada/no', $sender);
 customer_assert(!$foreignResend && $sent === 0, 'buyer cannot resend another account ticket');
-list($firstResend) = tickex_customer_portal_resend($pdo, 1, 'buyer@example.com', 101, '/ticket.php?t=secure', $sender);
+list($firstResend) = tickex_customer_portal_resend($pdo, 1, 'buyer@example.com', 101, '/entrada/secure', $sender);
 customer_assert($firstResend && $sent === 1, 'owned ticket can be resent once');
-list($duplicateResend) = tickex_customer_portal_resend($pdo, 1, 'buyer@example.com', 101, '/ticket.php?t=secure', $sender);
+list($duplicateResend) = tickex_customer_portal_resend($pdo, 1, 'buyer@example.com', 101, '/entrada/secure', $sender);
 customer_assert(!$duplicateResend && $sent === 1, 'repeated resend is rate limited');
 
 $panel = file_get_contents(__DIR__ . '/../panel_usuario.php');
@@ -67,6 +67,7 @@ $ticketPage = file_get_contents(__DIR__ . '/../ticket.php');
 customer_assert(strpos($panel, 'tickex_secure_ticket_url') !== false, 'portal exposes only secure ticket links');
 customer_assert(strpos($ticketPage, 'tickex_secure_checkin_url') !== false, 'ticket QR keeps the internal code private');
 customer_assert(strpos($ticketPage, '$ticketLink = tickex_secure_ticket_url') !== false, 'shared ticket link remains secure');
+customer_assert(strpos($panel, 'tickex-isotipo.svg') !== false && strpos($ticketPage, 'tickex-isotipo.svg') !== false, 'buyer portal and tickets use the Tickex logo');
 customer_assert(strpos($panel, "tickex_csrf_verify") !== false, 'portal protects every write action');
 customer_assert(strpos($profile, "\$_SESSION['auth_context'] !== 'user'") !== false, 'buyer profile rejects stale administrator sessions');
 customer_assert(strpos($panel, 'monto_pagado\']/100') === false, 'portal does not divide peso amounts by one hundred');

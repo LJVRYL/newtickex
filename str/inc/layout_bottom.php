@@ -15,7 +15,7 @@ $isApp = tickex_is_app_mode();
 ?>
 <?php if (!$isApp): ?>
   <div class="wrap footer" style="padding:16px 18px;margin-top:18px;">
-    <small>TICKEX / STR</small>
+    <small>TICKEX</small>
   </div>
 <?php endif; ?>
 </body>

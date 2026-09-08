@@ -20,5 +20,5 @@ site_ok(tickex_organizer_site_slug_from_host($pdo,'entradas.productora.com')==='
 $pdo->exec("UPDATE clientes_sites SET custom_domain_status='verified'");
 site_ok(tickex_organizer_site_slug_from_host($pdo,'entradas.productora.com')==='productora','only verified custom domains are routed');
 $site=tickex_organizer_site_by_admin($pdo,9);site_ok(tickex_organizer_site_public_url($site,true)==='https://entradas.productora.com/','verified domain becomes the canonical public URL');
-$pdo->exec("UPDATE clientes_sites SET custom_domain_status='pending'");$site=tickex_organizer_site_by_admin($pdo,9);site_ok(tickex_organizer_site_public_url($site,true)==='https://str.tickex.com.ar/site.php?slug=productora','stable Tickex URL remains canonical until domain verification');
+$pdo->exec("UPDATE clientes_sites SET custom_domain_status='pending'");$site=tickex_organizer_site_by_admin($pdo,9);site_ok(tickex_organizer_site_public_url($site,true)==='https://www.tickex.com.ar/site.php?slug=productora','stable www Tickex URL remains canonical until domain verification');
 @unlink($db);echo 'ALL ORGANIZER SITE TESTS PASSED'.PHP_EOL;

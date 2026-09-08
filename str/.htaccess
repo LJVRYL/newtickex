@@ -5,6 +5,13 @@
   # Rewrite both spellings internally so Apache never issues a DirectorySlash
   # redirect that could change POST to GET or discard the ApiKey header.
   RewriteRule ^notification/tcwbh/?$ totalcoin_webhook.php [END]
+  RewriteRule ^ingresar/?$ login.php [END]
+  RewriteRule ^mi-cuenta/?$ panel_usuario.php [END]
+  RewriteRule ^mi-cuenta/perfil/?$ panel_usuario_mi_perfil.php [END]
+  RewriteRule ^salir/?$ logout_usuario.php [END]
+  RewriteRule ^administrar/?$ panel_admin.php [END]
+  RewriteRule ^entrada/([A-Fa-f0-9]{40,128})/?$ ticket.php?t=$1 [END,NE]
+  RewriteRule ^validar/([A-Fa-f0-9]{40,128})/?$ checkin.php?t=$1 [END,NE]
 </IfModule>
 
 # Evita que copias de base, logs, respaldos o configuraciones históricas

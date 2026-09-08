@@ -169,7 +169,7 @@ if (!function_exists('tickex_organizer_site_public_url')) {
         if (!empty($site['custom_domain']) && isset($site['custom_domain_status']) && $site['custom_domain_status'] === 'verified') {
             return 'https://' . $site['custom_domain'] . '/';
         }
-        if ($production && $slug !== '') return 'https://str.tickex.com.ar/site.php?slug=' . rawurlencode($slug);
+        if ($production && $slug !== '') return 'https://www.tickex.com.ar/site.php?slug=' . rawurlencode($slug);
         return '';
     }
 }

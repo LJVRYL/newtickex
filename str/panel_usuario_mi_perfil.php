@@ -1,6 +1,7 @@
 <?php
 // panel_usuario_mi_perfil.php - Página de perfil y seguridad del usuario
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
@@ -8,7 +9,7 @@ require_once __DIR__ . '/inc/notificaciones.php';
 require_once __DIR__ . '/inc/customer_portal.php';
 
 if (!isset($_SESSION['auth_context'], $_SESSION['usuario_id']) || $_SESSION['auth_context'] !== 'user' || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()));
   exit;
 }
 
@@ -54,7 +55,7 @@ try {
   if (!$u) {
     $_SESSION = array();
     session_destroy();
-    header('Location: login.php');
+    header('Location: ' . tickex_route('login', array()));
     exit;
   }
 } catch (Exception $e) {
@@ -376,10 +377,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   }
 }
 
+$title = 'Mi perfil – Tickex';
 include __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="card" style="max-width:760px;margin:0 auto 16px auto;">
-  <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap;"><div><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;">Cuenta de comprador</div><h2 style="margin:5px 0;">Mi perfil</h2><p class="muted" style="margin:0;">Actualizá tus datos y administrá la seguridad de tu cuenta.</p></div><a class="btn secondary" href="panel_usuario.php">Mis entradas</a></div>
+<style>
+.customer-profile{max-width:900px;margin:0 auto;display:grid;gap:16px}.customer-profile>.card{max-width:none!important;margin:0!important}.customer-profile-hero{padding:28px;background:radial-gradient(circle at 90% 0,rgba(54,216,245,.13),transparent 34%),linear-gradient(135deg,rgba(25,29,57,.98),rgba(54,31,105,.93));border-color:rgba(139,92,246,.3)}.customer-profile-logo{display:block;width:142px;height:40px;object-fit:contain;object-position:left center;margin-bottom:14px}.customer-profile h3{font-family:Manrope,Inter,sans-serif}.customer-profile form label{display:grid;gap:6px;font-weight:750}.customer-profile .table{border-collapse:separate;border-spacing:0 6px}@media(max-width:620px){.customer-profile{gap:12px}.customer-profile-hero{padding:22px}}
+.customer-profile-logo{width:52px;height:52px;object-position:center;margin-bottom:14px}
+</style>
+<main class="customer-profile">
+<div class="card customer-profile-hero">
+  <img class="customer-profile-logo" src="/tickex-isotipo.svg" alt="Tickex">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap;"><div><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;">Cuenta de comprador</div><h2 style="margin:5px 0;">Mi perfil</h2><p class="muted" style="margin:0;">Actualizá tus datos y administrá la seguridad de tu cuenta.</p></div><a class="btn secondary" href="<?php echo htmlspecialchars(tickex_route('customer_home', array()), ENT_QUOTES, 'UTF-8'); ?>">Mis entradas</a></div>
 </div>
 
 <?php if ($flashErr !== '' || $flashOk !== ''): ?>
@@ -593,4 +601,5 @@ try {
   </div>
 <?php endif; ?>
 
+</main>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>

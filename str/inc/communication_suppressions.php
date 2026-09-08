@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/routes.php';
 
 if (!function_exists('communication_suppressions_ensure_schema')) {
     function communication_suppressions_ensure_schema($pdo)
@@ -82,13 +83,13 @@ if (!function_exists('communication_suppressions_base_url')) {
     function communication_suppressions_base_url()
     {
         $configured = getenv('TICKEX_SITE_URL');
-        if (is_string($configured) && trim($configured) !== '') return rtrim(trim($configured), '/');
+        if (is_string($configured) && trim($configured) !== '') return tickex_public_base_url($configured);
         $host = isset($_SERVER['HTTP_HOST']) ? trim((string)$_SERVER['HTTP_HOST']) : '';
         if ($host !== '') {
             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            return $scheme . '://' . $host;
+            return tickex_public_base_url($scheme . '://' . $host);
         }
-        return 'https://str.tickex.com.ar';
+        return tickex_public_base_url('');
     }
 }
 

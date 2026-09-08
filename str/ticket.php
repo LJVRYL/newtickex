@@ -100,19 +100,19 @@ if ($eventoId > 0) {
 // Tanto el QR como el enlace compartible mantienen opaco el código interno.
 $configuredBaseUrl = getenv('TICKEX_SITE_URL');
 if (is_string($configuredBaseUrl) && trim($configuredBaseUrl) !== '') {
-    $baseUrl = rtrim(trim($configuredBaseUrl), '/');
+    $baseUrl = tickex_public_base_url($configuredBaseUrl);
 } elseif (!empty($_SERVER['HTTP_HOST'])) {
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $baseUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
+    $baseUrl = tickex_public_base_url($scheme . '://' . $_SERVER['HTTP_HOST']);
 } else {
-    $baseUrl = 'https://str.tickex.com.ar';
+    $baseUrl = tickex_public_base_url('');
 }
 $checkinUrl = tickex_secure_checkin_url($pdo, $baseUrl, (int)$entrada['id'], $codigo);
 // QR externo por ahora (simple)
 $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urlencode($checkinUrl);
 
 $ticketLink = tickex_secure_ticket_url($pdo, $baseUrl, (int)$entrada['id'], $codigo);
-$mensajeBase = "Hola, aqui tienes tu entrada:\nEvento: " . ($eventoNombre ?: 'TICKEX') . "\nNombre: " . $nombre . "\nTipo: " . $tipoDesc . "\nCódigo: " . $codigo . "\nVer ticket: " . $ticketLink;
+$mensajeBase = "Hola, aquí tenés tu entrada:\nEvento: " . ($eventoNombre ?: 'TICKEX') . "\nNombre: " . $nombre . "\nTipo: " . $tipoDesc . "\nVer ticket: " . $ticketLink;
 $waMensaje = $mensajeBase;
 $mailSubject = 'Tu entrada - ' . ($eventoNombre ?: 'TICKEX');
 $mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
@@ -124,17 +124,19 @@ $mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
   <meta charset="UTF-8" />
   <title>Entrada – TICKEX</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="assets/str.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/str.css?v=20260219_2">
+  <link rel="stylesheet" href="/assets/str-theme.css?v=20260828_1">
+  <link rel="stylesheet" href="/assets/tickex-v2.css?v=20260908_1">
   <style>
-    body{
-      display:flex;align-items:center;justify-content:center;min-height:100vh;
-      background:var(--bg);
-    }
-    .ticket-wrap{max-width:520px;width:100%;}
-    .subtitle{color:var(--muted);font-size:14px;margin-top:-2px;}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;background:radial-gradient(circle at 50% 0,rgba(118,87,255,.2),transparent 38%),#070913;color:#f7f8fc;font-family:Inter,sans-serif}
+    .ticket-wrap{max-width:560px;width:100%;padding:0}.ticket-card{position:relative;overflow:hidden;padding:28px;border:1px solid rgba(255,255,255,.11);border-radius:24px;background:linear-gradient(155deg,rgba(21,27,46,.98),rgba(9,13,28,.98));box-shadow:0 28px 80px rgba(0,0,0,.45)}
+    .ticket-card:before{content:"";position:absolute;width:240px;height:240px;right:-130px;top:-130px;border:1px solid rgba(54,216,245,.18);border-radius:50%}.ticket-brand{display:block;width:152px;height:44px;margin:0 auto 22px;object-fit:contain}.ticket-kicker{color:#36d8f5;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.15em}.ticket-card h1{margin:7px 0 4px;font:800 clamp(25px,7vw,38px)/1.08 Manrope,Inter,sans-serif;letter-spacing:-.035em}.subtitle{color:#aeb5c8;font-size:14px;margin-top:4px}
     .chip{
       display:inline-block;padding:4px 10px;border-radius:999px;
-      background:var(--panel-2);border:1px solid var(--line);
+      background:rgba(118,87,255,.14);border:1px solid rgba(148,125,255,.35);
       font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;
       margin:6px 0 10px;
     }
@@ -144,28 +146,28 @@ $mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
       margin:8px 0 12px;
       border:1px solid var(--line);
     }
-    .status.ok{border-color:var(--ok);color:var(--ok);background:#0c2416;}
-    .status.pend{border-color:var(--warn);color:var(--warn);background:#2a1b0b;}
-    .qr img{
-      width:320px;max-width:100%;height:auto;border-radius:14px;background:#fff;padding:8px;
-    }
-    .hint{color:var(--muted);font-size:13px;margin-top:10px;}
+    .status.ok{border-color:#55df98;color:#65e6a5;background:rgba(22,111,68,.2)}
+    .status.pend{border-color:#ffd167;color:#ffd167;background:rgba(135,89,13,.17)}
+    .qr{margin:8px auto 0;max-width:336px;padding:8px;border-radius:22px;background:linear-gradient(135deg,#7458ff,#36d8f5)}.qr img{display:block;width:320px;max-width:100%;height:auto;border-radius:16px;background:#fff;padding:10px}
+    .hint{color:var(--muted);font-size:13px;margin-top:12px}.ticket-security{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:16px;color:#929aaf;font-size:12px}.ticket-security:before{content:"";width:7px;height:7px;border-radius:50%;background:#55df98;box-shadow:0 0 12px #55df98}@media(max-width:520px){body{padding:12px}.ticket-card{padding:22px 16px;border-radius:20px}.ticket-brand{width:132px;height:38px}.qr{max-width:294px}.qr img{width:278px}}
+    .ticket-brand-lockup{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 auto 22px}.ticket-brand-lockup .ticket-brand{width:48px;height:48px;margin:0}.ticket-brand-lockup strong{font:800 17px/1 Manrope,Inter,sans-serif;letter-spacing:.13em}
   </style>
 </head>
 <body>
   <div class="wrap ticket-wrap">
-    <div class="card" style="text-align:center;">
-      <h2>Entrada digital</h2>
+    <div class="ticket-card" style="text-align:center;">
+      <div class="ticket-brand-lockup"><img class="ticket-brand" src="/tickex-isotipo.svg" alt=""><strong>TICKEX</strong></div>
+      <div class="ticket-kicker">Entrada digital</div>
 
       <?php if($eventoNombre !== ''): ?>
-        <div class="subtitle"><?php echo e($eventoNombre); ?></div>
+        <h1><?php echo e($eventoNombre); ?></h1>
         <?php if($eventoDesde!=='' || $eventoHasta!==''): ?>
           <div class="subtitle" style="margin-top:4px;">
             <?php echo e($eventoFechaLbl); ?>
           </div>
         <?php endif; ?>
       <?php else: ?>
-        <div class="subtitle">TICKEX</div>
+        <h1>Tu entrada Tickex</h1>
       <?php endif; ?>
 
       <div class="chip"><?php echo e($tipoDesc); ?></div>
@@ -187,6 +189,7 @@ $mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
         Mostrá este QR en puerta para ingresar.<br>
         No lo compartas con terceros.
       </div>
+      <div class="ticket-security">Enlace privado y validación única</div>
 
       <?php if ($canManage): ?>
         <div style="margin-top:16px;text-align:left;">

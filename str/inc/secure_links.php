@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/routes.php';
 
 if (!function_exists('tickex_secure_links_ensure_schema')) {
     function tickex_secure_links_ensure_schema($pdo)
@@ -101,9 +102,9 @@ if (!function_exists('tickex_secure_entry_id_from_token')) {
 if (!function_exists('tickex_secure_ticket_url')) {
     function tickex_secure_ticket_url($pdo, $baseUrl, $entradaId, $codigoFallback)
     {
-        $base = rtrim((string)$baseUrl, '/');
+        $base = $baseUrl === '' ? '' : tickex_public_base_url($baseUrl);
         $tok = tickex_secure_token_for_entry($pdo, (int)$entradaId);
-        if ($tok !== '') return $base . '/ticket.php?t=' . urlencode($tok);
+        if ($tok !== '') return $base . tickex_route('ticket', array('token' => $tok));
         return $base . '/ticket.php?c=' . urlencode((string)$codigoFallback);
     }
 }
@@ -111,9 +112,9 @@ if (!function_exists('tickex_secure_ticket_url')) {
 if (!function_exists('tickex_secure_checkin_url')) {
     function tickex_secure_checkin_url($pdo, $baseUrl, $entradaId, $codigoFallback)
     {
-        $base = rtrim((string)$baseUrl, '/');
+        $base = $baseUrl === '' ? '' : tickex_public_base_url($baseUrl);
         $tok = tickex_secure_token_for_entry($pdo, (int)$entradaId);
-        if ($tok !== '') return $base . '/checkin.php?t=' . urlencode($tok);
+        if ($tok !== '') return $base . tickex_route('checkin', array('token' => $tok));
         return $base . '/checkin.php?c=' . urlencode((string)$codigoFallback);
     }
 }

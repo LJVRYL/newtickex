@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/routes.php';
 
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
@@ -163,13 +164,13 @@ if (!function_exists('tickex_access_base_url')) {
     function tickex_access_base_url()
     {
         $env = getenv('TICKEX_SITE_URL');
-        if (is_string($env) && trim($env) !== '') return rtrim(trim($env), '/');
+        if (is_string($env) && trim($env) !== '') return tickex_public_base_url($env);
         $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '';
         if ($host !== '') {
             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            return $scheme . '://' . $host;
+            return tickex_public_base_url($scheme . '://' . $host);
         }
-        return 'https://str.tickex.com.ar';
+        return tickex_public_base_url('');
     }
 }
 

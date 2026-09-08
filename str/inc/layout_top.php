@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/routes.php';
 $cu = isset($cu) ? $cu : (function_exists('current_user') ? current_user() : array());
 require_once __DIR__ . '/notificaciones.php';
 // Fallback: algunas páginas incluyen layout_top sin definir e()
@@ -113,14 +114,14 @@ if ($page === 'puerta.php' || $page === 'puerta_lista.php') {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/str.css?v=20260219_2">
-    <link rel="stylesheet" href="assets/str-theme.css?v=20260828_1">
-    <link rel="stylesheet" href="assets/tickex-v2.css?v=20260905_21">
+    <link rel="stylesheet" href="/assets/str.css?v=20260219_2">
+    <link rel="stylesheet" href="/assets/str-theme.css?v=20260828_1">
+    <link rel="stylesheet" href="/assets/tickex-v2.css?v=20260908_1">
 </head>
 <body class="<?php echo htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8'); ?>">
 <div class="topbar">
     <div class="wrap">
-    <a class="logo" href="<?php echo $isClient ? 'panel_usuario.php' : 'panel_admin.php'; ?>">TICKEX</a>
+    <a class="logo tx-brand-logo" href="<?php echo e(!$isLogged ? '/' : ($isClient ? tickex_route('customer_home', array()) : tickex_route('admin_home', array()))); ?>" aria-label="Inicio de Tickex"><img src="/tickex-isotipo.svg" alt="Tickex"></a>
         <?php if ($isLogged): ?>
             <?php if (empty($hideNav)): ?>
                 <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menú" aria-expanded="false">
@@ -132,10 +133,10 @@ if ($page === 'puerta.php' || $page === 'puerta_lista.php') {
 
                 <div class="quick-links" aria-label="Accesos rápidos">
                   <?php if ($isClient): ?>
-                    <a href="panel_usuario.php">Mis Tickex</a>
-                    <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
+                    <a href="<?php echo e(tickex_route('customer_home', array())); ?>">Mis Tickex</a>
+                    <a href="<?php echo e(tickex_route('customer_profile', array())); ?>">Mi perfil</a>
                     <?php if ($isApp): ?>
-                      <a href="logout_usuario.php">Salir</a>
+                      <a href="<?php echo e(tickex_route('logout', array())); ?>">Salir</a>
                     <?php endif; ?>
                   <?php else: ?>
                     <span class="tx-page-context"><?php echo e($title); ?></span>
@@ -195,7 +196,7 @@ if ($page === 'puerta.php' || $page === 'puerta_lista.php') {
                     </span>
                   <?php endif; ?>
                 </div>
-                <a class="tx-logout" href="logout_usuario.php" title="Cerrar sesión">
+                <a class="tx-logout" href="<?php echo e(tickex_route('logout', array())); ?>" title="Cerrar sesión">
                   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 17l5-5-5-5M15 12H3M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   <span>Salir</span>
                 </a>

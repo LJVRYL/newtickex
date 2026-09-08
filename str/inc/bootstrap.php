@@ -1,6 +1,7 @@
 <?php
 // inc/bootstrap.php (PHP5-safe)
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
