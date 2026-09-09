@@ -430,7 +430,21 @@ require __DIR__ . '/inc/layout_top.php';
   .entry-name{min-width:170px;font-weight:750}.entry-price{font-weight:800;white-space:nowrap}
   .entries-table th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
   .entries-table td{vertical-align:middle}.entries-table-actions{display:flex;justify-content:flex-end;gap:6px;white-space:nowrap}
-  @media(max-width:720px){.entries-hero{padding:22px}.entries-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.entries-toolbar{align-items:stretch}.entries-actions,.entries-actions .btn{width:100%}.entries-actions .btn{text-align:center}}
+  @media(max-width:720px){
+    .entries-hero{padding:22px}.entries-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.entries-toolbar{align-items:stretch}.entries-actions,.entries-actions .btn{width:100%}.entries-actions .btn{text-align:center}
+    .entries-table-wrap{overflow:visible!important}
+    .entries-table,.entries-table tbody,.entries-table tr,.entries-table td{display:block;width:100%;min-width:0}
+    .entries-table thead{display:none}
+    .entries-table tbody{display:grid;gap:12px}
+    .entries-table tr{padding:10px 14px;border:1px solid var(--line);border-radius:15px;background:rgba(8,12,25,.58)}
+    .entries-table td{min-height:38px;padding:9px 0;display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.06)}
+    .entries-table td:last-child{border-bottom:0}
+    .entries-table td::before{content:attr(data-label);color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+    .entries-table td form{min-width:0}
+    .entries-table td input[type="number"]{width:72px!important}
+    .entries-table-actions{display:grid;grid-template-columns:1fr 1fr;white-space:normal}
+    .entries-table-actions .btn{width:100%;text-align:center}
+  }
 </style>
 
 <div class="card entries-hero">
@@ -602,7 +616,7 @@ require __DIR__ . '/inc/layout_top.php';
   <?php if (empty($plantillas)): ?>
     <p>No tenes plantillas cargadas todavia.</p>
   <?php else: ?>
-    <div style="overflow:auto;margin-top:8px;">
+    <div class="entries-table-wrap" style="overflow:auto;margin-top:8px;">
       <table class="table entries-table">
         <thead>
           <tr>
@@ -621,11 +635,11 @@ require __DIR__ . '/inc/layout_top.php';
         <tbody>
           <?php foreach ($plantillas as $p): ?>
             <tr>
-              <td><span class="entry-badge"><?php echo e($p['categoria']); ?></span></td>
-              <td class="entry-name"><?php echo e($p['nombre']); ?></td>
-              <td><span class="entry-badge"><?php echo e($p['tipo']); ?></span></td>
-              <td class="entry-price">$<?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
-              <td>
+              <td data-label="Categoría"><span class="entry-badge"><?php echo e($p['categoria']); ?></span></td>
+              <td data-label="Nombre" class="entry-name"><?php echo e($p['nombre']); ?></td>
+              <td data-label="Tipo"><span class="entry-badge"><?php echo e($p['tipo']); ?></span></td>
+              <td data-label="Precio" class="entry-price">$<?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
+              <td data-label="Stock QR">
                 <form method="post" style="margin:0;display:inline;">
                   <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="update">
@@ -645,10 +659,10 @@ require __DIR__ . '/inc/layout_top.php';
                   <button class="btn secondary" type="submit" style="padding:5px 8px;font-size:12px;">Actualizar</button>
                 </form>
               </td>
-              <td><?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?></td>
-              <?php if ($hasVentaHasta): ?><td><?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?></td><?php endif; ?>
+              <td data-label="QR/unidad"><?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?></td>
+              <?php if ($hasVentaHasta): ?><td data-label="Hasta"><?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?></td><?php endif; ?>
               <?php if ($hasVis): ?>
-                <td>
+                <td data-label="Visible">
                   <form method="post" class="vis-toggle" style="margin:0;display:inline;">
                     <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="update">
@@ -674,14 +688,14 @@ require __DIR__ . '/inc/layout_top.php';
                   </form>
                 </td>
               <?php endif; ?>
-              <td>
+              <td data-label="Estado">
                 <?php if ((int)$p['activo'] === 1): ?>
                   <span class="entry-badge" style="color:var(--ok);">Activo</span>
                 <?php else: ?>
                   <span class="entry-badge" style="color:var(--warn);">Inactivo</span>
                 <?php endif; ?>
               </td>
-              <td>
+              <td data-label="Acciones">
                 <div class="entries-table-actions">
                 <a class="btn secondary" style="padding:6px 10px;font-size:12px;" href="mis_entradas.php?action=edit&amp;id=<?php echo (int)$p['id']; ?>" title="Editar">
                   Editar
