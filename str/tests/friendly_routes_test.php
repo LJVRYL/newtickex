@@ -43,6 +43,8 @@ friendly_assert(substr_count($strApache, 'RewriteRule ^/mi-cuenta/?$ /panel_usua
 friendly_assert(substr_count($strApache, 'RewriteRule ^/administrar/?$ /panel_admin.php [END]') === 2, 'compatibility host serves the administrator clean route over HTTP and HTTPS');
 friendly_assert(substr_count($strApache, 'RewriteRule ^/mi-cuenta/staff/?$ /panel_staff.php [END]') === 2, 'compatibility host serves the staff clean route over HTTP and HTTPS');
 friendly_assert(strpos($apache, '"\\s/+login\\.php(?:[?\\s])"') !== false, 'legacy route matching uses executable Apache escapes');
+friendly_assert(strpos($apache, 'RewriteRule ^/favicon[.]ico$ /tickex-isotipo.svg [END]') !== false, 'the public favicon resolves to the Tickex symbol');
+friendly_assert(is_file(__DIR__ . '/../robots.txt'), 'public crawler rules are present');
 friendly_assert(strpos($auth, "tickex_route('login', array())") !== false && strpos($auth, "header('Location: login.php')") === false, 'protected pages keep authentication on the clean login route');
 friendly_assert(strpos($legacy, 'tickex_secure_ticket_url') !== false && strpos($legacy, "SELECT id, codigo") !== false, 'historical ticket links migrate to opaque links');
 

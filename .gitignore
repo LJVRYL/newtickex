@@ -28,6 +28,7 @@ str/*.sql
 str/*.gz
 str/*.log
 str/*.txt
+!str/robots.txt
 str/*.jpeg
 str/*.jpg
 str/*.png
