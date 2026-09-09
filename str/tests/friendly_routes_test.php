@@ -36,6 +36,7 @@ $apache = file_get_contents(__DIR__ . '/../../ops/apache/999-tickex.conf');
 $strApache = file_get_contents(__DIR__ . '/../../ops/apache/str.conf');
 $legacy = file_get_contents(__DIR__ . '/../entrada.php');
 $auth = file_get_contents(__DIR__ . '/../inc/auth.php');
+$layout = file_get_contents(__DIR__ . '/../inc/layout_top.php');
 friendly_assert(strpos($router, "'/mi-cuenta' => 'panel_usuario.php'") !== false, 'local router resolves the buyer panel');
 friendly_assert(strpos($router, "'/mi-cuenta/staff' => 'panel_staff.php'") !== false, 'local router resolves the staff panel');
 friendly_assert(strpos($apache, 'RewriteRule ^/entrada/') !== false && strpos($apache, 'https://str.tickex.com.ar/$1') === false, 'production vhost serves clean routes without redirecting to str');
@@ -46,6 +47,7 @@ friendly_assert(strpos($apache, '"\\s/+login\\.php(?:[?\\s])"') !== false, 'lega
 friendly_assert(strpos($apache, 'RewriteRule ^/favicon[.]ico$ /tickex-isotipo.svg [END]') !== false, 'the public favicon resolves to the Tickex symbol');
 friendly_assert(is_file(__DIR__ . '/../robots.txt'), 'public crawler rules are present');
 friendly_assert(strpos($auth, "tickex_route('login', array())") !== false && strpos($auth, "header('Location: login.php')") === false, 'protected pages keep authentication on the clean login route');
+friendly_assert(strpos($layout, "\$requestPath === '/ingresar'") !== false, 'clean login route activates the dedicated login layout');
 friendly_assert(strpos($legacy, 'tickex_secure_ticket_url') !== false && strpos($legacy, "SELECT id, codigo") !== false, 'historical ticket links migrate to opaque links');
 
 echo 'ALL FRIENDLY ROUTES TESTS PASSED' . PHP_EOL;

@@ -80,7 +80,9 @@ if ($isApp) {
 }
 
 $page = basename(isset($_SERVER['SCRIPT_NAME']) ? (string)$_SERVER['SCRIPT_NAME'] : '');
-if ($page === 'login.php') {
+$requestPath = parse_url(isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '', PHP_URL_PATH);
+$requestPath = $requestPath === '/' ? '/' : rtrim((string)$requestPath, '/');
+if ($page === 'login.php' || $requestPath === '/ingresar') {
   $bodyClass .= ' page-login';
 }
 if ($page === 'login_admin.php') {
