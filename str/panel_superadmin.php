@@ -5,9 +5,13 @@ require_once __DIR__ . '/inc/bootstrap.php';
 
 $cu = current_user();
 if (empty($cu['tipo_global']) || $cu['tipo_global'] !== 'super_admin') {
-    header('Location: panel_admin.php');
+    header('Location: ' . tickex_route('admin_home', array()));
     exit;
 }
+
+// Entrada histórica: el centro operativo actual vive en el panel unificado.
+header('Location: ' . tickex_route('admin_home', array()), true, 302);
+exit;
 
 // Ocultar nav global y quick-links en superadmin
 // Datos para el dashboard superadmin

@@ -103,6 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['auth_context'] = 'admin';
                         $_SESSION['rol']         = (string)$admin['rol'];
                         $_SESSION['tipo_global'] = (string)$admin['tipo_global'];
+                        $_SESSION['rol_evento']  = !empty($admin['rol_evento'])
+                            ? (string)$admin['rol_evento']
+                            : (string)$admin['rol'];
 
                         // Staff de puerta
                         if ($admin['tipo_global'] === 'staff_evento') {
@@ -135,10 +138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         // Super admin / admin de eventos
                         if ($admin['tipo_global'] === 'super_admin') {
-                            header('Location: panel_superadmin.php');
+                            header('Location: ' . tickex_route('admin_home', array()));
                             exit;
                         } else {
-                            header('Location: panel_admin.php');
+                            header('Location: ' . tickex_route('admin_home', array()));
                             exit;
                         }
                     }

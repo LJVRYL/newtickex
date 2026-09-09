@@ -243,7 +243,10 @@ if (!function_exists('tickex_google_establish_session')) {
             $_SESSION['auth_context'] = 'admin';
             $_SESSION['rol'] = (string)$account['rol'];
             $_SESSION['tipo_global'] = (string)$account['tipo_global'];
-            if (in_array((string)$account['tipo_global'], array('super_admin','superadmin'), true)) return 'panel_superadmin.php';
+            $_SESSION['rol_evento'] = !empty($account['rol_evento'])
+                ? (string)$account['rol_evento']
+                : (string)$account['rol'];
+            if (in_array((string)$account['tipo_global'], array('super_admin','superadmin'), true)) return function_exists('tickex_route') ? tickex_route('admin_home', array()) : '/administrar';
             if ((string)$account['tipo_global'] === 'staff_evento') {
                 $events = array();
                 try {
@@ -259,7 +262,7 @@ if (!function_exists('tickex_google_establish_session')) {
                 }
                 return 'puerta.php';
             }
-            return 'panel_admin.php';
+            return function_exists('tickex_route') ? tickex_route('admin_home', array()) : '/administrar';
         }
         $name = trim((string)($account['nombre'] ?? '') . ' ' . (string)($account['apellido'] ?? ''));
         $_SESSION['usuario_id'] = (int)$account['id'];
@@ -275,6 +278,6 @@ if (!function_exists('tickex_google_establish_session')) {
         $_SESSION['nombre'] = $name;
         $_SESSION['email'] = (string)$account['email'];
         $_SESSION['tipo_global'] = '';
-        return 'panel_usuario.php';
+        return function_exists('tickex_route') ? tickex_route('customer_home', array()) : '/mi-cuenta';
     }
 }

@@ -25,11 +25,12 @@ dashboard_assert($data['alerts']['support_waiting']===1,'dashboard flags support
 dashboard_assert($data['alerts']['mp_missing']===1,'dashboard flags active organizers without Mercado Pago');
 dashboard_assert($data['alerts']['campaigns_attention']===1,'dashboard flags failed campaigns');
 dashboard_assert(count($data['organizers'])===2,'inactive organizers stay out of the recent list');
-$panel=file_get_contents(__DIR__.'/../panel_admin.php');$legacy=file_get_contents(__DIR__.'/../superadmin.php');
+$panel=file_get_contents(__DIR__.'/../panel_admin.php');$legacy=file_get_contents(__DIR__.'/../superadmin.php');$oldPanel=file_get_contents(__DIR__.'/../panel_superadmin.php');
 $eventsPage=file_get_contents(__DIR__.'/../superadmin_eventos.php');
 $usersPage=file_get_contents(__DIR__.'/../superadmin_usuarios.php');
 dashboard_assert(strpos($panel,'superadmin_dashboard_view.php')!==false,'main panel routes superadministrator to platform overview');
 dashboard_assert(strpos($legacy,"header('Location: panel_admin.php')")!==false,'legacy superadmin entry redirects to the unified panel');
+dashboard_assert(strpos($oldPanel,"tickex_route('admin_home'")!==false&&strpos($oldPanel,"true, 302")!==false,'historical superadmin panel redirects to the clean unified route');
 dashboard_assert(strpos($eventsPage,'LEFT JOIN usuarios_admin')!==false,'global events resolve the real organizer account');
 dashboard_assert(strpos($usersPage,'UPDATE usuarios SET rol')!==false&&strpos($usersPage,'UPDATE usuarios SET email_confirmado')!==false,'buyer actions update the buyer table');
 dashboard_assert($pdo->query('PRAGMA integrity_check')->fetchColumn()==='ok','dashboard queries keep database consistent');

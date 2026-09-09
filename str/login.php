@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
 require_once __DIR__ . '/inc/turnstile.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/auth.php';
@@ -99,16 +100,13 @@ $nextSafe = _safe_next_url($next);
 // ---------------------------------------------------------------------
 if (!empty($_SESSION['es_admin']) && !empty($_SESSION['admin_id'])) {
     // Usuario admin ya logueado
-    $defaultAdminPanel = in_array(isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '', array('super_admin','superadmin'), true)
-      ? 'panel_superadmin.php'
-      : 'panel_admin.php';
-  header('Location: ' . ($nextSafe !== '' ? $nextSafe : $defaultAdminPanel));
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('admin_home', array())));
     exit;
 }
 
 if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
     // Usuario común ya logueado
-  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('customer_home', array())));
     exit;
 }
 
@@ -164,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Un único acceso: primero validamos si el email corresponde a una
             // cuenta administrativa activa. La contraseña debe ser la propia
             // de esa cuenta; una contraseña de comprador nunca eleva permisos.
-            $adminStmt = $pdo->prepare("SELECT id,username,email,password,rol,tipo_global,activo,evento_id FROM usuarios_admin WHERE email=:email COLLATE NOCASE LIMIT 1");
+            $adminStmt = $pdo->prepare("SELECT id,username,email,password,rol,tipo_global,rol_evento,activo,evento_id FROM usuarios_admin WHERE email=:email COLLATE NOCASE LIMIT 1");
             $adminStmt->execute(array(':email'=>$email));
             $adminAccount = $adminStmt->fetch(PDO::FETCH_ASSOC);
             if ($adminAccount && (int)$adminAccount['activo'] === 1) {
@@ -273,7 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['usuario']        = $u['email'];
 
                     // Si NO es admin, seguimos con el flujo normal de usuario común:
-                    header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
+                    header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('customer_home', array())));
                     exit;
                 }
             }
@@ -359,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['email']          = $cli['email'];
                     $_SESSION['tipo_global']    = '';
 
-                  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
+                  header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('customer_home', array())));
                     exit;
                 }
 

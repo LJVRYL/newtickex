@@ -8,10 +8,10 @@ function google_test($condition, $message) { if (!$condition) { echo 'FAIL: '.$m
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE registro_pendientes(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL,token TEXT NOT NULL,nombre TEXT,apellido TEXT,apodo TEXT,dni TEXT,genero TEXT,foto_path TEXT,next_url TEXT,creado_en TEXT,completado_en TEXT,password_hash TEXT)');
-$pdo->exec('CREATE TABLE usuarios_admin(id INTEGER PRIMARY KEY,username TEXT,email TEXT,password TEXT,rol TEXT,tipo_global TEXT,activo INTEGER,evento_id INTEGER)');
+$pdo->exec('CREATE TABLE usuarios_admin(id INTEGER PRIMARY KEY,username TEXT,email TEXT,password TEXT,rol TEXT,tipo_global TEXT,rol_evento TEXT,activo INTEGER,evento_id INTEGER)');
 $pdo->exec('CREATE TABLE staff_eventos(staff_id INTEGER,evento_id INTEGER)');
-$pdo->exec("INSERT INTO usuarios_admin VALUES(10,'agus','agus@example.com','x','admin','admin_evento',1,NULL)");
-$pdo->exec("INSERT INTO usuarios_admin VALUES(11,'puerta','door@example.com','x','staff','staff_evento',1,NULL)");
+$pdo->exec("INSERT INTO usuarios_admin VALUES(10,'agus','agus@example.com','x','admin','admin_evento',NULL,1,NULL)");
+$pdo->exec("INSERT INTO usuarios_admin VALUES(11,'puerta','door@example.com','x','staff','staff_evento','puerta',1,NULL)");
 $pdo->exec('INSERT INTO staff_eventos VALUES(11,77)');
 
 tickex_google_ensure_schema($pdo);
@@ -52,16 +52,16 @@ google_test($unknownAdminRejected, 'Google never creates administrator privilege
 
 $_SESSION = array();
 $destination = tickex_google_establish_session($pdo,'buyer',$buyer);
-google_test($destination === 'panel_usuario.php' && $_SESSION['auth_context'] === 'user' && empty($_SESSION['es_admin']), 'buyer login cannot inherit administrator privileges');
+google_test($destination === '/mi-cuenta' && $_SESSION['auth_context'] === 'user' && empty($_SESSION['es_admin']), 'buyer login cannot inherit administrator privileges');
 $_SESSION = array();
 $destination = tickex_google_establish_session($pdo,'admin',$admin);
-google_test($destination === 'panel_admin.php' && $_SESSION['auth_context'] === 'admin' && (int)$_SESSION['admin_id'] === 10, 'administrator Google login preserves its tenant identity');
+google_test($destination === '/administrar' && $_SESSION['auth_context'] === 'admin' && (int)$_SESSION['admin_id'] === 10, 'administrator Google login preserves its tenant identity');
 
 $doorProfile = array('sub'=>'google-door-1','email'=>'door@example.com','email_verified'=>true);
 list($doorType,$door) = tickex_google_find_or_create_account($pdo,$doorProfile,'admin');
 $_SESSION = array();
 $destination = tickex_google_establish_session($pdo,$doorType,$door);
-google_test($destination === 'puerta.php?evento_id=77', 'staff Google login keeps the assigned door flow');
+google_test($destination === 'puerta.php?evento_id=77' && $_SESSION['rol_evento'] === 'puerta', 'staff login keeps the assigned door role and flow');
 
 google_test(tickex_google_safe_next('https://evil.example') === '' && tickex_google_safe_next('/panel_usuario.php') === '/panel_usuario.php', 'post-login redirect cannot leave Tickex');
 $unverifiedRejected = false;
@@ -70,6 +70,8 @@ google_test($unverifiedRejected, 'unverified Google emails are rejected');
 
 $buyerLogin = file_get_contents(__DIR__ . '/../login.php');
 $adminLogin = file_get_contents(__DIR__ . '/../login_admin.php');
+google_test(strpos($buyerLogin, "require_once __DIR__ . '/inc/routes.php';") !== false, 'the unified login loads clean routes before redirecting');
+google_test(strpos($buyerLogin, 'rol_evento,activo,evento_id FROM usuarios_admin') !== false, 'the unified password login loads the assigned staff role');
 google_test(strpos($buyerLogin, 'google_login.php?context=unified') !== false, 'the public login uses one Google entry point for every role');
 google_test(strpos($adminLogin, "header('Location: login.php'") !== false, 'the historical administrator login redirects to the unified login');
 
