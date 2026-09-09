@@ -81,7 +81,8 @@ test_ok((int)$pdo->query("SELECT cantidad_disponible FROM tipos_entrada WHERE id
 test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WHERE tc_order_request_id = 'bundle-four-rid'")->fetchColumn() - 300.0) < 0.001, 'four-QR package revenue equals package price');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE related_table = 'tc_orders' AND related_id = " . (int)$bundleFourOrder['id'] . " AND mail_ok = 1")->fetchColumn() === 1, 'four QR links are delivered in one email');
 $bundleFourMailBody = (string)$pdo->query("SELECT body FROM email_logs WHERE related_table = 'tc_orders' AND related_id = " . (int)$bundleFourOrder['id'] . " AND mail_ok = 1 LIMIT 1")->fetchColumn();
-test_ok(substr_count($bundleFourMailBody, 'ticket.php?') === 4, 'consolidated email contains all four ticket links');
+test_ok(substr_count($bundleFourMailBody, '/entrada/') === 4, 'consolidated email contains all four secure ticket links');
+test_ok(strpos($bundleFourMailBody, 'ticket.php?c=') === false, 'consolidated email never exposes legacy ticket codes');
 
 $bundleFourAgain = $pdo->query("SELECT * FROM tc_orders WHERE request_id = 'bundle-four-rid'")->fetch(PDO::FETCH_ASSOC);
 process_tc_order_row($pdo, $bundleFourAgain);
