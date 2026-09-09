@@ -28,10 +28,13 @@ friendly_assert(strpos($ticket, 'INTERNAL-CODE') === false && strpos($checkin, '
 
 $router = file_get_contents(__DIR__ . '/../router.php');
 $apache = file_get_contents(__DIR__ . '/../../ops/apache/999-tickex.conf');
+$strApache = file_get_contents(__DIR__ . '/../../ops/apache/str.conf');
 $legacy = file_get_contents(__DIR__ . '/../entrada.php');
 $auth = file_get_contents(__DIR__ . '/../inc/auth.php');
 friendly_assert(strpos($router, "'/mi-cuenta' => 'panel_usuario.php'") !== false, 'local router resolves the buyer panel');
 friendly_assert(strpos($apache, 'RewriteRule ^/entrada/') !== false && strpos($apache, 'https://str.tickex.com.ar/$1') === false, 'production vhost serves clean routes without redirecting to str');
+friendly_assert(substr_count($strApache, 'RewriteRule ^/mi-cuenta/?$ /panel_usuario.php [END]') === 2, 'compatibility host serves the buyer clean route over HTTP and HTTPS');
+friendly_assert(substr_count($strApache, 'RewriteRule ^/administrar/?$ /panel_admin.php [END]') === 2, 'compatibility host serves the administrator clean route over HTTP and HTTPS');
 friendly_assert(strpos($apache, '"\\s/+login\\.php(?:[?\\s])"') !== false, 'legacy route matching uses executable Apache escapes');
 friendly_assert(strpos($auth, "tickex_route('login', array())") !== false && strpos($auth, "header('Location: login.php')") === false, 'protected pages keep authentication on the clean login route');
 friendly_assert(strpos($legacy, 'tickex_secure_ticket_url') !== false && strpos($legacy, "SELECT id, codigo") !== false, 'historical ticket links migrate to opaque links');
