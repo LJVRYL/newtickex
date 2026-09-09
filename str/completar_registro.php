@@ -211,35 +211,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
     }
 
     if (empty($errores)) {
-      // log de versión anterior
-      $pdo->prepare('INSERT INTO registro_pendientes_log (reg_id,email,nombre,apellido,apodo,dni,genero,foto_path,created_at) VALUES (:id,:em,:n,:a,:ap,:dni,:g,:fp,:c)')
-        ->execute(array(
-          ':id' => (int)$row['id'],
-          ':em' => $email,
-          ':n'  => $row['nombre'] ?? '',
-          ':a'  => $row['apellido'] ?? '',
-          ':ap' => $row['apodo'] ?? '',
-          ':dni'=> $row['dni'] ?? '',
-          ':g'  => $row['genero'] ?? '',
-          ':fp' => $row['foto_path'] ?? '',
-          ':c'  => date('Y-m-d H:i:s'),
-        ));
-
         $newHash = function_exists('password_hash') ? password_hash($passNueva, PASSWORD_DEFAULT) : md5($passNueva);
+        // Los apodos vacíos no representan una identidad y deben guardarse como
+        // NULL. SQLite considera dos cadenas vacías iguales en un índice UNIQUE.
+        $apodoDb = $apodo === '' ? null : $apodo;
 
-        $stmtUp = $pdo->prepare('UPDATE registro_pendientes SET nombre=:n, apellido=:a, apodo=:ap, dni=:dni, genero=:g, foto_path=:fp, completado_en=:c, password_hash=:ph WHERE id=:id');
-        $stmtUp->execute(array(
-          ':n'  => $nombre,
-          ':a'  => $apellido,
-          ':ap' => $apodo,
-          ':dni'=> $dni,
-          ':g'  => $genero,
-          ':fp' => $fotoPath,
-          ':c'  => date('Y-m-d H:i:s'),
-          ':ph' => $newHash,
-          ':id' => (int)$row['id'],
-        ));
+        try {
+          $pdo->beginTransaction();
 
+          // log de versión anterior
+          $pdo->prepare('INSERT INTO registro_pendientes_log (reg_id,email,nombre,apellido,apodo,dni,genero,foto_path,created_at) VALUES (:id,:em,:n,:a,:ap,:dni,:g,:fp,:c)')
+            ->execute(array(
+              ':id' => (int)$row['id'],
+              ':em' => $email,
+              ':n'  => $row['nombre'] ?? '',
+              ':a'  => $row['apellido'] ?? '',
+              ':ap' => $row['apodo'] ?? '',
+              ':dni'=> $row['dni'] ?? '',
+              ':g'  => $row['genero'] ?? '',
+              ':fp' => $row['foto_path'] ?? '',
+              ':c'  => date('Y-m-d H:i:s'),
+            ));
+
+          $stmtUp = $pdo->prepare('UPDATE registro_pendientes SET nombre=:n, apellido=:a, apodo=:ap, dni=:dni, genero=:g, foto_path=:fp, completado_en=:c, password_hash=:ph WHERE id=:id');
+          $stmtUp->execute(array(
+            ':n'  => $nombre,
+            ':a'  => $apellido,
+            ':ap' => $apodoDb,
+            ':dni'=> $dni,
+            ':g'  => $genero,
+            ':fp' => $fotoPath,
+            ':c'  => date('Y-m-d H:i:s'),
+            ':ph' => $newHash,
+            ':id' => (int)$row['id'],
+          ));
+
+          $pdo->commit();
+        } catch (PDOException $e) {
+          if ($pdo->inTransaction()) $pdo->rollBack();
+          $detail = strtolower((string)$e->getMessage());
+          if ((string)$e->getCode() === '23000' || strpos($detail, 'unique constraint') !== false || strpos($detail, 'not unique') !== false) {
+            $errores[] = 'Ese Tickex ID ya está en uso. Elegí otro.';
+          } else {
+            error_log('[Registration] profile update failed: ' . $e->getMessage());
+            $errores[] = 'No pudimos guardar tus datos en este momento. Intentá nuevamente.';
+          }
+        }
+
+      if (empty($errores)) {
         $_SESSION['email']      = $email;
         $_SESSION['first_name'] = $nombre;
         $_SESSION['last_name']  = $apellido;
@@ -255,6 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
         $dest = ($nextUrl !== '' && strpos($nextUrl, '://') === false && substr($nextUrl, 0, 2) !== '//') ? $nextUrl : 'panel_usuario.php';
         header('Location: ' . $dest);
         exit;
+      }
     }
 }
 
