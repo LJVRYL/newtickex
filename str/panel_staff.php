@@ -381,18 +381,64 @@ include __DIR__ . '/inc/layout_top.php';
   .roles-mini-item{font-size:12px;color:var(--muted)}
   .staff-work{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.staff-work-card{padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.staff-work-card h3{margin:0 0 9px}.staff-work-row{display:flex;justify-content:space-between;gap:9px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.staff-work-row:first-of-type{border-top:0}.staff-work-row.done{opacity:.55;text-decoration:line-through}@media(max-width:680px){.staff-work{grid-template-columns:1fr}}
   @media (min-width:1024px){.staff-bottom-nav{max-width:860px;left:50%;right:auto;transform:translateX(-50%);width:100%}}
+  .staff-app{max-width:1120px;padding:24px 18px 108px}
+  .staff-head{margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.09)}
+  .staff-identity{display:flex;align-items:center;gap:13px;min-width:0}
+  .staff-brand-mark{display:flex;width:48px;height:48px;flex:0 0 48px;align-items:center;justify-content:center}
+  .staff-brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
+  .staff-kicker{color:#36d6f0;font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+  .staff-hello{margin-top:4px;color:#f5f7ff;font-size:18px;line-height:1.2}
+  .staff-hello span{color:var(--muted);font-size:13px;font-weight:500}
+  .staff-event-label{margin:18px 0 8px;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+  .staff-events{margin:0 0 14px;padding:0 0 4px}
+  .staff-events a{padding:9px 13px;border-radius:10px;font-weight:700}
+  .staff-events a.active{color:#fff;border-color:rgba(125,92,255,.8);background:linear-gradient(135deg,rgba(102,67,255,.42),rgba(41,51,111,.58));box-shadow:none}
+  .staff-hero{position:relative;overflow:hidden;padding:28px;border-color:rgba(132,112,255,.35);border-radius:22px;background:linear-gradient(135deg,#171934 0%,#24205d 58%,#29366c 100%);box-shadow:0 24px 60px rgba(0,0,0,.25)}
+  .staff-hero::after{content:"";position:absolute;width:360px;height:360px;right:-190px;bottom:-260px;border:1px solid rgba(255,255,255,.10);border-radius:50%;box-shadow:0 0 0 55px rgba(255,255,255,.018),0 0 0 110px rgba(255,255,255,.012)}
+  .staff-hero-main,.staff-stats,.roles-mini{position:relative;z-index:1}
+  .staff-role-chip{display:inline-flex;padding:6px 10px;border:1px solid rgba(62,220,242,.28);border-radius:999px;background:rgba(34,211,238,.08);color:#66e8f8;font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+  .staff-hero h1{max-width:720px;margin:16px 0 6px;color:#fff;font-size:clamp(30px,5vw,54px);line-height:1;letter-spacing:-.05em}
+  .staff-hero-copy{max-width:660px;margin:0;color:rgba(255,255,255,.66);font-size:14px}
+  .staff-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+  .staff-stat{min-height:104px;padding:17px;border-color:rgba(255,255,255,.12);background:rgba(7,10,26,.35);backdrop-filter:blur(8px)}
+  .staff-stat .k{color:rgba(255,255,255,.6);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+  .staff-stat .v{margin-top:9px;color:#fff;font-family:Manrope,Inter,sans-serif;font-size:30px}
+  .staff-progress{height:4px;margin-top:12px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.10)}
+  .staff-progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#37d9f2,#7b5cff)}
+  .roles-mini{margin-top:14px;border-color:rgba(255,255,255,.12);background:rgba(7,10,26,.25)}
+  .roles-mini summary{color:rgba(255,255,255,.7);font-weight:700}
+  .staff-section{margin-top:22px}
+  .staff-section-head{display:flex;justify-content:space-between;gap:16px;align-items:end;margin-bottom:10px}
+  .staff-section-head h2{margin:4px 0 0;font-size:22px;letter-spacing:-.025em}
+  .staff-section-head p{max-width:520px;margin:0;color:var(--muted);font-size:13px}
+  .staff-section-kicker{color:#36d6f0;font-size:9px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}
+  .staff-quick-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .staff-action{display:flex;min-height:100px;padding:17px;flex-direction:column;justify-content:space-between;text-decoration:none;color:#f7f8ff;border:1px solid var(--line);border-radius:16px;background:var(--panel);transition:.16s ease}
+  .staff-action:hover{transform:translateY(-2px);border-color:rgba(124,92,255,.6);background:linear-gradient(145deg,rgba(35,38,73,.98),rgba(19,24,43,.98))}
+  .staff-action strong{font-size:16px}.staff-action span{color:var(--muted);font-size:12px}
+  .staff-action.primary{border-color:rgba(100,80,255,.5);background:linear-gradient(135deg,rgba(90,58,245,.65),rgba(38,49,102,.9))}
+  .staff-work{gap:12px;margin-top:0}
+  .staff-work-card{padding:18px;border-radius:16px}.staff-work-card h3{font-size:17px}
+  .staff-list{margin-top:0;border-radius:18px;overflow:hidden}
+  .staff-list-head{padding:18px}.staff-list-head h3{font-size:20px;letter-spacing:-.02em}
+  .entry-item{padding:15px 18px}.entry-main strong{font-size:14px}.entry-meta{margin-top:4px}
+  .staff-bottom-nav{max-width:620px!important;left:50%!important;right:auto!important;transform:translateX(-50%);width:calc(100% - 24px)!important;bottom:12px;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:9px 10px calc(9px + env(safe-area-inset-bottom));box-shadow:0 18px 48px rgba(0,0,0,.5)}
+  @media(max-width:760px){.staff-app{padding:16px 10px 104px}.staff-hero{padding:20px 16px}.staff-quick-actions{grid-template-columns:1fr}.staff-section-head{display:block}.staff-section-head p{margin-top:5px}.staff-head{margin-bottom:16px}.staff-stats{gap:7px}.staff-stat{min-height:88px;padding:12px}.staff-stat .v{font-size:24px}.staff-hello{font-size:15px}.staff-brand-mark{width:42px;height:42px;flex-basis:42px}}
 </style>
 
 <div class="staff-app">
-  <div class="staff-head">
-    <div>
-      <div class="staff-brand">TICKEX</div>
-      <div class="staff-hello">Hola, <strong><?php echo e($helloName); ?></strong></div>
+  <header class="staff-head">
+    <div class="staff-identity">
+      <a class="staff-brand-mark" href="<?php echo e(tickex_route('customer_home', array())); ?>" aria-label="Volver a mi cuenta"><img src="/tickex-isotipo.svg" alt="Tickex"></a>
+      <div>
+        <div class="staff-kicker">Espacio operativo</div>
+        <div class="staff-hello">Hola, <strong><?php echo e($helloName); ?></strong> <span>· Equipo Tickex</span></div>
+      </div>
     </div>
     <button class="staff-notif" id="btnNotifStaff" type="button" title="Notificaciones">🔔
       <?php if ($unreadCount > 0): ?><span class="staff-notif-badge"><?php echo (int)$unreadCount; ?></span><?php endif; ?>
     </button>
-  </div>
+  </header>
 
   <div id="notifPanelStaff" class="staff-notifs" aria-hidden="true">
     <div class="staff-notifs-head">Notificaciones</div>
@@ -412,6 +458,7 @@ include __DIR__ . '/inc/layout_top.php';
     <div class="flash err">No tenés asignaciones de staff activas.</div>
   <?php else: ?>
     <?php if (!empty($eventosStaff)): ?>
+      <div class="staff-event-label">Elegí el evento que vas a operar</div>
       <div class="staff-events">
         <?php foreach ($eventosStaff as $ev): ?>
           <?php $isAct = ((int)$ev['id'] === (int)$activeEventId); ?>
@@ -423,16 +470,18 @@ include __DIR__ . '/inc/layout_top.php';
     <?php endif; ?>
 
     <div class="staff-hero">
-      <h2 style="margin:0;">Panel de <?php echo $activeEvent ? e(tickex_staff_role_label($pdo,(int)$activeEvent['owner_admin_id'],(string)$activeEvent['event_role'])) : 'Staff'; ?></h2>
-      <div class="muted" style="margin-top:4px;">
-        <?php if ($activeEvent): ?>Evento actual: <strong><?php echo e($activeEvent['nombre']); ?></strong><?php else: ?>Sin evento seleccionado<?php endif; ?>
+      <div class="staff-hero-main">
+        <span class="staff-role-chip"><?php echo $activeEvent ? e(tickex_staff_role_label($pdo,(int)$activeEvent['owner_admin_id'],(string)$activeEvent['event_role'])) : 'Staff'; ?></span>
+        <h1><?php echo $activeEvent ? e($activeEvent['nombre']) : 'Sin evento seleccionado'; ?></h1>
+        <p class="staff-hero-copy"><?php echo $activeEvent ? 'Todo lo necesario para operar tu turno y seguir los ingresos en tiempo real.' : 'Cuando te asignen un evento, vas a encontrar acá tus herramientas de trabajo.'; ?></p>
       </div>
 
       <?php if ($activeEvent): ?>
+      <?php $staffProgress = (int)$activeEvent['total'] > 0 ? min(100, round(((int)$activeEvent['checkins'] / (int)$activeEvent['total']) * 100)) : 0; ?>
       <div class="staff-stats">
-        <div class="staff-stat"><div class="k">Entradas</div><div class="v"><?php echo (int)$activeEvent['total']; ?></div></div>
-        <div class="staff-stat"><div class="k">Check-ins</div><div class="v"><?php echo (int)$activeEvent['checkins']; ?></div></div>
-        <div class="staff-stat"><div class="k">Pendientes</div><div class="v"><?php echo max(0, (int)$activeEvent['total'] - (int)$activeEvent['checkins']); ?></div></div>
+        <div class="staff-stat"><div class="k">Entradas emitidas</div><div class="v"><?php echo (int)$activeEvent['total']; ?></div></div>
+        <div class="staff-stat"><div class="k">Ingresaron</div><div class="v"><?php echo (int)$activeEvent['checkins']; ?></div><div class="staff-progress"><span style="width:<?php echo (int)$staffProgress; ?>%"></span></div></div>
+        <div class="staff-stat"><div class="k">Faltan ingresar</div><div class="v"><?php echo max(0, (int)$activeEvent['total'] - (int)$activeEvent['checkins']); ?></div></div>
       </div>
       <?php endif; ?>
 
@@ -458,14 +507,30 @@ include __DIR__ . '/inc/layout_top.php';
       </div>
     </div>
 
-    <?php if($activeEvent): ?><div class="staff-work">
+    <?php if($activeEvent): ?>
+    <section class="staff-section">
+      <div class="staff-section-head"><div><div class="staff-section-kicker">Acciones principales</div><h2>¿Qué necesitás hacer?</h2></div><p>Solo aparecen las herramientas habilitadas para tu rol en este evento.</p></div>
+      <div class="staff-quick-actions">
+        <?php if($canScan): ?><a class="staff-action primary" href="staff_scan_qr.php?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Escanear un QR</strong><span>Abrir cámara y validar accesos</span></a><?php endif; ?>
+        <?php if($canSell): ?><a class="staff-action" href="panel_staff_venta_puerta.php?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Registrar venta</strong><span>Cargar una operación de puerta</span></a><?php endif; ?>
+        <?php if($canReports): ?><a class="staff-action" href="panel_staff_checkin_log.php?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Ver actividad</strong><span>Revisar los últimos check-ins</span></a><?php endif; ?>
+      </div>
+    </section>
+
+    <section class="staff-section">
+      <div class="staff-section-head"><div><div class="staff-section-kicker">Tu jornada</div><h2>Turnos y tareas</h2></div><p>Tu horario, sector y pendientes asignados por el organizador.</p></div>
+      <div class="staff-work">
       <section class="staff-work-card"><h3>Mis turnos</h3><?php if(!$myShifts): ?><div class="muted">No tenés turnos cargados.</div><?php endif; ?><?php foreach($myShifts as $shift): ?><div class="staff-work-row"><div><strong><?php echo e($shift['area']?:'Turno'); ?></strong><div class="muted"><?php echo e($shift['starts_at']); ?><?php echo $shift['ends_at']?' → '.e($shift['ends_at']):''; ?></div></div></div><?php endforeach; ?></section>
       <section class="staff-work-card"><h3>Mis tareas</h3><?php if(!$myTasks): ?><div class="muted">No tenés tareas pendientes.</div><?php endif; ?><?php foreach($myTasks as $task): ?><form method="post" class="staff-work-row <?php echo $task['status']==='done'?'done':''; ?>"><input type="hidden" name="csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="staff_task_toggle"><input type="hidden" name="task_id" value="<?php echo (int)$task['id']; ?>"><input type="hidden" name="evento_id" value="<?php echo (int)$activeEventId; ?>"><div><strong><?php echo e($task['title']); ?></strong><?php if($task['due_at']): ?><div class="muted">Hasta <?php echo e($task['due_at']); ?></div><?php endif; ?></div><button class="btn secondary" type="submit"><?php echo $task['status']==='done'?'Reabrir':'Listo'; ?></button></form><?php endforeach; ?></section>
-    </div><?php endif; ?>
+      </div>
+    </section>
+    <?php endif; ?>
 
+    <section class="staff-section">
+      <div class="staff-section-head"><div><div class="staff-section-kicker">Control de acceso</div><h2>Personas e ingresos</h2></div><p>Buscá por nombre o código y confirmá el ingreso sin perder el contexto del evento.</p></div>
     <div class="staff-list">
       <div class="staff-list-head">
-        <h3 style="margin:0 0 6px 0;">Lista de ingresos</h3>
+        <h3 style="margin:0 0 10px 0;">Lista de ingresos</h3>
         <form method="get" class="staff-search">
           <input type="hidden" name="evento_id" value="<?php echo (int)$activeEventId; ?>">
           <div>
@@ -518,6 +583,7 @@ include __DIR__ . '/inc/layout_top.php';
         <?php endif; ?>
       </div>
     </div>
+    </section>
   <?php endif; ?>
 </div>
 

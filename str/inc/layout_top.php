@@ -104,6 +104,9 @@ if ($page === 'crear_evento.php') {
 if ($page === 'enviar_tickex.php') {
   $bodyClass .= ' page-send-ticket';
 }
+if ($page === 'panel_staff.php') {
+  $bodyClass .= ' page-staff-dashboard';
+}
 if ($page === 'puerta.php' || $page === 'puerta_lista.php') {
   $bodyClass .= ' page-door';
 }
