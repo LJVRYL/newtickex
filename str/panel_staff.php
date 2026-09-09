@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
@@ -9,7 +10,7 @@ require_once __DIR__ . '/inc/notificaciones.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()) . '?next=' . urlencode(tickex_route('staff_home', array())));
   exit;
 }
 
@@ -462,7 +463,7 @@ include __DIR__ . '/inc/layout_top.php';
       <div class="staff-events">
         <?php foreach ($eventosStaff as $ev): ?>
           <?php $isAct = ((int)$ev['id'] === (int)$activeEventId); ?>
-          <a href="panel_staff.php?evento_id=<?php echo (int)$ev['id']; ?>" class="<?php echo $isAct ? 'active' : ''; ?>">
+          <a href="<?php echo e(tickex_route('staff_home', array())); ?>?evento_id=<?php echo (int)$ev['id']; ?>" class="<?php echo $isAct ? 'active' : ''; ?>">
             <?php echo e($ev['nombre']); ?>
           </a>
         <?php endforeach; ?>
@@ -511,9 +512,9 @@ include __DIR__ . '/inc/layout_top.php';
     <section class="staff-section">
       <div class="staff-section-head"><div><div class="staff-section-kicker">Acciones principales</div><h2>¿Qué necesitás hacer?</h2></div><p>Solo aparecen las herramientas habilitadas para tu rol en este evento.</p></div>
       <div class="staff-quick-actions">
-        <?php if($canScan): ?><a class="staff-action primary" href="staff_scan_qr.php?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Escanear un QR</strong><span>Abrir cámara y validar accesos</span></a><?php endif; ?>
-        <?php if($canSell): ?><a class="staff-action" href="panel_staff_venta_puerta.php?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Registrar venta</strong><span>Cargar una operación de puerta</span></a><?php endif; ?>
-        <?php if($canReports): ?><a class="staff-action" href="panel_staff_checkin_log.php?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Ver actividad</strong><span>Revisar los últimos check-ins</span></a><?php endif; ?>
+        <?php if($canScan): ?><a class="staff-action primary" href="<?php echo e(tickex_route('staff_scan', array())); ?>?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Escanear un QR</strong><span>Abrir cámara y validar accesos</span></a><?php endif; ?>
+        <?php if($canSell): ?><a class="staff-action" href="<?php echo e(tickex_route('staff_sales', array())); ?>?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Registrar venta</strong><span>Cargar una operación de puerta</span></a><?php endif; ?>
+        <?php if($canReports): ?><a class="staff-action" href="<?php echo e(tickex_route('staff_activity', array())); ?>?evento_id=<?php echo (int)$activeEventId; ?>"><strong>Ver actividad</strong><span>Revisar los últimos check-ins</span></a><?php endif; ?>
       </div>
     </section>
 
@@ -588,9 +589,9 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <nav class="staff-bottom-nav" aria-label="Navegación staff">
-  <a href="panel_usuario.php"><span class="i">🏠</span><span>Inicio</span></a>
-  <a href="panel_staff.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
-  <?php if($canScan): ?><a href="staff_scan_qr.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" id="btnOpenScan" class="center" aria-label="QR" title="QR">
+  <a href="<?php echo e(tickex_route('customer_home', array())); ?>"><span class="i">🏠</span><span>Inicio</span></a>
+  <a href="<?php echo e(tickex_route('staff_home', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
+  <?php if($canScan): ?><a href="<?php echo e(tickex_route('staff_scan', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" id="btnOpenScan" class="center" aria-label="QR" title="QR">
     <span class="qr-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
         <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zm9-2h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zm11-2h2v2h-2v-2zm-2 2h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm2-2h2v2h-2v-2zm4 0h2v2h-2v-2z"></path>
@@ -598,17 +599,17 @@ include __DIR__ . '/inc/layout_top.php';
     </span>
     <span>QR</span>
   </a><?php else: ?><span class="center"><span>QR</span></span><?php endif; ?>
-  <?php if($canSell): ?><a href="panel_staff_venta_puerta.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a><?php else: ?><span><span>Sin venta</span></span><?php endif; ?>
+  <?php if($canSell): ?><a href="<?php echo e(tickex_route('staff_sales', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a><?php else: ?><span><span>Sin venta</span></span><?php endif; ?>
   <button type="button" id="btnMore"><span class="i">☰</span><span>Más</span></button>
 </nav>
 
 <div id="staffSheet" class="staff-sheet" aria-hidden="true">
   <div class="staff-sheet-box">
     <div class="staff-sheet-links">
-      <?php if($canReports): ?><a href="panel_staff_checkin_log.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>">Actividad check-ins</a><?php endif; ?>
-      <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
-      <a href="panel_usuario.php">Dashboard usuario</a>
-      <a href="logout_usuario.php">Cerrar sesión</a>
+      <?php if($canReports): ?><a href="<?php echo e(tickex_route('staff_activity', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>">Actividad check-ins</a><?php endif; ?>
+      <a href="<?php echo e(tickex_route('customer_profile', array())); ?>">Mi perfil</a>
+      <a href="<?php echo e(tickex_route('customer_home', array())); ?>">Dashboard usuario</a>
+      <a href="<?php echo e(tickex_route('logout', array())); ?>">Cerrar sesión</a>
     </div>
   </div>
 </div>

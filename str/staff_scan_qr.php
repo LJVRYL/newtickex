@@ -1,12 +1,13 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/staff_operations.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()) . '?next=' . urlencode(tickex_route('staff_scan', array())));
   exit;
 }
 
@@ -54,7 +55,7 @@ include __DIR__ . '/inc/layout_top.php';
 <div class="scan-page">
   <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
     <h2 style="margin:0;">Escanear QR</h2>
-    <a class="btn secondary" href="panel_staff.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>">Volver</a>
+    <a class="btn secondary" href="<?php echo e(tickex_route('staff_home', array())); ?><?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>">Volver</a>
   </div>
 
   <div class="scan-card">
@@ -64,11 +65,11 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <nav class="staff-bottom-nav" aria-label="Navegación staff">
-  <a href="panel_usuario.php"><span class="i">🏠</span><span>Inicio</span></a>
-  <a href="panel_staff.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
-  <a href="staff_scan_qr.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>" class="center" aria-label="QR" title="QR"><span class="i">▣</span><span>QR</span></a>
-  <a href="panel_staff_venta_puerta.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
-  <a href="panel_staff_checkin_log.php<?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">🧾</span><span>Log</span></a>
+  <a href="<?php echo e(tickex_route('customer_home', array())); ?>"><span class="i">🏠</span><span>Inicio</span></a>
+  <a href="<?php echo e(tickex_route('staff_home', array())); ?><?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
+  <a href="<?php echo e(tickex_route('staff_scan', array())); ?><?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>" class="center" aria-label="QR" title="QR"><span class="i">▣</span><span>QR</span></a>
+  <a href="<?php echo e(tickex_route('staff_sales', array())); ?><?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
+  <a href="<?php echo e(tickex_route('staff_activity', array())); ?><?php echo $eventoId > 0 ? ('?evento_id=' . (int)$eventoId) : ''; ?>"><span class="i">🧾</span><span>Log</span></a>
 </nav>
 
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>

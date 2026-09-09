@@ -34,6 +34,11 @@ if (!function_exists('tickex_route')) {
             'login' => '/ingresar',
             'customer_home' => '/mi-cuenta',
             'customer_profile' => '/mi-cuenta/perfil',
+            'staff_home' => '/mi-cuenta/staff',
+            'staff_scan' => '/mi-cuenta/staff/escanear',
+            'staff_sales' => '/mi-cuenta/staff/puerta',
+            'staff_activity' => '/mi-cuenta/staff/actividad',
+            'reseller_home' => '/mi-cuenta/revendedor',
             'logout' => '/salir',
             'admin_home' => '/administrar',
         );

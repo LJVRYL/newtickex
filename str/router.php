@@ -9,6 +9,11 @@ $fixed = array(
     '/ingresar' => 'login.php',
     '/mi-cuenta' => 'panel_usuario.php',
     '/mi-cuenta/perfil' => 'panel_usuario_mi_perfil.php',
+    '/mi-cuenta/staff' => 'panel_staff.php',
+    '/mi-cuenta/staff/escanear' => 'staff_scan_qr.php',
+    '/mi-cuenta/staff/puerta' => 'panel_staff_venta_puerta.php',
+    '/mi-cuenta/staff/actividad' => 'panel_staff_checkin_log.php',
+    '/mi-cuenta/revendedor' => 'panel_revendedor.php',
     '/salir' => 'logout_usuario.php',
     '/administrar' => 'panel_admin.php',
 );

@@ -1,11 +1,12 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()) . '?next=' . urlencode(tickex_route('staff_home', array())));
   exit;
 }
 
@@ -119,9 +120,9 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <nav class="staff-bottom-nav" aria-label="Navegación staff">
-  <a href="panel_usuario.php"><span class="i">🏠</span><span>Inicio</span></a>
-  <a href="panel_staff.php"><span class="i">📋</span><span>Gestión</span></a>
-  <a href="staff_scan_qr.php" class="center" aria-label="QR" title="QR">
+  <a href="<?php echo e(tickex_route('customer_home', array())); ?>"><span class="i">🏠</span><span>Inicio</span></a>
+  <a href="<?php echo e(tickex_route('staff_home', array())); ?>"><span class="i">📋</span><span>Gestión</span></a>
+  <a href="<?php echo e(tickex_route('staff_scan', array())); ?>" class="center" aria-label="QR" title="QR">
     <span class="qr-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
         <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zm9-2h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zm11-2h2v2h-2v-2zm-2 2h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm2-2h2v2h-2v-2zm4 0h2v2h-2v-2z"></path>
@@ -129,7 +130,7 @@ include __DIR__ . '/inc/layout_top.php';
     </span>
     <span>QR</span>
   </a>
-  <a href="panel_staff_venta_puerta.php"><span class="i">💸</span><span>Venta</span></a>
+  <a href="<?php echo e(tickex_route('staff_sales', array())); ?>"><span class="i">💸</span><span>Venta</span></a>
   <button type="button" id="btnMore"><span class="i">☰</span><span>Más</span></button>
 </nav>
 
@@ -137,8 +138,8 @@ include __DIR__ . '/inc/layout_top.php';
   <div class="staff-sheet-box">
     <div class="staff-sheet-links">
       <a href="panel_usuario_mi_perfil.php">Mi perfil</a>
-      <a href="panel_usuario.php">Dashboard usuario</a>
-      <a href="logout_usuario.php">Cerrar sesión</a>
+      <a href="<?php echo e(tickex_route('customer_home', array())); ?>">Dashboard usuario</a>
+      <a href="<?php echo e(tickex_route('logout', array())); ?>">Cerrar sesión</a>
     </div>
   </div>
 </div>

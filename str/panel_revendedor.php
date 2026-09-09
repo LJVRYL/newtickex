@@ -1,12 +1,13 @@
 <?php
 // panel_revendedor.php - Dashboard básico para revendedores (clientes)
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()) . '?next=' . urlencode(tickex_route('reseller_home', array())));
   exit;
 }
 
@@ -42,7 +43,7 @@ try {
 if (!$cliente) {
   $_SESSION = array();
   session_destroy();
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()));
   exit;
 }
 
@@ -60,7 +61,7 @@ if (!$rev) {
   http_response_code(403);
   $title = 'Acceso restringido';
   include __DIR__ . '/inc/layout_top.php';
-  echo '<div class="card" style="max-width:700px;margin:32px auto;"><h2>Acceso restringido</h2><p>No tenés una cuenta de revendedor activa.</p><a class="btn secondary" href="panel_usuario.php">⬅ Volver</a></div>';
+  echo '<div class="card" style="max-width:700px;margin:32px auto;"><h2>Acceso restringido</h2><p>No tenés una cuenta de revendedor activa.</p><a class="btn secondary" href="' . e(tickex_route('customer_home', array())) . '">⬅ Volver</a></div>';
   include __DIR__ . '/inc/layout_bottom.php';
   exit;
 }
@@ -188,7 +189,7 @@ if ($nombre === '') $nombre = (string)$cliente['email'];
     <div class="muted" style="margin-top:4px;"><?php echo htmlspecialchars($nombre, ENT_QUOTES, 'UTF-8'); ?> — Tickex ID: <strong><?php echo htmlspecialchars($tickexId, ENT_QUOTES, 'UTF-8'); ?></strong></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="btn secondary" href="panel_usuario.php">⬅ Volver</a>
+    <a class="btn secondary" href="<?php echo e(tickex_route('customer_home', array())); ?>">⬅ Volver</a>
   </div>
 </div>
 
