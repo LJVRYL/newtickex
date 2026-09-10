@@ -13,6 +13,7 @@ require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
 require_once __DIR__ . '/inc/event_capacity.php';
 require_once __DIR__ . '/inc/legal_center.php';
+require_once __DIR__ . '/inc/event_presentation.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -79,6 +80,8 @@ $defaults = array(
 );
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
 $freeCheckoutTypeId = 0;
+$eventMaxPurchase = 10;
+$eventDetails = array();
 $legalCheckoutDocs = array();
 $legalCheckoutRequired = false;
 
@@ -286,6 +289,7 @@ if ($eventId > 0) {
   // Tickex local
   try {
     $pdoLocal = db();
+    tickex_event_presentation_ensure_schema($pdoLocal);
 
     // Determinar columna de creador (si existe)
     $creatorCol = null;
@@ -327,6 +331,8 @@ if ($eventId > 0) {
       }
       if (isset($evRow['nombre']) && $evRow['nombre'] !== null) $eventName = $evRow['nombre'];
       if (isset($evRow['fecha_desde']) && $evRow['fecha_desde'] !== null) $eventDate = $evRow['fecha_desde'];
+      $eventDetails = $evRow;
+      $eventMaxPurchase = isset($evRow['max_entradas_compra']) && (int)$evRow['max_entradas_compra'] > 0 ? max(1, min(20, (int)$evRow['max_entradas_compra'])) : 10;
       if (isset($evRow['lugar']) && $evRow['lugar'] !== null) {
         $eventLoc = $evRow['lugar'];
       } elseif (isset($evRow['ubicacion']) && $evRow['ubicacion'] !== null) {
@@ -615,7 +621,7 @@ foreach ($entryOptions as $opt) {
 
 if (!function_exists('_tickex_parse_selection')) {
   // Normaliza selección del form a array de líneas: id,name,qty,price
-  function _tickex_parse_selection($optionMap, $ids, $qtys, &$errors)
+  function _tickex_parse_selection($optionMap, $ids, $qtys, &$errors, $purchaseLimit)
   {
     $selectedTickets = array();
     $total = 0;
@@ -627,9 +633,9 @@ if (!function_exists('_tickex_parse_selection')) {
       $qty = isset($qtys[$i]) ? (int)$qtys[$i] : 0;
       if ($qty <= 0) continue;
 
-      // Límite UX/anti-abuso: no más de 10 por tipo en una compra.
-      if ($qty > 10) {
-        $errors[] = 'Máximo 10 entradas por tipo en una compra.';
+      $purchaseLimit = max(1, min(20, (int)$purchaseLimit));
+      if ($qty > $purchaseLimit) {
+        $errors[] = 'Máximo ' . $purchaseLimit . ' entradas por tipo en una compra.';
         continue;
       }
       if (!isset($optionMap[$tidStr])) continue;
@@ -738,7 +744,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Selección (paso 1 o paso 2)
   $selIds = isset($_POST['selected_id']) ? $_POST['selected_id'] : (isset($_POST['ticket_id']) ? $_POST['ticket_id'] : array());
   $selQty = isset($_POST['selected_qty']) ? $_POST['selected_qty'] : (isset($_POST['qty']) ? $_POST['qty'] : array());
-  list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors);
+  list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors, $eventMaxPurchase);
 
   $ticketSubtotal = $total;
   $serviceFeeAmount = 0;
@@ -1208,23 +1214,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
+$doorTime = isset($eventDetails['hora_puertas']) ? trim((string)$eventDetails['hora_puertas']) : '';
+$showTime = isset($eventDetails['hora_show']) ? trim((string)$eventDetails['hora_show']) : '';
+$eventDescription = isset($eventDetails['descripcion']) ? trim((string)$eventDetails['descripcion']) : '';
+$eventAddress = isset($eventDetails['direccion']) ? trim((string)$eventDetails['direccion']) : '';
+$eventArrival = isset($eventDetails['indicaciones_llegada']) ? trim((string)$eventDetails['indicaciones_llegada']) : '';
+$eventTransport = isset($eventDetails['transporte_publico']) ? trim((string)$eventDetails['transporte_publico']) : '';
+$eventMinors = isset($eventDetails['politica_menores']) ? trim((string)$eventDetails['politica_menores']) : '';
+$eventAccessibility = isset($eventDetails['movilidad_reducida']) ? trim((string)$eventDetails['movilidad_reducida']) : '';
+$eventProhibited = isset($eventDetails['objetos_prohibidos']) ? trim((string)$eventDetails['objetos_prohibidos']) : '';
+$mapUrls = tickex_event_map_urls($eventAddress);
+$minimumTicketPrice = null;
+foreach ($entryOptions as $priceOption) if ((float)$priceOption['price'] > 0 && ($minimumTicketPrice === null || (float)$priceOption['price'] < $minimumTicketPrice)) $minimumTicketPrice = (float)$priceOption['price'];
+$eventTimestamp = 0;
+if ($eventDate !== '') { $eventTimestamp = strtotime($eventDate . ' ' . ($doorTime !== '' ? $doorTime : '00:00')); if ($eventTimestamp === false) $eventTimestamp = 0; }
+$displayEventDate = $eventDate;
+if ($eventTimestamp > 0) $displayEventDate = date('d/m/Y', $eventTimestamp);
+$paymentMethodLabel = $paymentProvider === 'mercadopago' ? 'Mercado Pago' : 'TotalCoin';
 include __DIR__.'/inc/layout_top.php';
 ?>
 <style>
-  .checkout-hero { display:grid; grid-template-columns: minmax(260px, 1fr) 1.4fr; gap:16px; align-items:start; }
-  .flyer-box { position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--panel-2); min-height:260px; }
+  .checkout-shell{max-width:1160px;margin:0 auto}.checkout-hero { display:grid; grid-template-columns: minmax(280px,.82fr) 1.35fr; gap:0; overflow:hidden;padding:0!important;background:linear-gradient(135deg,#101a39,#251c52 72%,#133654);border-color:rgba(92,220,244,.22)!important }
+  .flyer-box { position:relative; overflow:hidden; background:var(--panel-2); min-height:410px; }
   .flyer-box img { width:100%; height:100%; object-fit:cover; display:block; }
   .flyer-empty { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:14px; }
-  .meta-grid { display:grid; gap:6px; font-size:14px; color:var(--muted); }
-  .meta-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px; color:var(--muted); }
+  .checkout-summary{padding:32px;display:flex;flex-direction:column;justify-content:center;gap:22px}.checkout-summary h1{font-size:clamp(30px,4vw,50px);line-height:1.02;letter-spacing:-.035em;margin:0}.checkout-kicker{font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#55dcef}.checkout-countdown{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.count-cell{padding:12px 8px;border:1px solid rgba(255,255,255,.12);border-radius:12px;text-align:center;background:rgba(5,10,28,.32)}.count-cell strong{display:block;font-size:24px}.count-cell span{font-size:10px;color:#9ca4bd;text-transform:uppercase;letter-spacing:.08em}.event-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.event-fact{padding:14px;border-radius:13px;background:rgba(6,11,29,.42);border:1px solid rgba(255,255,255,.1)}.event-fact small{display:block;color:#7f89a8;text-transform:uppercase;letter-spacing:.09em;font-size:9px;font-weight:900}.event-fact strong{display:block;margin-top:7px;color:#fff}.checkout-sections{display:grid;gap:14px;margin-top:14px}.public-info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.public-block{padding:22px}.public-block h2{margin:0 0 9px;font-size:21px}.public-block p{margin:0;color:var(--muted);line-height:1.65;white-space:pre-line}.map-frame{width:100%;height:260px;border:0;border-radius:14px;margin-top:16px}.info-pill{display:inline-flex;margin-top:12px;padding:8px 12px;border-radius:999px;background:rgba(84,217,239,.1);color:#66deef;font-weight:800;text-decoration:none}
   .card-soft { background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  @media (max-width: 780px) { .checkout-hero { grid-template-columns:1fr; } }
+  @media (max-width: 780px) { .checkout-hero { grid-template-columns:1fr; }.flyer-box{min-height:0;aspect-ratio:4/5}.checkout-summary{padding:24px}.event-facts,.public-info-grid{grid-template-columns:1fr}.checkout-countdown{gap:5px}.count-cell strong{font-size:20px} }
   .tickex-safe-bottom { padding-bottom:calc(24px + constant(safe-area-inset-bottom)); padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
   .tickex-hidden { display:none !important; }
 </style>
 
-<div class="card card-soft" style="margin-bottom:12px;">
-  <div class="checkout-hero">
+<div class="checkout-shell"><div class="card checkout-hero" style="margin-bottom:12px;">
     <div class="flyer-box">
       <?php if ($flyerUrl): ?>
         <img src="<?php echo e($flyerUrl); ?>" alt="Flyer de <?php echo e($eventName); ?>">
@@ -1232,19 +1253,34 @@ include __DIR__.'/inc/layout_top.php';
         <div class="flyer-empty">Sin flyer</div>
       <?php endif; ?>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <div>
-        <div style="font-size:14px;color:var(--muted);margin-bottom:2px;">Checkout</div>
-        <h2 style="margin:0 0 6px;line-height:1.2;"><?php echo e($eventName); ?></h2>
-        <div class="meta-grid">
-          <?php if ($eventDate): ?><div class="meta-chip">📅 <span><?php echo e($eventDate); ?></span></div><?php endif; ?>
-          <?php if ($eventLoc):  ?><div class="meta-chip">📍 <span><?php echo e($eventLoc); ?></span></div><?php endif; ?>
-        </div>
+    <div class="checkout-summary">
+      <div><div class="checkout-kicker">Tickex presenta</div><h1><?php echo e($eventName); ?></h1></div>
+      <?php if ($eventTimestamp > time()): ?><div><div class="checkout-kicker" style="margin-bottom:9px;">Faltan</div><div class="checkout-countdown" data-event-countdown="<?php echo (int)$eventTimestamp; ?>"><div class="count-cell"><strong data-days>--</strong><span>Días</span></div><div class="count-cell"><strong data-hours>--</strong><span>Horas</span></div><div class="count-cell"><strong data-minutes>--</strong><span>Minutos</span></div><div class="count-cell"><strong data-seconds>--</strong><span>Segundos</span></div></div></div><?php endif; ?>
+      <div class="event-facts">
+        <?php if ($minimumTicketPrice !== null): ?><div class="event-fact"><small>Entradas desde</small><strong>$<?php echo e(number_format($minimumTicketPrice,0,',','.')); ?></strong></div><?php endif; ?>
+        <?php if ($displayEventDate !== ''): ?><div class="event-fact"><small>Fecha</small><strong><?php echo e($displayEventDate); ?></strong></div><?php endif; ?>
+        <?php if ($doorTime !== ''): ?><div class="event-fact"><small>Puertas</small><strong><?php echo e($doorTime); ?> hs</strong></div><?php endif; ?>
+        <?php if ($showTime !== ''): ?><div class="event-fact"><small>Show</small><strong><?php echo e($showTime); ?> hs</strong></div><?php endif; ?>
+        <div class="event-fact"><small>Medio de pago</small><strong><?php echo e($paymentMethodLabel); ?></strong></div>
+        <?php if ($eventLoc !== ''): ?><div class="event-fact"><small>Lugar</small><strong><?php echo e($eventLoc); ?></strong></div><?php endif; ?>
       </div>
-      <div style="font-size:14px;color:var(--muted);">Seleccioná las entradas y la cantidad que quieras comprar. El total se calcula automáticamente antes de ir a pagar.</div>
+      <div style="font-size:14px;color:#b8bfd4;">Elegí tus entradas. Antes de pagar vas a revisar el detalle completo de la compra.</div>
+      <div><a class="btn" href="#checkoutFlow">Comprar entradas</a></div>
     </div>
-  </div>
 </div>
+
+<?php if ($eventDescription !== '' || $eventAddress !== '' || $eventArrival !== '' || $eventTransport !== '' || $eventMinors !== '' || $eventAccessibility !== '' || $eventProhibited !== ''): ?>
+<div class="checkout-sections">
+ <?php if ($eventDescription !== ''): ?><section class="card public-block"><div class="checkout-kicker">El evento</div><h2>Todo lo que necesitás saber</h2><p><?php echo e($eventDescription); ?></p></section><?php endif; ?>
+ <div class="public-info-grid">
+  <?php if ($eventAddress !== '' || $eventArrival !== ''): ?><section class="card public-block"><div class="checkout-kicker">Ubicación</div><h2>Cómo llegar</h2><?php if ($eventAddress !== ''): ?><p><strong style="color:var(--text)"><?php echo e($eventAddress); ?></strong></p><?php endif; ?><?php if ($eventArrival !== ''): ?><p><?php echo e($eventArrival); ?></p><?php endif; ?><?php if ($mapUrls['link'] !== ''): ?><a class="info-pill" href="<?php echo e($mapUrls['link']); ?>" target="_blank" rel="noopener noreferrer">Abrir en Google Maps →</a><iframe class="map-frame" src="<?php echo e($mapUrls['embed']); ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Mapa del evento"></iframe><?php endif; ?></section><?php endif; ?>
+  <?php if ($eventTransport !== ''): ?><section class="card public-block"><div class="checkout-kicker">Opciones cercanas</div><h2>Transporte público</h2><p><?php echo e($eventTransport); ?></p></section><?php endif; ?>
+  <?php if ($eventMinors !== ''): ?><section class="card public-block"><div class="checkout-kicker">Ingreso</div><h2>Menores</h2><p><?php echo e($eventMinors); ?></p></section><?php endif; ?>
+  <?php if ($eventAccessibility !== ''): ?><section class="card public-block"><div class="checkout-kicker">Accesibilidad</div><h2>Movilidad reducida</h2><p><?php echo e($eventAccessibility); ?></p></section><?php endif; ?>
+  <?php if ($eventProhibited !== ''): ?><section class="card public-block"><div class="checkout-kicker">Antes de venir</div><h2>Elementos no permitidos</h2><p><?php echo e($eventProhibited); ?></p></section><?php endif; ?>
+ </div>
+</div>
+<?php endif; ?>
 
   <?php $prefillMissing = ($defaults['email']==='' || $defaults['dni']==='' || $defaults['first_name']==='' || $defaults['last_name']===''); ?>
   <?php if ($prefillMissing): ?>
@@ -1408,13 +1444,13 @@ include __DIR__.'/inc/layout_top.php';
         <?php foreach ($entryOptions as $idx => $opt): 
           $avail = $opt['avail'];
           if ($avail === null) {
-            $maxQty = 10;
+            $maxQty = $eventMaxPurchase;
           } elseif ($avail > 0) {
             $maxQty = $avail;
           } else {
             $maxQty = 0;
           }
-          if ($maxQty > 10) $maxQty = 10;
+          if ($maxQty > $eventMaxPurchase) $maxQty = $eventMaxPurchase;
           $isSoldOut = ($avail !== null && $avail <= 0);
         ?>
           <div class="card" style="padding:16px;margin-bottom:12px;border:1px solid var(--line);background:var(--panel);">
@@ -1525,6 +1561,9 @@ include __DIR__.'/inc/layout_top.php';
   <?php endif; ?>
 </div>
 
+<script>
+(function(){var box=document.querySelector('[data-event-countdown]');if(!box)return;var target=parseInt(box.getAttribute('data-event-countdown'),10)*1000;function paint(){var left=Math.max(0,target-Date.now()),days=Math.floor(left/86400000),hours=Math.floor(left/3600000)%24,minutes=Math.floor(left/60000)%60,seconds=Math.floor(left/1000)%60;box.querySelector('[data-days]').textContent=String(days);box.querySelector('[data-hours]').textContent=String(hours).padStart(2,'0');box.querySelector('[data-minutes]').textContent=String(minutes).padStart(2,'0');box.querySelector('[data-seconds]').textContent=String(seconds).padStart(2,'0')}paint();setInterval(paint,1000)})();
+</script>
 <script>
   (function(){
     const form = document.getElementById('checkoutFlow');

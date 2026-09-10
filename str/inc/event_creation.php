@@ -29,6 +29,10 @@ if (!function_exists('tickex_event_creation_validate')) {
         if ($capacity<1 || $capacity>1000000) return 'Definí un cupo total entre 1 y 1.000.000.';
         if (!tickex_event_creation_valid_date($from) || !tickex_event_creation_valid_date($until)) return 'Definí la fecha de inicio y la fecha de finalización.';
         if ($until<$from) return 'La fecha de finalización no puede ser anterior a la fecha de inicio.';
+        if (function_exists('tickex_event_presentation_validate')) {
+            $presentationError=tickex_event_presentation_validate($data,true);
+            if ($presentationError!=='') return $presentationError;
+        }
         if (tickex_event_creation_length($description)>3000) return 'La descripción puede tener hasta 3.000 caracteres.';
         return '';
     }

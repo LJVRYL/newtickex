@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/event_presentation.php';
 
 require_login();
 $pdo = db();
+tickex_event_presentation_ensure_schema($pdo);
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : '';
 $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
@@ -32,7 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_evento'])) {
     $fechaDesde = trim(isset($_POST['fecha_desde']) ? (string)$_POST['fecha_desde'] : '');
     $fechaHasta = trim(isset($_POST['fecha_hasta']) ? (string)$_POST['fecha_hasta'] : '');
     $descripcion = trim(isset($_POST['descripcion']) ? (string)$_POST['descripcion'] : '');
+    $publicDetails = tickex_event_presentation_post($_POST);
     if ($nombre === '') $error = 'El nombre es obligatorio.';
+    if ($error === '') $error = tickex_event_presentation_validate($publicDetails, false);
 
     $flyerFilename = isset($evento['flyer_filename']) ? $evento['flyer_filename'] : null;
     if ($error === '' && isset($_FILES['flyer']) && $_FILES['flyer']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -60,15 +64,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_evento'])) {
     }
 
     if ($error === '') {
-        $st = $pdo->prepare('UPDATE eventos SET nombre=:nombre, descripcion=:descripcion, flyer_filename=:flyer, fecha_desde=:desde, fecha_hasta=:hasta WHERE id=:id');
-        $st->execute(array(
+        $sets = array(); foreach (array_keys(tickex_event_presentation_columns()) as $field) $sets[] = $field . '=:' . $field;
+        $st = $pdo->prepare('UPDATE eventos SET nombre=:nombre, descripcion=:descripcion, flyer_filename=:flyer, fecha_desde=:desde, fecha_hasta=:hasta, ' . implode(',', $sets) . ' WHERE id=:id');
+        $params = array(
             ':nombre' => $nombre,
             ':descripcion' => $descripcion !== '' ? $descripcion : null,
             ':flyer' => $flyerFilename,
             ':desde' => $fechaDesde !== '' ? $fechaDesde : null,
             ':hasta' => $fechaHasta !== '' ? $fechaHasta : null,
             ':id' => $eventoId,
-        ));
+        );
+        $st->execute(array_merge($params, tickex_event_presentation_params($publicDetails)));
         $okMsg = 'Evento actualizado.';
         $stEv->execute(array(':id' => $eventoId));
         $evento = $stEv->fetch(PDO::FETCH_ASSOC);
@@ -154,6 +160,20 @@ include __DIR__ . '/inc/layout_top.php';
     <label>Descripción</label><textarea name="descripcion" rows="3"><?php echo e(isset($evento['descripcion']) ? $evento['descripcion'] : ''); ?></textarea>
     <label>Fechas (desde / hasta)</label>
     <div style="display:flex;gap:8px;flex-wrap:wrap;"><input type="date" name="fecha_desde" value="<?php echo e(isset($evento['fecha_desde']) ? $evento['fecha_desde'] : ''); ?>"><input type="date" name="fecha_hasta" value="<?php echo e(isset($evento['fecha_hasta']) ? $evento['fecha_hasta'] : ''); ?>"></div>
+    <h3 style="margin-top:22px;">Horarios</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;"><label>Puertas<input type="time" name="hora_puertas" value="<?php echo e(isset($evento['hora_puertas']) ? $evento['hora_puertas'] : ''); ?>"></label><label>Show (opcional)<input type="time" name="hora_show" value="<?php echo e(isset($evento['hora_show']) ? $evento['hora_show'] : ''); ?>"></label></div>
+    <h3 style="margin-top:22px;">Información pública opcional</h3>
+    <div class="muted" style="margin-bottom:12px;">Solo aparecerán en el checkout los datos que completes.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+      <label>Lugar<input name="lugar" maxlength="120" value="<?php echo e(isset($evento['lugar']) ? $evento['lugar'] : ''); ?>"></label>
+      <label>Dirección<input name="direccion" maxlength="220" value="<?php echo e(isset($evento['direccion']) ? $evento['direccion'] : ''); ?>"></label>
+      <label>Máximo por compra<input type="number" name="max_entradas_compra" min="1" max="20" value="<?php echo (int)(isset($evento['max_entradas_compra']) && $evento['max_entradas_compra'] ? $evento['max_entradas_compra'] : 10); ?>"></label>
+    </div>
+    <label>Cómo llegar</label><textarea name="indicaciones_llegada" rows="3" maxlength="1200"><?php echo e(isset($evento['indicaciones_llegada']) ? $evento['indicaciones_llegada'] : ''); ?></textarea>
+    <label>Transporte público</label><textarea name="transporte_publico" rows="3" maxlength="1200"><?php echo e(isset($evento['transporte_publico']) ? $evento['transporte_publico'] : ''); ?></textarea>
+    <label>Política de menores</label><textarea name="politica_menores" rows="2" maxlength="600"><?php echo e(isset($evento['politica_menores']) ? $evento['politica_menores'] : ''); ?></textarea>
+    <label>Accesibilidad</label><textarea name="movilidad_reducida" rows="2" maxlength="600"><?php echo e(isset($evento['movilidad_reducida']) ? $evento['movilidad_reducida'] : ''); ?></textarea>
+    <label>Elementos no permitidos</label><textarea name="objetos_prohibidos" rows="3" maxlength="1200"><?php echo e(isset($evento['objetos_prohibidos']) ? $evento['objetos_prohibidos'] : ''); ?></textarea>
     <label>Flyer (PNG/JPG, máximo 2 MB)</label><input type="file" name="flyer" accept="image/png,image/jpeg">
     <div style="margin-top:10px;"><button class="btn" type="submit">Guardar cambios</button></div>
   </form>
