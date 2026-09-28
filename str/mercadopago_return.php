@@ -6,6 +6,7 @@ require_once __DIR__ . '/inc/order_events.php';
 
 $title = 'Estado del pago';
 $ref = isset($_GET['ref']) ? trim((string)$_GET['ref']) : '';
+$mobileReturnUrl = preg_match('/^mobile-[a-f0-9]{32}$/', $ref) ? 'tickex://checkout/' . $ref : null;
 $paymentId = isset($_GET['payment_id']) ? trim((string)$_GET['payment_id']) : (isset($_GET['collection_id']) ? trim((string)$_GET['collection_id']) : '');
 $visualState = isset($_GET['state']) ? trim((string)$_GET['state']) : '';
 $order = null;
@@ -45,6 +46,10 @@ include __DIR__ . '/inc/layout_top.php';
   <p><?php echo e($message); ?></p>
   <?php if ($order): ?>
     <p class="muted">Pago: <?php echo e(isset($order['payment_status']) ? $order['payment_status'] : 'pending'); ?> · Entradas: <?php echo e(isset($order['processing_status']) ? $order['processing_status'] : 'pending'); ?> · Email: <?php echo e(isset($order['email_status']) ? $order['email_status'] : 'pending'); ?></p>
+  <?php endif; ?>
+  <?php if ($mobileReturnUrl): ?>
+    <p><a class="btn" href="<?php echo e($mobileReturnUrl); ?>">Volver a la app y consultar estado</a></p>
+    <p class="muted">La app consulta el estado real en Tickex; este enlace no confirma el pago.</p>
   <?php endif; ?>
 </div>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
