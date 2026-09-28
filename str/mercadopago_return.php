@@ -6,7 +6,7 @@ require_once __DIR__ . '/inc/order_events.php';
 
 $title = 'Estado del pago';
 $ref = isset($_GET['ref']) ? trim((string)$_GET['ref']) : '';
-$mobileReturnUrl = preg_match('/^mobile-[a-f0-9]{32}$/', $ref) ? 'tickex://checkout/' . $ref : null;
+$mobileReturnUrl = preg_match('/^mobile-[a-f0-9]{32}$/', $ref) ? 'tickex://checkout/' . $ref . '?returned=1' : null;
 $paymentId = isset($_GET['payment_id']) ? trim((string)$_GET['payment_id']) : (isset($_GET['collection_id']) ? trim((string)$_GET['collection_id']) : '');
 $visualState = isset($_GET['state']) ? trim((string)$_GET['state']) : '';
 $order = null;
