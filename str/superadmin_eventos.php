@@ -61,6 +61,10 @@ $flashErr = '';
 
 // Acción: ocultar/publicar en el sitio (publicado_site)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_site') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud inválida.');
+    }
     $eid = isset($_POST['event_id']) ? (int)$_POST['event_id'] : 0;
     $to  = isset($_POST['to']) ? (int)$_POST['to'] : 0;
     if ($eid > 0 && ($to === 0 || $to === 1) && $hasPublicadoSite) {
@@ -78,23 +82,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 $q = isset($_GET['q']) ? trim($_GET['q']) : '';
 
-// Detectar si podemos unir con usuarios (para mostrar creador)
-$hasUsuarios = false;
-$hasUsuariosId = false;
-$hasUsuariosEmail = false;
+// El propietario del evento es un registro de usuarios_admin, no un comprador.
+$hasAdminOwners = false;
 try {
-    $rowU = $pdo->query("SELECT type FROM sqlite_master WHERE name='usuarios' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    $rowU = $pdo->query("SELECT type FROM sqlite_master WHERE name='usuarios_admin' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
     if ($rowU) {
-        $hasUsuarios = true;
-        $colsU = $pdo->query("PRAGMA table_info(usuarios)")->fetchAll(PDO::FETCH_ASSOC);
+        $hasId = false; $hasEmail = false;
+        $colsU = $pdo->query("PRAGMA table_info(usuarios_admin)")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($colsU as $c) {
             $n = isset($c['name']) ? $c['name'] : '';
-            if ($n === 'id') $hasUsuariosId = true;
-            if ($n === 'email') $hasUsuariosEmail = true;
+            if ($n === 'id') $hasId = true;
+            if ($n === 'email') $hasEmail = true;
         }
+        $hasAdminOwners = $hasId && $hasEmail;
     }
 } catch (Exception $e) {
-    $hasUsuarios = false;
+    $hasAdminOwners = false;
 }
 
 $where = array();
@@ -109,7 +112,9 @@ if ($q !== '') {
         $where[] = 'e.id = :idq';
         $params[':idq'] = (int)$q;
     } else {
-        $where[] = '(e.nombre LIKE :q OR e.slug LIKE :q)';
+        $where[] = $hasAdminOwners
+            ? '(e.nombre LIKE :q OR e.slug LIKE :q OR EXISTS (SELECT 1 FROM usuarios_admin au WHERE au.id=e.creado_por_admin_id AND au.email LIKE :q))'
+            : '(e.nombre LIKE :q OR e.slug LIKE :q)';
         $params[':q'] = '%' . $q . '%';
     }
 }
@@ -140,9 +145,9 @@ if ($hasFechaDesde || $hasFechaHasta) {
 
 $selectCreator = 'NULL AS creador_email';
 $joinCreator = '';
-if ($hasCreadoPor && $hasUsuarios && $hasUsuariosId && $hasUsuariosEmail) {
+if ($hasCreadoPor && $hasAdminOwners) {
     $selectCreator = 'u.email AS creador_email';
-    $joinCreator = 'LEFT JOIN usuarios u ON u.id = e.creado_por_admin_id';
+    $joinCreator = 'LEFT JOIN usuarios_admin u ON u.id = e.creado_por_admin_id';
 }
 
 $sql = "SELECT e.*, $selectCreator\nFROM eventos e\n$joinCreator\n";
@@ -280,6 +285,7 @@ include __DIR__ . '/inc/layout_top.php';
 
             <?php if ($hasPublicadoSite): ?>
               <form method="post" style="display:inline;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="toggle_site">
                 <input type="hidden" name="event_id" value="<?php echo $eid; ?>">
                 <input type="hidden" name="to" value="<?php echo $pub ? 0 : 1; ?>">

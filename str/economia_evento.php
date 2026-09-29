@@ -48,9 +48,16 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </div>
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Total recaudado</div>
+      <div class="muted" style="font-size:12px;">Recaudación registrada</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Incluye movimientos manuales netos. El costo estimado de TotalCoin ya está descontado.</div>
+    </div>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Procesamiento TotalCoin (ya descontado)</div>
+      <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
+        $<?php echo number_format(isset($ecoStats['payment_processing_cost']) ? (float)$ecoStats['payment_processing_cost'] : 0, 2); ?>
       </div>
     </div>
     <?php if ($ecoStats['manual_income'] != 0): ?>

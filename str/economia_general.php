@@ -5,6 +5,11 @@ require_once __DIR__.'/inc/manual_income.php';
 require_once __DIR__.'/inc/produccion.php';
 
 require_login();
+$csrf = tickex_csrf_token();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+  http_response_code(403);
+  exit('Solicitud inválida.');
+}
 
 $cu = current_user();
 $rol = isset($cu['tipo_global']) && $cu['tipo_global'] !== ''
@@ -267,6 +272,7 @@ foreach ($movimientos as $m) {
 // ------------------------------------------------------------------
 $ingresosTotales = 0;
 $ingresosManual  = 0;
+$costosProcesamiento = 0;
 $entradasVendidas = 0;
 $totalesPorEvento = array();
 $ventasCheckout = 0.0; // Tickex/SenForms (checkout)
@@ -286,6 +292,7 @@ foreach ($eventIds as $eid) {
     $stats = get_economic_stats($pdo, $eid);
     $ingresosTotales += $stats['total_recaudado'];
     $ingresosManual  += $stats['manual_income'];
+    $costosProcesamiento += isset($stats['payment_processing_cost']) ? (float)$stats['payment_processing_cost'] : 0;
     $entradasVendidas += $stats['entradas_vendidas'];
 
     // Desglose ventas por origen (para aplicar cargo de servicio SOLO al checkout)
@@ -719,11 +726,15 @@ include __DIR__.'/inc/layout_top.php';
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Ingresos totales</div>
     <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">$<?php echo number_format($ingresosTotales,2); ?></div>
-    <div style="font-size:12px;color:var(--muted);">Incluye ventas + manuales (neto)</div>
+    <div style="font-size:12px;color:var(--muted);">Incluye ventas y movimientos manuales netos. El costo estimado de TotalCoin ya está descontado.</div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Manual (otros/varios)</div>
     <div style="font-size:24px;font-weight:700;margin-top:4px;color:<?php echo ($ingresosManual >= 0 ? 'var(--info)' : 'var(--warn)'); ?>;">$<?php echo number_format($ingresosManual,2); ?></div>
+  </div>
+  <div class="card" style="margin:0;background:var(--panel-2);">
+    <div class="muted" style="font-size:12px;">Procesamiento TotalCoin (ya descontado)</div>
+    <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">$<?php echo number_format($costosProcesamiento,2); ?></div>
   </div>
   <div class="card" style="margin:0;background:var(--panel-2);">
     <div class="muted" style="font-size:12px;">Gastos registrados</div>
@@ -764,6 +775,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Agregar movimiento</h3>
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="add_mov">
     <div>
       <label>Tipo</label>
@@ -858,6 +870,7 @@ include __DIR__.'/inc/layout_top.php';
               <td style="text-align:center;">
                 <?php $incl = isset($m['incluye_en_totales']) ? (int)$m['incluye_en_totales'] : 1; ?>
                 <form method="post" style="margin:0;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="toggle_mov">
                   <input type="hidden" name="id" value="<?php echo (int)$m['id']; ?>">
                   <input type="hidden" name="val" value="<?php echo $incl ? 0 : 1; ?>">
@@ -868,6 +881,7 @@ include __DIR__.'/inc/layout_top.php';
               </td>
               <td style="text-align:center;">
                 <form method="post" style="margin:0;" onsubmit="return confirm('¿Eliminar movimiento?');">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="del_mov">
                   <input type="hidden" name="id" value="<?php echo (int)$m['id']; ?>">
                   <button class="btn secondary" type="submit" style="padding:4px 10px;font-size:12px;background:var(--panel-2);color:var(--warn);border:1px solid var(--line);">Eliminar</button>

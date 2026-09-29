@@ -72,12 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashOk = 'Administrador independiente creado/actualizado. ID: ' . $newAdminId;
             } elseif ($accion === 'cambiar_rol' && $usuarioId > 0) {
                 $nuevoRol = (isset($_POST['nuevo_rol']) && $_POST['nuevo_rol'] === 'admin') ? 'admin' : 'cliente';
-                $stmt = $pdo->prepare('UPDATE usuarios_admin SET rol = :rol WHERE id = :id');
+                $stmt = $pdo->prepare('UPDATE usuarios SET rol = :rol WHERE id = :id');
                 $stmt->execute(array(':rol' => $nuevoRol, ':id' => $usuarioId));
                 $flashOk = 'Rol actualizado correctamente.';
             } elseif ($accion === 'cambiar_validado' && $usuarioId > 0) {
                 $nuevoVal = (isset($_POST['nuevo_validado']) && (string)$_POST['nuevo_validado'] === '1') ? 1 : 0;
-                $stmt = $pdo->prepare('UPDATE usuarios_admin SET email_confirmado = :val WHERE id = :id');
+                $stmt = $pdo->prepare('UPDATE usuarios SET email_confirmado = :val WHERE id = :id');
                 $stmt->execute(array(':val' => $nuevoVal, ':id' => $usuarioId));
                 $flashOk = 'Estado de validacion actualizado.';
             } elseif ($accion === 'bloquear' && $usuarioId > 0) {
