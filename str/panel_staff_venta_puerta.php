@@ -58,8 +58,8 @@ if ($activeEventId > 0) {
     $stT->execute(array(':eid' => $activeEventId));
     $allTipos = $stT->fetchAll(PDO::FETCH_ASSOC);
     foreach ($allTipos as $t) {
-      $tv = strtoupper(trim((string)($t['tipo_venta'] ?? '')));
-      $nom = strtoupper(trim((string)($t['nombre'] ?? '')));
+      $tv = strtoupper(trim((string)(isset($t['tipo_venta']) ? $t['tipo_venta'] : '')));
+      $nom = strtoupper(trim((string)(isset($t['nombre']) ? $t['nombre'] : '')));
       if ($tv === 'PUERTA' || strpos($nom, 'PUERTA') !== false) {
         $tiposPuerta[] = $t;
       }
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
   } else {
     $eventoPost = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
     $modo = isset($_POST['modo']) ? trim((string)$_POST['modo']) : 'tipo';
-    $nombre = trim((string)($_POST['nombre'] ?? ''));
+    $nombre = trim((string)(isset($_POST['nombre']) ? $_POST['nombre'] : ''));
     if ($nombre === '') $nombre = 'Puerta';
 
     if (!in_array($eventoPost, $staffEventIds, true) || $eventoPost <= 0) {
@@ -104,9 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       $tipoSeleccionadoId = isset($_POST['tipo_id']) ? (int)$_POST['tipo_id'] : 0;
 
       if ($modo === 'monto') {
-        $montoFinal = (int)round((float)str_replace(',', '.', (string)($_POST['monto_variable'] ?? '0')));
+        $montoFinal = (int)round((float)str_replace(',', '.', (string)(isset($_POST['monto_variable']) ? $_POST['monto_variable'] : '0')));
         if ($montoFinal < 0) $montoFinal = 0;
-        $tipoFinal = trim((string)($_POST['tipo_variable'] ?? 'PUERTA_VARIABLE'));
+        $tipoFinal = trim((string)(isset($_POST['tipo_variable']) ? $_POST['tipo_variable'] : 'PUERTA_VARIABLE'));
         if ($tipoFinal === '') $tipoFinal = 'PUERTA_VARIABLE';
       } else {
         $tipoMap = array();
@@ -115,8 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
           $flashErr = 'Seleccioná un tipo PUERTA válido.';
         } else {
           $sel = $tipoMap[$tipoSeleccionadoId];
-          $tipoFinal = (string)($sel['nombre'] ?? 'PUERTA');
-          $montoFinal = (int)round((float)($sel['precio'] ?? 0));
+          $tipoFinal = (string)(isset($sel['nombre']) ? $sel['nombre'] : 'PUERTA');
+          $montoFinal = (int)round((float)(isset($sel['precio']) ? $sel['precio'] : 0));
         }
       }
 
@@ -229,7 +229,7 @@ include __DIR__ . '/inc/layout_top.php';
   <?php else: ?>
     <div class="card" style="margin-bottom:12px;">
       <div class="muted">Evento actual</div>
-      <div><strong><?php echo e((string)($activeEvent['nombre'] ?? 'Sin evento')); ?></strong></div>
+      <div><strong><?php echo e((string)(isset($activeEvent['nombre']) ? $activeEvent['nombre'] : 'Sin evento')); ?></strong></div>
     </div>
 
     <?php if ($flashOk !== ''): ?><div class="flash ok" style="margin-bottom:12px;"><?php echo e($flashOk); ?></div><?php endif; ?>
@@ -252,7 +252,7 @@ include __DIR__ . '/inc/layout_top.php';
             <option value="">Seleccionar...</option>
             <?php foreach ($tiposPuerta as $tp): ?>
               <option value="<?php echo (int)$tp['id']; ?>">
-                <?php echo e((string)$tp['nombre']); ?> · $<?php echo number_format((float)($tp['precio'] ?? 0), 0, ',', '.'); ?> · disp <?php echo (int)($tp['cantidad_disponible'] ?? 0); ?>
+                <?php echo e((string)$tp['nombre']); ?> · $<?php echo number_format((float)(isset($tp['precio']) ? $tp['precio'] : 0), 0, ',', '.'); ?> · disp <?php echo (int)(isset($tp['cantidad_disponible']) ? $tp['cantidad_disponible'] : 0); ?>
               </option>
             <?php endforeach; ?>
           </select>
