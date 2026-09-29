@@ -11,6 +11,7 @@ require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
 require_once __DIR__ . '/inc/ticket_packages.php';
 require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
+require_once __DIR__ . '/inc/checkout_ticket_catalog.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -273,6 +274,7 @@ if ($defaults['dni'] === '' && $sessionDni !== '') $defaults['dni'] = $sessionDn
 
 // Cargar evento y entradas desde Tickex (SQLite). Enriquecer con SenForms si estuviera accesible.
 $event = null; $ticketTypes = array();
+$allowLegacyFallback = $eventId <= 0;
 $flyerUrl = null;
 $eventName = 'Evento'; $eventDate = ''; $eventLoc  = '';
 if ($eventId > 0) {
@@ -347,6 +349,10 @@ if ($eventId > 0) {
       }
     } catch (Exception $e) {}
 
+    // Si el evento ya tiene catálogo, tipos agotados u ocultos no deben
+    // reaparecer como entradas inferidas del historial.
+    $allowLegacyFallback = tickex_checkout_legacy_fallback_allowed($pdoLocal, $eventId, $hasTipos);
+
     if ($hasTipos) {
       try {
         tickex_free_checkout_ensure_schema($pdoLocal);
@@ -418,7 +424,7 @@ if ($eventId > 0) {
     }
 
     // Si no hubo tipos_entrada, inferir de entradas cargadas
-    if (empty($ticketTypes)) {
+    if (empty($ticketTypes) && $allowLegacyFallback) {
       $stTp = $pdoLocal->prepare("SELECT COALESCE(tipo,'General') AS tipo, MAX(COALESCE(monto_pagado,0)) AS precio FROM entradas WHERE evento_id = :id GROUP BY tipo ORDER BY tipo ASC");
       $stTp->execute(array(':id' => $eventId));
       while ($r = $stTp->fetch(PDO::FETCH_ASSOC)) {
@@ -554,7 +560,7 @@ foreach ($ticketTypes as $tt) {
     'available_qr' => $availableQr,
   );
 }
-if (empty($entryOptions)) {
+if (empty($entryOptions) && $allowLegacyFallback) {
   $fallbackPrice = $defaults['amount'] !== '' ? (float)$defaults['amount'] : 0;
   $entryOptions[] = array(
     'id'    => 'general',
