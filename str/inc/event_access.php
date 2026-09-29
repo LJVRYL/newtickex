@@ -4,10 +4,10 @@ if (!function_exists('tickex_admin_id')) {
     function tickex_admin_id($user = null)
     {
         if (!is_array($user) && function_exists('current_user')) $user = current_user();
-        foreach (array('admin_id', 'user_id', 'id') as $key) {
+        foreach (array('user_id', 'admin_id', 'id') as $key) {
             if (isset($user[$key]) && (int)$user[$key] > 0) return (int)$user[$key];
         }
-        foreach (array('admin_id', 'user_id') as $key) {
+        foreach (array('user_id', 'admin_id') as $key) {
             if (isset($_SESSION[$key]) && (int)$_SESSION[$key] > 0) return (int)$_SESSION[$key];
         }
         return 0;

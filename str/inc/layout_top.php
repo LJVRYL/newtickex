@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/routes.php';
 $cu = isset($cu) ? $cu : (function_exists('current_user') ? current_user() : array());
 require_once __DIR__ . '/notificaciones.php';
 // Fallback: algunas páginas incluyen layout_top sin definir e()
@@ -63,6 +64,7 @@ if ($isLogged) {
   }
 }
 $bodyClass = trim($themeClass . ($isLogged ? '' : ' no-nav'));
+$bodyClass = !empty($hideNav) ? ($bodyClass . ' no-nav') : $bodyClass;
 $role = isset($_SESSION['rol']) ? $_SESSION['rol'] : (isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '');
 $isClient = ($role === 'cliente');
 $bodyClass = $isClient ? ($bodyClass . ' no-nav') : $bodyClass;
@@ -78,7 +80,9 @@ if ($isApp) {
 }
 
 $page = basename(isset($_SERVER['SCRIPT_NAME']) ? (string)$_SERVER['SCRIPT_NAME'] : '');
-if ($page === 'login.php') {
+$requestPath = parse_url(isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '', PHP_URL_PATH);
+$requestPath = $requestPath === '/' ? '/' : rtrim((string)$requestPath, '/');
+if ($page === 'login.php' || $requestPath === '/ingresar') {
   $bodyClass .= ' page-login';
 }
 if ($page === 'panel_staff.php') {
