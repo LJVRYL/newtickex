@@ -4,35 +4,58 @@
 // Permite loguear por EMAIL (si el input tiene @) o por username.
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/login_security.php';
+require_once __DIR__ . '/inc/google_identity.php';
+
+// Entrada histórica: conservamos la URL para favoritos y enlaces antiguos,
+// pero toda persona ingresa hoy desde una única pantalla.
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $params = array();
+    if (!empty($_GET['next'])) $params['next'] = (string)$_GET['next'];
+    if (!empty($_GET['google_error'])) $params['google_error'] = (string)$_GET['google_error'];
+    header('Location: login.php' . ($params ? '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986) : ''), true, 302);
+    exit;
+}
 
 $title   = 'Ingresar como administrador - Tickex';
 $errors  = array();
 $loginId = '';
+$csrf = tickex_csrf_token();
+$googleError = isset($_GET['google_error']) ? trim((string)$_GET['google_error']) : '';
+$googleEnabled = tickex_google_is_configured();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $loginId = isset($_POST['login_id']) ? trim($_POST['login_id']) : '';
     $password = isset($_POST['password']) ? (string)$_POST['password'] : '';
 
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    }
+    if (tickex_login_throttled('admin', 10, 600)) {
+        $errors[] = 'Demasiados intentos. Esperá unos minutos e intentá de nuevo.';
+        usleep(350000);
+    }
     if ($loginId === '' || $password === '') {
         $errors[] = 'Email/usuario y contraseña son obligatorios.';
-    } else {
+    } elseif (empty($errors)) {
         try {
-            $pdo = new PDO('sqlite:' . __DIR__ . '/save_the_rave.sqlite');
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            // Usar la conexión central: configura busy_timeout/WAL y evita que el
+            // login compita con otra conexión SQLite durante la inicialización.
+            $pdo = db();
 
             // Si contiene @ asumimos que es un email, si no username
             if (strpos($loginId, '@') !== false) {
                 $stmt = $pdo->prepare("
                     SELECT id, username, email, password, rol, tipo_global, activo, evento_id
                     FROM usuarios_admin
-                    WHERE email = :v
+                    WHERE email = :v COLLATE NOCASE
                     LIMIT 1
                 ");
             } else {
                 $stmt = $pdo->prepare("
                     SELECT id, username, email, password, rol, tipo_global, activo, evento_id
                     FROM usuarios_admin
-                    WHERE username = :v
+                    WHERE username = :v COLLATE NOCASE
                     LIMIT 1
                 ");
             }
@@ -41,39 +64,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$admin) {
+                tickex_login_record_failure('admin');
                 $errors[] = 'Email/usuario o contraseña incorrectos.';
             } else {
                 if ((int)$admin['activo'] !== 1) {
-                    $errors[] = 'Este usuario está desactivado.';
+                    tickex_login_record_failure('admin');
+                    $errors[] = 'Email/usuario o contraseña incorrectos.';
                 } else {
                     $stored = (string)$admin['password'];
-                    $okPass = false;
-
-                    // Preferir hashes seguros y mantener compatibilidad con cuentas legacy.
-                    if (function_exists('password_verify') && password_verify($password, $stored)) {
-                        $okPass = true;
-                    } elseif ($stored === $password) {
-                        $okPass = true;
-                    } elseif ($stored === md5($password)) {
-                        $okPass = true;
-                    }
+                    $passwordCheck = tickex_password_verify_compat($password, $stored);
+                    $okPass = !empty($passwordCheck['valid']);
 
                     if (!$okPass) {
+                        tickex_login_record_failure('admin');
                         $errors[] = 'Email/usuario o contraseña incorrectos.';
                     } else {
+                        if (!empty($passwordCheck['needs_upgrade'])) {
+                            tickex_password_upgrade($pdo, 'usuarios_admin', 'password', (int)$admin['id'], $password);
+                        }
+                        tickex_login_clear_failures('admin');
                         if (session_status() !== PHP_SESSION_ACTIVE) {
                             session_start();
                         }
 
+                        if (function_exists('session_regenerate_id')) {
+                            @session_regenerate_id(true);
+                        }
+                        tickex_clear_identity_session();
+
                         $_SESSION['usuario']     = $admin['username'];
+                        $_SESSION['username']    = $admin['username'];
+                        $_SESSION['usuario_email'] = $admin['email'];
+                        $_SESSION['email']       = $admin['email'];
+                        $_SESSION['admin_id']    = (int)$admin['id'];
                         $_SESSION['user_id']     = (int)$admin['id'];
+                        $_SESSION['es_admin']    = true;
+                        $_SESSION['is_admin']    = true;
+                        $_SESSION['auth_context'] = 'admin';
+                        $_SESSION['rol']         = (string)$admin['rol'];
                         $_SESSION['tipo_global'] = (string)$admin['tipo_global'];
+                        $_SESSION['rol_evento']  = !empty($admin['rol_evento'])
+                            ? (string)$admin['rol_evento']
+                            : (string)$admin['rol'];
 
                         // Staff de puerta
                         if ($admin['tipo_global'] === 'staff_evento') {
                             // buscar asignaciones múltiples
-                            $pdoMap = new PDO('sqlite:' . __DIR__ . '/save_the_rave.sqlite');
-                            $pdoMap->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                            $pdoMap = $pdo;
                             $stmtEvStaff = $pdoMap->prepare("SELECT evento_id FROM staff_eventos WHERE staff_id = :sid");
                             $stmtEvStaff->execute(array(':sid'=>(int)$admin['id']));
                             $evList = $stmtEvStaff->fetchAll(PDO::FETCH_COLUMN);
@@ -101,16 +138,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         // Super admin / admin de eventos
                         if ($admin['tipo_global'] === 'super_admin') {
-                            header('Location: panel_superadmin.php');
+                            header('Location: ' . tickex_route('admin_home', array()));
                             exit;
                         } else {
-                            header('Location: panel_admin.php');
+                            header('Location: ' . tickex_route('admin_home', array()));
                             exit;
                         }
                     }
                 }
             }
         } catch (Exception $e) {
+            error_log('Tickex admin login database error: ' . $e->getMessage());
             $errors[] = 'Error interno al conectar con la base de datos.';
         }
     }
@@ -118,20 +156,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="container" style="max-width:480px;margin:40px auto;">
+<main class="tx-login-shell tx-admin-login-shell">
+  <section class="tx-login-story">
+    <div class="tx-login-brand">TICKEX <span>BACKSTAGE</span></div>
+    <div class="tx-login-story-copy">
+      <div class="tx-kicker"><i></i> Centro de operaciones</div>
+      <h1>Tu evento bajo control, desde cualquier lugar.</h1>
+      <p>Ventas, puerta, equipo, comunicación y economía organizados en una sola plataforma.</p>
+    </div>
+    <div class="tx-login-proof">
+      <div><strong>Ventas</strong><span>Seguimiento claro</span></div>
+      <div><strong>Puerta</strong><span>Accesos en vivo</span></div>
+      <div><strong>Equipo</strong><span>Roles separados</span></div>
+    </div>
+  </section>
+  <section class="tx-login-form-column">
+  <div class="container tx-admin-login-card">
+    <div class="tx-kicker"><i></i> Acceso privado</div>
     <h1 class="mb-4">Ingreso de administradores</h1>
+    <p class="tx-login-intro">Ingresá para administrar tus eventos y operaciones.</p>
+
+    <?php if ($googleError !== ''): ?>
+        <div class="flash err" style="margin:16px 0;"><?php echo htmlspecialchars($googleError, ENT_QUOTES, 'UTF-8'); ?></div>
+    <?php endif; ?>
+
+    <?php if ($googleEnabled): ?>
+        <a class="tx-google-login" href="google_login.php?context=admin">
+          <span class="tx-google-mark" aria-hidden="true">G</span>
+          Continuar con Google
+        </a>
+        <div class="tx-login-divider"><span>o ingresá con tu contraseña</span></div>
+    <?php endif; ?>
 
     <?php if ($errors): ?>
         <div class="alert alert-danger">
             <ul style="margin:0;padding-left:20px;">
                 <?php foreach ($errors as $e): ?>
-                    
+                    <li><?php echo htmlspecialchars($e, ENT_QUOTES, 'UTF-8'); ?></li>
                 <?php endforeach; ?>
             </ul>
         </div>
     <?php endif; ?>
 
     <form method="post" autocomplete="off">
+        <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
         <div class="mb-3">
             <label for="login_id" class="form-label">Email de admin</label>
             <input
@@ -166,6 +234,8 @@ include __DIR__ . '/inc/layout_top.php';
         Este acceso es sólo para organizadores, productores y personal de puerta.
         Si sos público general, usá el ingreso desde la página principal de Tickex.
     </p>
-</div>
+  </div>
+  </section>
+</main>
 <?php
 include __DIR__ . '/inc/layout_bottom.php';

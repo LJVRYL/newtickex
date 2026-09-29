@@ -1,8 +1,12 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
 require_once __DIR__ . '/inc/turnstile.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
+require_once __DIR__ . '/inc/auth.php';
+require_once __DIR__ . '/inc/login_security.php';
+require_once __DIR__ . '/inc/google_identity.php';
 
 // Conexión directa a la misma base que usamos en registro_usuario.php
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
@@ -45,6 +49,9 @@ try {
 $errores = array();
 $email   = '';
 $pass    = '';
+$csrf = tickex_csrf_token();
+$googleError = isset($_GET['google_error']) ? trim((string)$_GET['google_error']) : '';
+$googleEnabled = tickex_google_is_configured();
 
 // Soporte para volver a una URL específica (ej: checkout) luego del login.
 $next = '';
@@ -93,13 +100,13 @@ $nextSafe = _safe_next_url($next);
 // ---------------------------------------------------------------------
 if (!empty($_SESSION['es_admin']) && !empty($_SESSION['admin_id'])) {
     // Usuario admin ya logueado
-  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_admin.php'));
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('admin_home', array())));
     exit;
 }
 
 if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
     // Usuario común ya logueado
-  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
+  header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('customer_home', array())));
     exit;
 }
 
@@ -107,6 +114,9 @@ if (isset($_SESSION['usuario_id']) && $_SESSION['usuario_id'] > 0) {
 // Manejo del POST (login)
 // ---------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+      $errores[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    }
     // Rate limit básico por sesión: evita brute force casual
     $now = time();
     $windowSec = 10 * 60;
@@ -149,6 +159,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errores)) {
         try {
+            // Un único acceso: primero validamos si el email corresponde a una
+            // cuenta administrativa activa. La contraseña debe ser la propia
+            // de esa cuenta; una contraseña de comprador nunca eleva permisos.
+            $adminStmt = $pdo->prepare("SELECT id,username,email,password,rol,tipo_global,rol_evento,activo,evento_id FROM usuarios_admin WHERE email=:email COLLATE NOCASE LIMIT 1");
+            $adminStmt->execute(array(':email'=>$email));
+            $adminAccount = $adminStmt->fetch(PDO::FETCH_ASSOC);
+            if ($adminAccount && (int)$adminAccount['activo'] === 1) {
+              $adminPassword = tickex_password_verify_compat($pass, (string)$adminAccount['password']);
+              if (!empty($adminPassword['valid'])) {
+                if (!empty($adminPassword['needs_upgrade'])) {
+                  tickex_password_upgrade($pdo, 'usuarios_admin', 'password', (int)$adminAccount['id'], $pass);
+                }
+                $_SESSION['_login_fail_count'] = 0;
+                $_SESSION['_login_fail_ts'] = time();
+                $destination = tickex_google_establish_session($pdo, 'admin', $adminAccount);
+                header('Location: ' . ($nextSafe !== '' ? $nextSafe : $destination));
+                exit;
+              }
+            }
+
             // Detectar columnas disponibles en la vista/tabla usuarios
             $hasPwdHash = false;
             $hasLegacy  = false;
@@ -221,12 +251,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       @session_regenerate_id(true);
                     }
 
+					tickex_clear_identity_session();
+
                     // Reset rate limit
                     $_SESSION['_login_fail_count'] = 0;
                     $_SESSION['_login_fail_ts'] = time();
 
                     // Datos base del usuario (vista usuarios)
                     $_SESSION['usuario_id']     = (int)$u['id'];
+                    $_SESSION['auth_context']   = 'user';
                     $_SESSION['usuario_email']  = $u['email'];
                     $_SESSION['usuario_nombre'] = trim($u['nombre'] . ' ' . $u['apellido']);
                   $_SESSION['first_name']      = isset($u['nombre']) ? (string)$u['nombre'] : '';
@@ -237,57 +270,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['nombre']         = $_SESSION['usuario_nombre'];
                     $_SESSION['usuario']        = $u['email'];
 
-                    // -----------------------------------------------------
-                    // NUEVO: si también existe en usuarios_admin → admin
-                    // -----------------------------------------------------
-                    try {
-                        $stmtAdmin = $pdo->prepare("
-                            SELECT
-                                id,
-                                username,
-                                email,
-                                rol,
-                                tipo_global,
-                                rol_evento
-                            FROM usuarios_admin
-                            WHERE email = :email
-                              AND activo = 1
-                            LIMIT 1
-                        ");
-                        $stmtAdmin->execute(array(':email' => $u['email']));
-                        $adminRow = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
-
-                        if ($adminRow) {
-                          // Es un admin del sistema → setear sesión como admin
-                          $_SESSION['es_admin']    = true;
-                          $_SESSION['admin_id']    = (int)$adminRow['id'];
-                          $_SESSION['user_id']     = (int)$adminRow['id']; // muchos scripts usan user_id
-                          $_SESSION['usuario']     = $adminRow['username'];
-                          $_SESSION['rol']         = $adminRow['rol'];
-                          $_SESSION['tipo_global'] = $adminRow['tipo_global'];
-                          $_SESSION['rol_evento']  = isset($adminRow['rol_evento']) ? $adminRow['rol_evento'] : '';
-
-                          // Si no había nombre/email en la vista usuarios, usar los de admin
-                          if (empty($_SESSION['usuario_nombre']) && isset($adminRow['nombre'])) {
-                            $_SESSION['usuario_nombre'] = $adminRow['nombre'];
-                            $_SESSION['nombre'] = $adminRow['nombre'];
-                          }
-                          if (empty($_SESSION['usuario_email']) && isset($adminRow['email'])) {
-                            $_SESSION['usuario_email'] = $adminRow['email'];
-                            $_SESSION['email'] = $adminRow['email'];
-                          }
-
-                          // Redirigimos al panel de admins
-                          header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_admin.php'));
-                          exit;
-                        }
-                    } catch (Exception $e) {
-                        // Si falla la consulta de admins, no rompemos el login de usuario común
-                        // error_log('Error consultando usuarios_admin: '.$e->getMessage());
-                    }
-
                     // Si NO es admin, seguimos con el flujo normal de usuario común:
-                    header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
+                    header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('customer_home', array())));
                     exit;
                 }
             }
@@ -345,32 +329,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
 
                 $okCli = false;
-              $firstSet = false;
                 if ($cli && !empty($cli['password_hash'])) {
                     $hashCli = (string)$cli['password_hash'];
-                    if (function_exists('password_verify') && strpos($hashCli, '$2') === 0) {
-                        $okCli = password_verify($pass, $hashCli);
+                    $cliPasswordCheck = tickex_password_verify_compat($pass, $hashCli);
+                    $okCli = !empty($cliPasswordCheck['valid']);
+                    if ($okCli && !empty($cliPasswordCheck['needs_upgrade'])) {
+                        tickex_password_upgrade($pdo, 'registro_pendientes', 'password_hash', (int)$cli['id'], $pass);
                     }
-                    if (!$okCli && strlen($hashCli) === 32 && ctype_xdigit($hashCli)) {
-                        $okCli = (md5($pass) === strtolower($hashCli));
-                    }
-                    if (!$okCli && $hashCli !== '') {
-                        $okCli = ($pass === $hashCli);
-                    }
-              } elseif ($cli && (string)$cli['password_hash'] === '') {
-                // Primer seteo de contraseña: si no tenía, tomamos la enviada y la guardamos (mín 6 chars)
-                if (strlen($pass) >= 6) {
-                  $firstSet = true;
-                  $newHash = function_exists('password_hash') ? password_hash($pass, PASSWORD_DEFAULT) : md5($pass);
-                  $upd = $pdo->prepare("UPDATE registro_pendientes SET password_hash = :h WHERE id = :id");
-                  $upd->execute(array(':h' => $newHash, ':id' => (int)$cli['id']));
-                  $cli['password_hash'] = $newHash;
-                  $okCli = true;
-                }
               }
 
                 if ($cli && $okCli) {
+					tickex_clear_identity_session();
+					if (function_exists('session_regenerate_id')) {
+					  @session_regenerate_id(true);
+					}
                     $_SESSION['usuario_id']     = (int)$cli['id'];
+					$_SESSION['auth_context']   = 'user';
                     $_SESSION['usuario_email']  = $cli['email'];
                     $_SESSION['usuario_nombre'] = trim((isset($cli['nombre']) ? (string)$cli['nombre'] : '') . ' ' . (isset($cli['apellido']) ? (string)$cli['apellido'] : ''));
                   $_SESSION['first_name']      = isset($cli['nombre']) ? (string)$cli['nombre'] : '';
@@ -383,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['email']          = $cli['email'];
                     $_SESSION['tipo_global']    = '';
 
-                  header('Location: ' . ($nextSafe !== '' ? $nextSafe : 'panel_usuario.php'));
+                  header('Location: ' . ($nextSafe !== '' ? $nextSafe : tickex_route('customer_home', array())));
                     exit;
                 }
 
@@ -402,20 +376,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---------------------------------------------------------------------
 include __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="card" style="max-width:480px;margin:0 auto 16px auto;text-align:center;">
-  <div style="margin-bottom:16px;">
+<main class="tx-login-shell">
+<section class="tx-login-story">
+  <div class="tx-login-brand">TICKEX <span>EVENT PLATFORM</span></div>
+  <div class="tx-login-story-copy">
+    <div class="tx-kicker"><i></i> Todo tu evento, en un mismo lugar</div>
+    <h1>Entradas, accesos y resultados en tiempo real.</h1>
+    <p>Una plataforma simple para comprar entradas, administrar eventos y llegar más rápido a lo que importa.</p>
+  </div>
+  <div class="tx-login-proof">
+    <div><strong>Seguro</strong><span>Acceso protegido</span></div>
+    <div><strong>Ágil</strong><span>Todo desde el celular</span></div>
+    <div><strong>Claro</strong><span>Información en vivo</span></div>
+  </div>
+</section>
+
+<section class="tx-login-form-column">
+<div class="card tx-login-heading">
+  <div class="tx-login-logo-wrap">
     <img src="tickex-logo_sobre_oscuro.svg"
          alt="Tickex"
-         style="height:230px;display:block;margin:0 auto 8px auto;">
+         class="tx-login-logo">
   </div>
   <h2>Iniciar sesión</h2>
-  <p style="color:var(--muted);margin-top:8px;">
+  <p>
     Ingresá con tu cuenta de Tickex para ver tus Tickex, historial de compras y facturas.
   </p>
 </div>
 
 <?php if (!empty($errores)): ?>
-  <div class="card" style="max-width:480px;margin:0 auto 16px auto;">
+  <div class="card tx-login-errors">
     <div class="flash err">
       <ul style="margin:0 0 0 18px;padding:0;">
         <?php foreach ($errores as $e): ?>
@@ -426,8 +416,19 @@ include __DIR__ . '/inc/layout_top.php';
   </div>
 <?php endif; ?>
 
-<div class="card" style="max-width:480px;margin:0 auto 16px auto;">
+<div class="card tx-login-card">
+  <?php if ($googleError !== ''): ?>
+    <div class="flash err" style="margin-bottom:16px;"><?php echo htmlspecialchars($googleError, ENT_QUOTES, 'UTF-8'); ?></div>
+  <?php endif; ?>
+  <?php if ($googleEnabled): ?>
+    <a class="tx-google-login" href="google_login.php?context=unified<?php echo $nextSafe !== '' ? '&amp;next=' . rawurlencode($nextSafe) : ''; ?>">
+      <span class="tx-google-mark" aria-hidden="true">G</span>
+      Continuar con Google
+    </a>
+    <div class="tx-login-divider"><span>o ingresá con tu contraseña</span></div>
+  <?php endif; ?>
   <form method="post">
+    <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
     <?php if ($nextSafe !== ''): ?>
       <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextSafe, ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
@@ -460,6 +461,8 @@ include __DIR__ . '/inc/layout_top.php';
     <a href="forgot_password.php">Recuperala acá</a>.
   </div>
 </div>
+</section>
+</main>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
 

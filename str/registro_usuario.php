@@ -46,6 +46,11 @@ $errores   = array();
 $mensajeOk = '';
 $email     = '';
 $nextUrl   = isset($_GET['next']) ? $_GET['next'] : '';
+$csrf      = tickex_csrf_token();
+
+if ($nextUrl !== '' && (strpos($nextUrl, '://') !== false || substr($nextUrl, 0, 2) === '//')) {
+  $nextUrl = '';
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['email'])) {
   $email = trim($_GET['email']);
@@ -58,7 +63,7 @@ function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
     $fromName  = 'Tickex';
     $from      = $fromName . ' <' . $fromEmail . '>';
 
-    $link    = 'https://str.tickex.com.ar/completar_registro.php?token=' . urlencode($token);
+    $link    = tickex_public_base_url('') . '/completar_registro.php?token=' . urlencode($token);
     $subject = 'Confirmá tu email en Tickex';
 
     $body  = "Hola,\n\n";
@@ -89,10 +94,13 @@ function enviar_mail_confirmacion_step1($email, $token, $registroId = null)
 
 // ---------- POST: procesar email ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $email = isset($_POST['email']) ? trim($_POST['email']) : '';
+  $email = isset($_POST['email']) ? strtolower(trim($_POST['email'])) : '';
   $nextUrl = isset($_POST['next']) ? $_POST['next'] : $nextUrl;
+  if ($nextUrl !== '' && (strpos($nextUrl, '://') !== false || substr($nextUrl, 0, 2) === '//')) $nextUrl = '';
 
-  if ($email === '') {
+  if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    $errores[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+  } elseif ($email === '') {
     $errores[] = 'El email es obligatorio.';
   } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $errores[] = 'El email no tiene un formato válido.';
@@ -217,53 +225,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include __DIR__.'/inc/layout_top.php';
 ?>
-<div class="card" style="max-width:480px;margin:0 auto 16px auto;text-align:center;">
-  <div style="margin-bottom:16px;">
-    <img src="tickex-logo_sobre_oscuro.svg"
-         alt="Tickex"
-         style="height:230px;display:block;margin:0 auto 8px auto;">
-  </div>
-  <h2>Registrate en Tickex</h2>
-  <p style="color:var(--muted);margin-top:8px;">
-    Ingresá tu email para recibir un enlace y completar tu registro.
-  </p>
-</div>
-
-<?php if (!empty($errores)): ?>
-  <div class="card" style="max-width:480px;margin:0 auto 16px auto;">
-    <div class="flash err">
-      <ul style="margin:0 0 0 18px;padding:0;">
-        <?php foreach ($errores as $e): ?>
-          <li><?php echo htmlspecialchars($e, ENT_QUOTES, 'UTF-8'); ?></li>
-        <?php endforeach; ?>
-      </ul>
+<main class="tx-login-shell tx-register-shell">
+  <section class="tx-login-story" aria-label="Beneficios de Tickex">
+    <div class="tx-login-brand">TICKEX <span>EVENT PLATFORM</span></div>
+    <div class="tx-login-story-copy">
+      <div class="tx-eyebrow"><span></span> TU CUENTA TICKEX</div>
+      <h1>Tus entradas y eventos, siempre a mano.</h1>
+      <p>Registrate una sola vez para guardar tus QR, seguir tus compras y acceder a todo desde el celular.</p>
     </div>
-  </div>
-<?php endif; ?>
-
-<?php if ($mensajeOk !== ''): ?>
-  <div class="card" style="max-width:480px;margin:0 auto 16px auto;">
-    <div class="flash ok">
-      <strong>Revisá tu email</strong><br><br>
-      <?php echo $mensajeOk; ?><br><br>
-      Si no ves el mail en unos minutos, revisá la carpeta de spam / correo no deseado.
+    <div class="tx-login-proof">
+      <div><strong>Un solo acceso</strong><span>PARA TODA LA PLATAFORMA</span></div>
+      <div><strong>QR protegidos</strong><span>ENLACES PERSONALES</span></div>
+      <div><strong>Siempre disponible</strong><span>DESDE CUALQUIER DISPOSITIVO</span></div>
     </div>
-  </div>
-<?php endif; ?>
+  </section>
 
-<div class="card" style="max-width:480px;margin:0 auto 32px auto;">
-  <form method="post" autocomplete="off">
-    <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8'); ?>">
-    <label for="email" style="margin-top:8px;display:block;">Email</label>
-    <input type="email" id="email" name="email" required
-           value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
+  <section class="tx-login-form-column">
+    <header class="tx-login-heading">
+      <div class="tx-login-logo-wrap"><img class="tx-login-logo" src="/tickex-logo_sobre_oscuro.svg" alt="Tickex"></div>
+      <h2>Creá tu cuenta</h2>
+      <p>Ingresá tu email y te enviaremos un enlace seguro para completar el registro.</p>
+    </header>
 
-    <?php tickex_turnstile_widget(array('theme' => 'auto')); ?>
+    <?php if (!empty($errores)): ?>
+      <div class="tx-login-errors flash err">
+        <ul style="margin:0 0 0 18px;padding:0;">
+          <?php foreach ($errores as $e): ?>
+            <li><?php echo htmlspecialchars($e, ENT_QUOTES, 'UTF-8'); ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
 
-    <button class="btn" type="submit" style="width:100%;margin-top:16px;">
-      Enviarme enlace de registro
-    </button>
-  </form>
-</div>
+    <?php if ($mensajeOk !== ''): ?>
+      <div class="tx-login-errors flash ok">
+        <strong>Revisá tu email</strong><br><br>
+        <?php echo $mensajeOk; ?><br><br>
+        Si no lo encontrás en unos minutos, revisá spam o correo no deseado.
+      </div>
+    <?php endif; ?>
+
+    <?php if ($nextUrl === 'empezar.php'): ?>
+    <p>Tu cuenta de organizador: confirmá tu email y continuá con Mercado Pago.</p>
+    <a class="btn" href="google_login.php?context=unified&amp;next=empezar.php">Continuar con Google</a>
+    <?php endif; ?>
+    <form class="tx-login-card" method="post" autocomplete="off">
+      <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
+      <input type="hidden" name="next" value="<?php echo htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8'); ?>">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="email"
+             value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
+
+      <?php tickex_turnstile_widget(array('theme' => 'auto')); ?>
+
+      <button class="btn" type="submit" style="margin-top:16px;">
+        Enviarme enlace de registro
+      </button>
+      <p class="tx-register-login">¿Ya tenés cuenta? <a href="<?php echo e(tickex_route('login', array()) . ($nextUrl === 'empezar.php' ? '?next=empezar.php' : '')); ?>">Ingresá</a></p>
+    </form>
+  </section>
+</main>
 
 <?php include __DIR__.'/inc/layout_bottom.php'; ?>
