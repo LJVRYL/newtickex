@@ -6,7 +6,8 @@ require_login();
 $cu = current_user();
 $role = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = event_newsletters_is_super($role);
-if (!is_admin() || (!$isSuper && $role !== 'admin_evento')) {
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+if (!$adminContext || !is_admin() || (!$isSuper && $role !== 'admin_evento')) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
     echo '<div class="card"><h2>Acceso restringido</h2><p>Solo para administradores.</p></div>';
@@ -15,7 +16,7 @@ if (!is_admin() || (!$isSuper && $role !== 'admin_evento')) {
 }
 
 $pdo = db();
-$adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id']) ? (int)$cu['id'] : 0));
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $ok = '';
 $error = '';
@@ -186,6 +187,9 @@ if ($event && isset($_GET['preview']) && (int)$_GET['preview'] === 1) {
 
 $title = 'Mi newsletter';
 include __DIR__ . '/inc/layout_top.php';
+include __DIR__ . '/inc/newsletter_builder_view.php';
+include __DIR__ . '/inc/layout_bottom.php';
+exit;
 ?>
 <style>
 .nl-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:16px;align-items:start}.nl-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.nl-artist{border:1px solid var(--line);background:var(--panel-2);border-radius:12px;padding:14px;margin-top:12px}.nl-preview{width:100%;min-height:720px;border:1px solid var(--line);border-radius:12px;background:#05050b}@media(max-width:900px){.nl-grid{grid-template-columns:1fr}.nl-form-grid{grid-template-columns:1fr}.nl-preview{min-height:560px}}

@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/inc/bootstrap.php';
+require_login();
 
 if (empty($_SESSION['usuario'])) {
     header('Location: admin.php');

@@ -15,6 +15,7 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 $pdo = db();
 $adminId = tickex_admin_id($cu);
 $isSuper = tickex_is_super_admin($cu);
+$csrf = tickex_csrf_token();
 
 // ------------------------------------------------------------------
 // Setup tablas
@@ -84,6 +85,10 @@ function inv_upload_photo($file) {
 // ------------------------------------------------------------------
 $flash = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud vencida o inválida.');
+    }
     $action = isset($_POST['action']) ? $_POST['action'] : '';
 
     if ($action === 'create_item') {
@@ -232,6 +237,7 @@ include __DIR__.'/inc/layout_top.php';
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Agregar item</h3>
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="create_item">
     <div>
       <label>Nombre</label>
@@ -338,6 +344,7 @@ include __DIR__.'/inc/layout_top.php';
     <div style="flex:1 1 320px;">
       <h3 style="margin-top:0;">Agregar log / foto</h3>
       <form method="post" enctype="multipart/form-data" style="display:grid;grid-template-columns:1fr;gap:8px;">
+        <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
         <input type="hidden" name="action" value="add_log">
         <input type="hidden" name="item_id" value="<?php echo (int)$viewItem['id']; ?>">
         <div>
