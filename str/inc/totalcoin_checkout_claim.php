@@ -1,5 +1,26 @@
 <?php
 
+if (!function_exists('tickex_sqlite_write_with_retry')) {
+    function tickex_sqlite_write_with_retry($operation, $attempts, $delayMicros)
+    {
+        $attempts = max(1, (int)$attempts);
+        $delayMicros = max(0, (int)$delayMicros);
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                return call_user_func($operation);
+            } catch (PDOException $e) {
+                $message = strtolower((string)$e->getMessage());
+                $locked = strpos($message, 'database is locked') !== false
+                    || strpos($message, 'database is busy') !== false
+                    || strpos($message, 'database table is locked') !== false;
+                if (!$locked || $attempt >= $attempts) throw $e;
+                if ($delayMicros > 0) usleep($delayMicros * $attempt);
+            }
+        }
+        return null;
+    }
+}
+
 if (!function_exists('tickex_totalcoin_new_reference')) {
     function tickex_totalcoin_new_reference($seed)
     {
@@ -85,15 +106,21 @@ if (!function_exists('tickex_totalcoin_checkout_claim')) {
 if (!function_exists('tickex_totalcoin_checkout_claim_ready')) {
     function tickex_totalcoin_checkout_claim_ready($pdo, $ref, $fingerprint, $requestId, $paymentUrl)
     {
-        $st = $pdo->prepare("UPDATE totalcoin_checkout_claims SET status='ready',request_id=:rid,payment_url=:url,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE ref=:ref AND fingerprint=:fp");
-        $st->execute(array(':rid' => (string)$requestId, ':url' => (string)$paymentUrl, ':ref' => (string)$ref, ':fp' => (string)$fingerprint));
+        return tickex_sqlite_write_with_retry(function () use ($pdo, $ref, $fingerprint, $requestId, $paymentUrl) {
+            $st = $pdo->prepare("UPDATE totalcoin_checkout_claims SET status='ready',request_id=:rid,payment_url=:url,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE ref=:ref AND fingerprint=:fp");
+            $st->execute(array(':rid' => (string)$requestId, ':url' => (string)$paymentUrl, ':ref' => (string)$ref, ':fp' => (string)$fingerprint));
+            return $st->rowCount();
+        }, 5, 200000);
     }
 }
 
 if (!function_exists('tickex_totalcoin_checkout_claim_failed')) {
     function tickex_totalcoin_checkout_claim_failed($pdo, $ref, $fingerprint, $error)
     {
-        $st = $pdo->prepare("UPDATE totalcoin_checkout_claims SET status='failed',last_error=:err,updated_at=CURRENT_TIMESTAMP WHERE ref=:ref AND fingerprint=:fp AND status='creating'");
-        $st->execute(array(':err' => substr((string)$error, 0, 1000), ':ref' => (string)$ref, ':fp' => (string)$fingerprint));
+        return tickex_sqlite_write_with_retry(function () use ($pdo, $ref, $fingerprint, $error) {
+            $st = $pdo->prepare("UPDATE totalcoin_checkout_claims SET status='failed',last_error=:err,updated_at=CURRENT_TIMESTAMP WHERE ref=:ref AND fingerprint=:fp AND status='creating'");
+            $st->execute(array(':err' => substr((string)$error, 0, 1000), ':ref' => (string)$ref, ':fp' => (string)$fingerprint));
+            return $st->rowCount();
+        }, 5, 200000);
     }
 }

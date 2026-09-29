@@ -1,8 +1,10 @@
 <?php
+require_once __DIR__ . '/routes.php';
 
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/event_sales_control.php';
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_free_checkout_ensure_schema')) {
     function tickex_free_checkout_ensure_schema($pdo)
@@ -90,13 +92,13 @@ if (!function_exists('tickex_free_checkout_base_url')) {
     function tickex_free_checkout_base_url()
     {
         $env = getenv('TICKEX_SITE_URL');
-        if (is_string($env) && trim($env) !== '') return rtrim(trim($env), '/');
+        if (is_string($env) && trim($env) !== '') return tickex_public_base_url($env);
         $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '';
         if ($host !== '') {
             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            return $scheme . '://' . $host;
+            return tickex_public_base_url($scheme . '://' . $host);
         }
-        return 'https://str.tickex.com.ar';
+        return tickex_public_base_url('');
     }
 }
 
@@ -279,6 +281,7 @@ if (!function_exists('tickex_free_checkout_issue')) {
                 $pdo->rollBack();
                 return array('ok' => false, 'error' => 'La emisión de entradas está pausada para este evento.');
             }
+            tickex_event_capacity_assert_available($pdo, $eventoId, 1);
 
             if (isset($typeRow['cantidad_disponible'])) {
                 $stUpd = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = cantidad_disponible - 1 WHERE id = :id AND evento_id = :eid AND cantidad_disponible > 0');
@@ -296,7 +299,7 @@ if (!function_exists('tickex_free_checkout_issue')) {
             $pdo->commit();
         } catch (Exception $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            return array('ok' => false, 'error' => 'No se pudo emitir la entrada.');
+            return array('ok' => false, 'error' => strpos($e->getMessage(), 'Cupo global insuficiente:') === 0 ? 'No hay cupo disponible para este checkout.' : 'No se pudo emitir la entrada.');
         }
 
         $ticketUrl = tickex_secure_ticket_url($pdo, tickex_free_checkout_base_url(), $entryId, $codigo);
