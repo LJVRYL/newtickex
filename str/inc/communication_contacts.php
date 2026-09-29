@@ -18,6 +18,8 @@ if (!function_exists('communication_contacts_add_row')) {
                 'ultima_entrada' => '',
                 'bloqueado' => 0,
                 'tickets_count' => 0,
+                'paid_entries_count' => 0,
+                'paid_amount' => 0.0,
                 'event_ids' => array(),
                 'imported_batches' => array(),
                 'imported_files' => array(),
@@ -57,6 +59,18 @@ if (!function_exists('communication_contacts_add_row')) {
             $n = (int)$data['tickets_count'];
             if ($n > (int)$contacts[$key]['tickets_count']) {
                 $contacts[$key]['tickets_count'] = $n;
+            }
+        }
+        if (isset($data['paid_entries_count'])) {
+            $n = (int)$data['paid_entries_count'];
+            if ($n > (int)$contacts[$key]['paid_entries_count']) {
+                $contacts[$key]['paid_entries_count'] = $n;
+            }
+        }
+        if (isset($data['paid_amount'])) {
+            $amount = (float)$data['paid_amount'];
+            if ($amount > (float)$contacts[$key]['paid_amount']) {
+                $contacts[$key]['paid_amount'] = $amount;
             }
         }
         if (!empty($data['event_ids']) && is_array($data['event_ids'])) {
@@ -266,6 +280,9 @@ if (!function_exists('communication_contacts_resolve')) {
         $contacts = array();
 
         communication_contacts_imports_ensure_schema($pdo);
+        $paidEntryColumns = communication_contacts_table_has_column($pdo, 'entradas', 'monto_pagado')
+            ? "SUM(CASE WHEN COALESCE(monto_pagado,0) > 0 THEN 1 ELSE 0 END) AS paid_entries_count, SUM(COALESCE(monto_pagado,0)) AS paid_amount"
+            : "0 AS paid_entries_count, 0 AS paid_amount";
 
         if ($isSuper || $adminId <= 0) {
             $stUsers = $pdo->query("SELECT email, COALESCE(nombre,'') AS nombre, COALESCE(apellido,'') AS apellido, COALESCE(rol,'') AS rol FROM usuarios");
@@ -287,7 +304,7 @@ if (!function_exists('communication_contacts_resolve')) {
                 ));
             }
 
-            $stEntradas = $pdo->query("SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,'')) AS nombre, COUNT(*) AS tickets_count, GROUP_CONCAT(DISTINCT evento_id) AS event_ids FROM entradas WHERE email IS NOT NULL AND email <> '' GROUP BY lower(email)");
+            $stEntradas = $pdo->query("SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,'')) AS nombre, COUNT(*) AS tickets_count, " . $paidEntryColumns . ", GROUP_CONCAT(DISTINCT evento_id) AS event_ids FROM entradas WHERE email IS NOT NULL AND email <> '' GROUP BY lower(email)");
             while ($r = $stEntradas->fetch(PDO::FETCH_ASSOC)) {
                 $eventIds = array();
                 if (!empty($r['event_ids'])) {
@@ -301,6 +318,8 @@ if (!function_exists('communication_contacts_resolve')) {
                     'nombre' => isset($r['nombre']) ? $r['nombre'] : '',
                     'ultima_entrada' => isset($r['ultima_entrada']) ? $r['ultima_entrada'] : '',
                     'tickets_count' => isset($r['tickets_count']) ? (int)$r['tickets_count'] : 0,
+                    'paid_entries_count' => isset($r['paid_entries_count']) ? (int)$r['paid_entries_count'] : 0,
+                    'paid_amount' => isset($r['paid_amount']) ? (float)$r['paid_amount'] : 0,
                     'event_ids' => $eventIds,
                 ));
             }
@@ -356,7 +375,7 @@ if (!function_exists('communication_contacts_resolve')) {
 
             // 1) Contactos que compraron/recibieron entradas en eventos del admin
             try {
-                $sqlEntradas = "SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,'')) AS nombre, COUNT(*) AS tickets_count, GROUP_CONCAT(DISTINCT evento_id) AS event_ids
+                $sqlEntradas = "SELECT email, MAX(fecha_registro) AS ultima_entrada, MAX(COALESCE(nombre,'')) AS nombre, COUNT(*) AS tickets_count, " . $paidEntryColumns . ", GROUP_CONCAT(DISTINCT evento_id) AS event_ids
                                 FROM entradas
                                 WHERE email IS NOT NULL AND email <> '' AND evento_id IN (" . $inEvents . ")
                                 GROUP BY lower(email)";
@@ -374,6 +393,8 @@ if (!function_exists('communication_contacts_resolve')) {
                         'nombre' => isset($r['nombre']) ? $r['nombre'] : '',
                         'ultima_entrada' => isset($r['ultima_entrada']) ? $r['ultima_entrada'] : '',
                         'tickets_count' => isset($r['tickets_count']) ? (int)$r['tickets_count'] : 0,
+                        'paid_entries_count' => isset($r['paid_entries_count']) ? (int)$r['paid_entries_count'] : 0,
+                        'paid_amount' => isset($r['paid_amount']) ? (float)$r['paid_amount'] : 0,
                         'event_ids' => $eventList,
                     ));
                 }
@@ -529,6 +550,42 @@ if (!function_exists('communication_contacts_resolve')) {
     }
 }
 
+if (!function_exists('communication_contacts_type_keys')) {
+    function communication_contacts_type_keys($row)
+    {
+        $row = is_array($row) ? $row : array();
+        $types = array();
+        $tickets = (int)(isset($row['tickets_count']) ? $row['tickets_count'] : 0);
+        $paid = (int)(isset($row['paid_entries_count']) ? $row['paid_entries_count'] : 0);
+        $sources = isset($row['fuentes']) && is_array($row['fuentes']) ? $row['fuentes'] : array();
+
+        if ($paid > 0) $types[] = 'buyer';
+        if ($tickets > 0 && $paid <= 0) $types[] = 'guest';
+        if ($tickets > 0) $types[] = 'ticket_holder';
+        if (isset($row['registrado']) && $row['registrado'] === 'Si') $types[] = 'registered';
+        if (isset($sources['import_csv'])) $types[] = 'imported';
+        if (isset($sources['email_logs']) || !empty($row['ultimo_envio'])) $types[] = 'emailed';
+        if ($tickets <= 0) $types[] = 'prospect';
+        return array_values(array_unique($types));
+    }
+}
+
+if (!function_exists('communication_contacts_type_label')) {
+    function communication_contacts_type_label($type)
+    {
+        $labels = array(
+            'buyer' => 'Comprador',
+            'guest' => 'Invitado / cortesía',
+            'ticket_holder' => 'Con entrada',
+            'registered' => 'Usuario registrado',
+            'imported' => 'Importado',
+            'emailed' => 'Contactado por email',
+            'prospect' => 'Sin entradas',
+        );
+        return isset($labels[$type]) ? $labels[$type] : (string)$type;
+    }
+}
+
 if (!function_exists('communication_contacts_normalize_filters')) {
     function communication_contacts_normalize_filters($raw)
     {
@@ -598,6 +655,9 @@ if (!function_exists('communication_contacts_normalize_filters')) {
         }
 
         $role = isset($raw['role']) ? trim((string)$raw['role']) : '';
+        if ($role === '' && isset($raw['f_role'])) {
+            $role = trim((string)$raw['f_role']);
+        }
         if ($role !== '') $out['role'] = $role;
 
         $buyer = isset($raw['buyer']) ? trim((string)$raw['buyer']) : '';
@@ -605,7 +665,19 @@ if (!function_exists('communication_contacts_normalize_filters')) {
             $out['buyer'] = $buyer;
         }
 
+        $contactType = isset($raw['contact_type']) ? trim((string)$raw['contact_type']) : '';
+        if ($contactType === '' && isset($raw['f_contact_type'])) {
+            $contactType = trim((string)$raw['f_contact_type']);
+        }
+        $allowedContactTypes = array('buyer', 'guest', 'ticket_holder', 'registered', 'imported', 'emailed', 'prospect');
+        if (in_array($contactType, $allowedContactTypes, true)) {
+            $out['contact_type'] = $contactType;
+        }
+
         $eventId = isset($raw['event_id']) ? (int)$raw['event_id'] : 0;
+        if ($eventId <= 0 && isset($raw['f_event_id'])) {
+            $eventId = (int)$raw['f_event_id'];
+        }
         if ($eventId > 0) {
             $out['event_id'] = $eventId;
         }
@@ -698,6 +770,11 @@ if (!function_exists('communication_contacts_apply_filters')) {
                 $isBuyer = ((int)(isset($r['tickets_count']) ? $r['tickets_count'] : 0) > 0);
                 if ($filters['buyer'] === 'yes' && !$isBuyer) continue;
                 if ($filters['buyer'] === 'no' && $isBuyer) continue;
+            }
+
+            if (isset($filters['contact_type'])) {
+                $types = communication_contacts_type_keys($r);
+                if (!in_array((string)$filters['contact_type'], $types, true)) continue;
             }
 
             if (isset($filters['event_id'])) {

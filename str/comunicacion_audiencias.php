@@ -1,12 +1,13 @@
 <?php
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/communication_contacts.php';
+require_once __DIR__ . '/inc/communication_audience_management.php';
 
-require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -18,10 +19,7 @@ if (!$isAllowed) {
 $pdo = db();
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $organizationId = 1;
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 $contactScope = array(
   'is_super' => $isSuper,
   'admin_id' => $adminId,
@@ -30,6 +28,8 @@ $contactScope = array(
 $flashOk = '';
 $flashErr = '';
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$statusFilter = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
+if (!in_array($statusFilter, array('', 'active', 'archived'), true)) $statusFilter = '';
 $editId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if (!function_exists('communication_audiences_slugify')) {
@@ -91,16 +91,31 @@ if (!function_exists('communication_audiences_scope_params')) {
 }
 
 if (!function_exists('communication_audiences_form_filters')) {
-    function communication_audiences_form_filters()
+    function communication_audiences_form_filters($allowedEventIds = null)
     {
+        $contactType = isset($_POST['filter_contact_type']) ? trim((string)$_POST['filter_contact_type']) : '';
+        $buyer = isset($_POST['filter_buyer']) ? trim((string)$_POST['filter_buyer']) : '';
+        if ($contactType === 'legacy_non_buyer') {
+            $contactType = '';
+            $buyer = 'no';
+        } elseif ($contactType !== '') {
+            $buyer = '';
+        }
+
+        $eventId = isset($_POST['filter_event_id']) ? (int)$_POST['filter_event_id'] : 0;
+        if (is_array($allowedEventIds) && $eventId > 0 && !in_array($eventId, $allowedEventIds, true)) {
+            $eventId = 0;
+        }
+
         return communication_contacts_normalize_filters(array(
             'q' => isset($_POST['filter_q']) ? $_POST['filter_q'] : '',
             'registered' => isset($_POST['filter_registered']) ? $_POST['filter_registered'] : '',
             'blocked' => isset($_POST['filter_blocked']) ? $_POST['filter_blocked'] : '',
             'source' => isset($_POST['filter_source']) ? $_POST['filter_source'] : '',
             'role' => isset($_POST['filter_role']) ? $_POST['filter_role'] : '',
-            'buyer' => isset($_POST['filter_buyer']) ? $_POST['filter_buyer'] : '',
-            'event_id' => isset($_POST['filter_event_id']) ? $_POST['filter_event_id'] : '',
+            'buyer' => $buyer,
+            'contact_type' => $contactType,
+            'event_id' => $eventId,
         ));
     }
 }
@@ -135,6 +150,34 @@ try {
   }
 }
 
+$eventOptions = array();
+$eventNamesById = array();
+try {
+    $eventSql = "SELECT id, nombre, COALESCE(slug,'') AS slug FROM eventos";
+    $eventParams = array();
+    $eventWhere = array();
+    if (!$isSuper && communication_contacts_table_has_column($pdo, 'eventos', 'creado_por_admin_id')) {
+        $eventWhere[] = 'creado_por_admin_id = :admin_id';
+        $eventParams[':admin_id'] = $adminId;
+    }
+    if (communication_contacts_table_has_column($pdo, 'eventos', 'borrado_en')) {
+        $eventWhere[] = 'borrado_en IS NULL';
+    }
+    if ($eventWhere) $eventSql .= ' WHERE ' . implode(' AND ', $eventWhere);
+    $eventSql .= ' ORDER BY id DESC';
+    $eventStmt = $pdo->prepare($eventSql);
+    $eventStmt->execute($eventParams);
+    while ($eventRow = $eventStmt->fetch(PDO::FETCH_ASSOC)) {
+        $eventId = (int)$eventRow['id'];
+        $eventOptions[] = $eventRow;
+        $eventNamesById[$eventId] = trim((string)$eventRow['nombre']) !== '' ? (string)$eventRow['nombre'] : ('Evento #' . $eventId);
+    }
+} catch (Exception $e) {
+    $eventOptions = array();
+    $eventNamesById = array();
+}
+$allowedAudienceEventIds = array_map('intval', array_keys($eventNamesById));
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $provided = isset($_POST['csrf']) ? (string)$_POST['csrf'] : '';
     if (function_exists('tickex_csrf_verify') && !tickex_csrf_verify($provided)) {
@@ -143,7 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
 
         if ($action === 'estimate_form') {
-            $filters = communication_audiences_form_filters();
+            $filters = communication_audiences_form_filters($allowedAudienceEventIds);
           $count = communication_contacts_count($pdo, $filters, $contactScope);
             $flashOk = 'Destinatarios estimados: ' . (int)$count;
         }
@@ -162,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $slugBase = ($rawSlug !== '') ? $rawSlug : $name;
                 $slug = communication_audiences_unique_slug($pdo, $organizationId, $slugBase, $id);
 
-                $filters = communication_audiences_form_filters();
+                $filters = communication_audiences_form_filters($allowedAudienceEventIds);
                 $filtersJson = communication_contacts_filters_to_json($filters);
 
                 try {
@@ -263,6 +306,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        if ($action === 'delete') {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            if ($id > 0) {
+                try {
+                    $deleteResult = communication_audience_delete($pdo, $organizationId, $adminId, $isSuper, $id);
+                    if ($deleteResult['status'] === 'deleted') {
+                        $flashOk = 'Audiencia eliminada definitivamente.';
+                        if ($editId === $id) $editId = 0;
+                    } elseif ($deleteResult['status'] === 'deleted_preserved') {
+                        $flashOk = 'Audiencia eliminada. Sus campañas anteriores conservan la referencia histórica.';
+                        if ($editId === $id) $editId = 0;
+                    } else {
+                        $flashErr = 'No se encontró la audiencia o no tenés permiso para eliminarla.';
+                    }
+                } catch (Exception $e) {
+                    $flashErr = 'No se pudo eliminar la audiencia: ' . $e->getMessage();
+                }
+            }
+        }
+
         if ($action === 'estimate_saved') {
             $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
             if ($id > 0) {
@@ -291,9 +354,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $scopeSql = communication_audiences_scope_sql($isSuper);
 $scopeParams = communication_audiences_scope_params($organizationId, $adminId, $isSuper);
 $listSql = 'SELECT * FROM communication_audiences WHERE ' . $scopeSql;
+$listSql .= ' AND status <> "deleted"';
 if ($q !== '') {
     $listSql .= ' AND (name LIKE :q OR slug LIKE :q OR description LIKE :q)';
     $scopeParams[':q'] = '%' . $q . '%';
+}
+if ($statusFilter !== '') {
+    $listSql .= ' AND status = :status';
+    $scopeParams[':status'] = $statusFilter;
 }
 $listSql .= ' ORDER BY updated_at DESC, id DESC';
 $rows = array();
@@ -336,11 +404,58 @@ $formName = $editRow ? (string)$editRow['name'] : '';
 $formSlug = $editRow ? (string)$editRow['slug'] : '';
 $formDescription = $editRow ? (string)$editRow['description'] : '';
 $formStatus = $editRow ? (string)$editRow['status'] : 'active';
-$formFilters = $editRow ? communication_contacts_filters_from_json((string)$editRow['filters_json']) : array();
+$formFilters = $editRow ? communication_contacts_filters_from_json((string)$editRow['filters_json']) : array('blocked'=>'no');
+$postAction = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) ? (string)$_POST['action'] : '';
+if ($postAction === 'estimate_form' || ($postAction === 'save' && $flashErr !== '')) {
+    $formName = trim((string)(isset($_POST['name']) ? $_POST['name'] : ''));
+    $formSlug = trim((string)(isset($_POST['slug']) ? $_POST['slug'] : ''));
+    $formDescription = trim((string)(isset($_POST['description']) ? $_POST['description'] : ''));
+    $formStatus = isset($_POST['status']) && (string)$_POST['status'] === 'archived' ? 'archived' : 'active';
+    $formFilters = communication_audiences_form_filters($allowedAudienceEventIds);
+}
+$formContactType = isset($formFilters['contact_type']) ? (string)$formFilters['contact_type'] : '';
+if ($formContactType === '' && isset($formFilters['buyer'])) {
+    $formContactType = $formFilters['buyer'] === 'yes' ? 'buyer' : 'legacy_non_buyer';
+}
 
-$title = 'Comunicacion - Audiencias';
+$audienceTotal = count($rows);
+$audienceActive = 0;
+$audienceArchived = 0;
+try {
+    $statsScopeSql = communication_audiences_scope_sql($isSuper);
+    $statsScopeParams = communication_audiences_scope_params($organizationId, $adminId, $isSuper);
+    $statsStmt = $pdo->prepare('SELECT status, COUNT(*) AS total FROM communication_audiences WHERE ' . $statsScopeSql . ' AND status <> "deleted" GROUP BY status');
+    $statsStmt->execute($statsScopeParams);
+    while ($statsRow = $statsStmt->fetch(PDO::FETCH_ASSOC)) {
+        if ((string)$statsRow['status'] === 'archived') $audienceArchived = (int)$statsRow['total'];
+        elseif ((string)$statsRow['status'] === 'active') $audienceActive = (int)$statsRow['total'];
+    }
+} catch (Exception $e) {
+    foreach ($rows as $audienceRow) {
+        if ((string)$audienceRow['status'] === 'archived') $audienceArchived++;
+        else $audienceActive++;
+    }
+}
+$audienceCampaignCounts = communication_audience_campaign_counts($pdo, $rows);
+$audienceRecipientCounts = array();
+$audienceContactRows = array_values(communication_contacts_resolve($pdo, $contactScope));
+$audienceReachableContacts = count(communication_contacts_apply_filters($audienceContactRows, array('blocked' => 'no')));
+$contactRoles = array();
+foreach ($audienceContactRows as $contactRow) {
+    $roleLabel = isset($contactRow['rol']) ? trim((string)$contactRow['rol']) : '';
+    if ($roleLabel !== '') $contactRoles[strtolower($roleLabel)] = $roleLabel;
+}
+natcasesort($contactRoles);
+foreach ($rows as $audienceRow) {
+    $savedFilters = communication_contacts_filters_from_json(isset($audienceRow['filters_json']) ? (string)$audienceRow['filters_json'] : '');
+    $audienceRecipientCounts[(int)$audienceRow['id']] = count(communication_contacts_apply_filters($audienceContactRows, $savedFilters));
+}
+
+$title = 'Comunicación - Audiencias';
 include __DIR__ . '/inc/layout_top.php';
 ?>
+<?php include __DIR__ . '/inc/audience_manager_view.php'; ?>
+<?php if (false): // Vista anterior mantenida como referencia temporal. ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
   <a class="btn secondary" href="panel_admin.php">Volver</a>
@@ -534,4 +649,5 @@ include __DIR__ . '/inc/layout_top.php';
   </form>
 </div>
 
+<?php endif; ?>
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
