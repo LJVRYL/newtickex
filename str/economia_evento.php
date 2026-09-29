@@ -32,7 +32,7 @@ if (!$evento) abort_404('Evento no encontrado');
 // Estadísticas económicas
 $ecoStats = get_economic_stats($pdo, $eventoId);
 
-$title = 'Economía – ' . ($evento['nombre'] ?? 'Evento');
+$title = 'Economía – ' . (isset($evento['nombre']) ? $evento['nombre'] : 'Evento');
 include __DIR__.'/inc/layout_top.php';
 ?>
 
@@ -85,8 +85,8 @@ include __DIR__.'/inc/layout_top.php';
         $cantidad = isset($datos['cantidad']) ? (int)$datos['cantidad'] : 0;
         $monto_total = isset($datos['monto']) ? (float)$datos['monto'] : 0;
         $monto_unit = $cantidad>0 ? $monto_total/$cantidad : 0;
-        $origen = $datos['origen'] ?? 'Desconocido';
-        $tipoLabel = $datos['tipo'] ?? 'Sin tipo';
+        $origen = isset($datos['origen']) ? $datos['origen'] : 'Desconocido';
+        $tipoLabel = isset($datos['tipo']) ? $datos['tipo'] : 'Sin tipo';
         $isNegative = $monto_total < 0;
       ?>
       <tr>

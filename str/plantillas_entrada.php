@@ -12,6 +12,7 @@ if (!function_exists('e')) {
 
 $tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
 $adminId    = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+$csrf       = tickex_csrf_token();
 
 if (!in_array($tipoGlobal, array('admin_evento','super_admin','superadmin'), true)) {
     abort_404("No tenés permiso.");
@@ -55,9 +56,12 @@ function validar_categoria_tipo($categoria, $tipo){
 }
 
 /* ========= ELIMINAR PLANTILLA ========= */
-if (isset($_GET['del_id'])) {
-  if ($hasTablaPlantillas && isset($_GET['del_id'])) {
-    $delId = (int)$_GET['del_id'];
+if ($hasTablaPlantillas && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud inválida.');
+    }
+    $delId = isset($_POST['del_id']) ? (int)$_POST['del_id'] : 0;
 
     $st = $pdo->prepare("SELECT id, admin_id, creado_por_admin_id FROM plantillas_entrada WHERE id=?");
     $st->execute(array($delId));
@@ -109,7 +113,12 @@ if ($hasTablaPlantillas && $editId>0) {
 $error = '';
 $okMsg = '';
 
-if ($hasTablaPlantillas && $_SERVER['REQUEST_METHOD']==='POST') {
+if ($hasTablaPlantillas && $_SERVER['REQUEST_METHOD']==='POST' && (!isset($_POST['action']) || $_POST['action'] !== 'delete')) {
+
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud inválida.');
+    }
 
     $nombre    = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
     $categoria = isset($_POST['categoria']) ? trim($_POST['categoria']) : '';
@@ -254,6 +263,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php endif; ?>
 
   <form method="post" style="margin-top:10px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:8px;align-items:end;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <div>
       <label>Nombre</label>
       <input name="nombre" required value="<?php echo e($formNombre); ?>">
@@ -308,7 +318,7 @@ include __DIR__.'/inc/layout_top.php';
 
     <div style="grid-column:1 / -1;display:flex;gap:10px;align-items:center;">
       <label style="margin:0;display:flex;gap:6px;align-items:center;">
-        <input type="checkbox" name="activo" <?php 
+        <input type="checkbox" name="activo" <?php echo $formAct ? 'checked' : ''; ?>>
         Activa
       </label>
 
@@ -320,7 +330,7 @@ include __DIR__.'/inc/layout_top.php';
 
       <?php if($editing): ?>
         <a class="btn danger" href="plantillas_entrada.php">Cancelar</a>
-      <?php ef; ?>
+      <?php endif; ?>
     </div>
   </form>
 </div>
@@ -366,9 +376,12 @@ include __DIR__.'/inc/layout_top.php';
               <a class="btn secondary" style="padding:6px 10px;font-size:12px;"
                  href="plantillas_entrada.php?edit_id=<?php echo (int)$p['id']; ?>">✏️</a>
 
-              <a class="btn danger" style="padding:6px 10px;font-size:12px;"
-                 href="plantillas_entrada.php?del_id=<?php echo (int)$p['id']; ?>"
-                 onclick="return confirm('¿Eliminar plantilla <?php echo e($p['nombre']); ?>?');">🗑️</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar esta plantilla?');">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="del_id" value="<?php echo (int)$p['id']; ?>">
+                <button class="btn danger" style="padding:6px 10px;font-size:12px;" type="submit" aria-label="Eliminar plantilla">🗑️</button>
+              </form>
             </td>
           </tr>
         <?php endforeach; ?>

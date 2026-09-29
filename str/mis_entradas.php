@@ -3,12 +3,14 @@
 // PHP 5.6 compatible
 
 require __DIR__ . '/inc/bootstrap.php';
+require_login();
 
 // -------------------------------------------------------------------
 // Acceso
 // -------------------------------------------------------------------
-$tipoGlobal = isset($_SESSION['tipo_global']) ? $_SESSION['tipo_global'] : '';
-$userId     = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+$currentIdentity = current_user();
+$tipoGlobal = isset($currentIdentity['tipo_global']) ? (string)$currentIdentity['tipo_global'] : '';
+$userId = isset($currentIdentity['id']) ? (int)$currentIdentity['id'] : 0;
 
 if ($tipoGlobal !== 'admin_evento' && $tipoGlobal !== 'super_admin') {
         header('Location: /login.php?next=' . urlencode($_SERVER['REQUEST_URI']), true, 302);
@@ -29,6 +31,7 @@ if ($userId <= 0) {
 }
 
 $adminId = $userId;
+$csrf = tickex_csrf_token();
 
 // -------------------------------------------------------------------
 // DB: usar db() si existe, sino fallback a sqlite directo
@@ -168,6 +171,10 @@ $action = isset($_POST['action']) ? $_POST['action'] : '';
 $metodo = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'GET';
 
 if ($metodo === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud vencida o inválida.');
+    }
     $idPlantilla = isset($_POST['id']) ? (int)$_POST['id'] : 0;
     $nombre      = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
     $categoria   = isset($_POST['categoria']) ? $_POST['categoria'] : '';
@@ -417,6 +424,7 @@ require __DIR__ . '/inc/layout_top.php';
 <?php endif; ?>
 
 <form method="post">
+  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
   <div class="card">
     <h3><?php echo $editRow ? 'Editar plantilla' : 'Nueva plantilla'; ?></h3>
 
@@ -553,6 +561,7 @@ require __DIR__ . '/inc/layout_top.php';
               <td><?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
               <td>
                 <form method="post" style="margin:0;display:inline;">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="update">
                   <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
                   <input type="hidden" name="nombre" value="<?php echo e($p['nombre']); ?>">
@@ -575,6 +584,7 @@ require __DIR__ . '/inc/layout_top.php';
               <?php if ($hasVis): ?>
                 <td>
                   <form method="post" class="vis-toggle" style="margin:0;display:inline;">
+                    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
                     <input type="hidden" name="nombre" value="<?php echo e($p['nombre']); ?>">
@@ -610,6 +620,7 @@ require __DIR__ . '/inc/layout_top.php';
                   ✏️
                 </a>
                 <form method="post" action="mis_entradas.php" style="display:inline;" onsubmit="return confirm('Seguro que queres eliminar esta plantilla?');">
+                  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
                   <button type="submit" class="btn danger" title="Borrar" style="padding:6px 10px;font-size:14px;">
