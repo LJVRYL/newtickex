@@ -17,9 +17,11 @@ function ensure_produccion_table($pdo) {
             telefono TEXT,
             email TEXT,
             notas TEXT,
+            owner_admin_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
+        ensure_produccion_assignment_table($pdo);
         $cols = array();
         $st = $pdo->query('PRAGMA table_info(produccion_artistas)');
         if ($st) {
@@ -43,6 +45,20 @@ function ensure_produccion_table($pdo) {
         if (!isset($cols['email'])) {
             $pdo->exec("ALTER TABLE produccion_artistas ADD COLUMN email TEXT");
         }
+        if (!isset($cols['owner_admin_id'])) {
+            $pdo->exec("ALTER TABLE produccion_artistas ADD COLUMN owner_admin_id INTEGER");
+        }
+        $pdo->exec("UPDATE produccion_artistas
+            SET owner_admin_id=(
+                SELECT e.creado_por_admin_id
+                FROM produccion_evento pe
+                JOIN eventos e ON e.id=pe.evento_id
+                WHERE pe.artista_id=produccion_artistas.id
+                  AND e.creado_por_admin_id IS NOT NULL
+                ORDER BY pe.id ASC LIMIT 1
+            )
+            WHERE owner_admin_id IS NULL
+              AND EXISTS (SELECT 1 FROM produccion_evento pe2 WHERE pe2.artista_id=produccion_artistas.id)");
     } catch (Exception $e) {
         // ignorar
     }
@@ -66,10 +82,15 @@ function ensure_produccion_assignment_table($pdo) {
     }
 }
 
-function get_produccion_artistas($pdo) {
+function get_produccion_artistas($pdo, $adminId = 0, $isSuper = false) {
     ensure_produccion_table($pdo);
     try {
-        $st = $pdo->query("SELECT * FROM produccion_artistas ORDER BY nombre ASC");
+        if ($isSuper) {
+            $st = $pdo->query("SELECT * FROM produccion_artistas ORDER BY nombre ASC");
+        } else {
+            $st = $pdo->prepare("SELECT * FROM produccion_artistas WHERE owner_admin_id=:admin ORDER BY nombre ASC");
+            $st->execute(array(':admin'=>(int)$adminId));
+        }
         return $st ? $st->fetchAll(PDO::FETCH_ASSOC) : array();
     } catch (Exception $e) {
         return array();
