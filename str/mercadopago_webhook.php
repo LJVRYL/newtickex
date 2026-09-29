@@ -30,7 +30,7 @@ $insert->execute(array(':key' => $eventKey, ':action' => $action, ':payment' => 
 if ($insert->rowCount() !== 1) {
     $existingStatus = $pdo->prepare('SELECT status FROM mercadopago_webhook_events WHERE event_key=:key LIMIT 1');
     $existingStatus->execute(array(':key' => $eventKey));
-    if ($existingStatus->fetchColumn() === 'processed') {
+    if (in_array($existingStatus->fetchColumn(), array('processed', 'review_required'), true)) {
         echo json_encode(array('ok' => true, 'duplicate' => true));
         exit;
     }
@@ -64,10 +64,16 @@ try {
     if (!$order || !$payment) throw new RuntimeException('No se encontro la orden Mercado Pago asociada.');
     $result = tickex_mp_confirm_payment($pdo, $order, $payment);
     if (!empty($result['confirmed'])) process_tc_order_by_request_id((string)$order['request_id']);
-    $up = $pdo->prepare("UPDATE mercadopago_webhook_events SET order_id=:order,status='processed',updated_at=CURRENT_TIMESTAMP WHERE event_key=:key");
-    $up->execute(array(':order' => (int)$order['id'], ':key' => $eventKey));
+    $additionalApproved = isset($result['result']) && $result['result'] === 'additional_approved_payment';
+    $up = $pdo->prepare("UPDATE mercadopago_webhook_events SET order_id=:order,status=:status,error_text=:error,updated_at=CURRENT_TIMESTAMP WHERE event_key=:key");
+    $up->execute(array(
+        ':order' => (int)$order['id'],
+        ':status' => $additionalApproved ? 'review_required' : 'processed',
+        ':error' => $additionalApproved ? 'Additional approved payment for an already confirmed order' : null,
+        ':key' => $eventKey,
+    ));
     log_order_event($pdo, (int)$order['id'], (string)$order['request_id'], 'mercadopago_webhook', $result);
-    echo json_encode(array('ok' => true));
+    echo json_encode(array('ok' => true, 'review_required' => $additionalApproved));
 } catch (Exception $e) {
     $up = $pdo->prepare("UPDATE mercadopago_webhook_events SET status='error',error_text=:error,updated_at=CURRENT_TIMESTAMP WHERE event_key=:key");
     $up->execute(array(':error' => substr($e->getMessage(), 0, 1000), ':key' => $eventKey));

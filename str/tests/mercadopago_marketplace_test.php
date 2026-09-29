@@ -152,6 +152,12 @@ $payment = array('id' => 'PAY-1', 'status' => 'approved', 'external_reference' =
 $confirmed = tickex_mp_confirm_payment($pdo, $order, $payment);
 mp_test_assert(!empty($confirmed['confirmed']), 'approved payment confirms a matching Tickex order');
 mp_test_assert($pdo->query("SELECT payment_status FROM tc_orders WHERE id=" . (int)$order['id'])->fetchColumn() === 'confirmed', 'confirmed status is persisted');
+$confirmedOrder = $pdo->query("SELECT * FROM tc_orders WHERE id=" . (int)$order['id'])->fetch(PDO::FETCH_ASSOC);
+$additionalPayment = $payment;
+$additionalPayment['id'] = 'PAY-2';
+$additionalResult = tickex_mp_confirm_payment($pdo, $confirmedOrder, $additionalPayment);
+mp_test_assert($additionalResult['result'] === 'additional_approved_payment' && empty($additionalResult['confirmed']), 'another approved payment for the same order requires review');
+mp_test_assert($pdo->query("SELECT provider_payment_id FROM tc_orders WHERE id=" . (int)$order['id'])->fetchColumn() === 'PAY-1', 'additional payment never replaces the recorded payment');
 $wrongAmount = $payment;
 $wrongAmount['transaction_amount'] = 9000;
 mp_test_assert(tickex_mp_confirm_payment($pdo, $order, $wrongAmount)['result'] === 'amount_mismatch', 'wrong amount can never confirm an order');
