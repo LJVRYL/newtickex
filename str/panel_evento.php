@@ -570,7 +570,7 @@ include __DIR__.'/inc/layout_top.php';
     <div class="card" style="margin:0;background:var(--panel-2);">
       <div class="muted" style="font-size:12px;">Costo TotalCoin / Bridge (3%)</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
-        $<?php echo number_format((float)($ecoStats['totalcoin_fee_3pct'] ?? 0), 2); ?>
+        $<?php echo number_format((float)(isset($ecoStats['totalcoin_fee_3pct']) ? $ecoStats['totalcoin_fee_3pct'] : 0), 2); ?>
       </div>
       <div class="muted" style="font-size:11px;margin-top:4px;">Costo absorbido; no se cobra al comprador.</div>
     </div>
@@ -578,7 +578,7 @@ include __DIR__.'/inc/layout_top.php';
     <div class="card" style="margin:0;background:var(--panel-2);">
       <div class="muted" style="font-size:12px;">Costo de servicio cobrado</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--info);">
-        $<?php echo number_format((float)($ecoStats['service_fee_charged'] ?? 0), 2); ?>
+        $<?php echo number_format((float)(isset($ecoStats['service_fee_charged']) ? $ecoStats['service_fee_charged'] : 0), 2); ?>
       </div>
       <div class="muted" style="font-size:11px;margin-top:4px;">Por ejemplo, el 10% de checkout de clientes.</div>
     </div>
@@ -903,6 +903,7 @@ if (btnEditBridge) {
       const fd = new FormData();
       fd.append('evento_id', '<?php echo (int)$eventoId; ?>');
       fd.append('bridge_slug', s);
+      fd.append('_csrf', '<?php echo e($csrf); ?>');
 
       fetch('set_bridge_mapping.php', { method: 'POST', body: fd })
         .then(r => r.json())

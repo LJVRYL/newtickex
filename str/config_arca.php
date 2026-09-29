@@ -3,13 +3,13 @@
 // Configuración de la API de ARCA (AFIP) para facturación electrónica
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/arca.php';
 
 require_login();
 
 $cu = current_user();
-$esAdmin = is_admin();
 $tipoGlobal = isset($cu['tipo_global']) ? $cu['tipo_global'] : '';
-if (!$esAdmin && !in_array($tipoGlobal, array('admin_evento', 'super_admin', 'superadmin'), true)) {
+if (!in_array($tipoGlobal, array('super_admin', 'superadmin'), true)) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
     echo '<div class="card" style="max-width:640px;margin:32px auto;"><h2>Acceso restringido</h2><p>Solo para administradores.</p></div>';
@@ -17,12 +17,21 @@ if (!$esAdmin && !in_array($tipoGlobal, array('admin_evento', 'super_admin', 'su
     exit;
 }
 
+$config = arca_get_config();
+if (!is_array($config)) $config = array();
+
 // Guardar configuración (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $cuit = trim($_POST['cuit'] ?? '');
-    $cert = trim($_POST['cert'] ?? '');
-    $key = trim($_POST['key'] ?? '');
-    $modo = trim($_POST['modo'] ?? 'homologacion');
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('La sesión venció. Actualizá la página.');
+    }
+    $cuit = trim(isset($_POST['cuit']) ? (string)$_POST['cuit'] : '');
+    $cert = trim(isset($_POST['cert']) ? (string)$_POST['cert'] : '');
+    $key = trim(isset($_POST['key']) ? (string)$_POST['key'] : '');
+    if ($cert === '' && isset($config['cert'])) $cert = (string)$config['cert'];
+    if ($key === '' && isset($config['key'])) $key = (string)$config['key'];
+    $modo = trim(isset($_POST['modo']) ? (string)$_POST['modo'] : 'homologacion');
     $endpoint = $modo === 'produccion' ? 'https://wsaa.afip.gov.ar/ws/services/LoginCms' : 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
     // Guardar en archivo seguro (ejemplo simple, mejorar seguridad en producción)
     $data = [
@@ -32,13 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'modo' => $modo,
         'endpoint' => $endpoint
     ];
-    file_put_contents(__DIR__ . '/arca_config.json', json_encode($data));
-    $msg = 'Configuración guardada correctamente.';
-}
-// Leer configuración actual
-$config = [];
-if (file_exists(__DIR__ . '/arca_config.json')) {
-    $config = json_decode(file_get_contents(__DIR__ . '/arca_config.json'), true);
+    if (arca_save_config($data)) {
+        $msg = 'Configuración guardada correctamente.';
+        $config = $data;
+    } else {
+        http_response_code(500);
+        $msg = 'No se pudo guardar la configuración privada.';
+    }
 }
 include __DIR__ . '/inc/layout_top.php';
 ?>
@@ -46,13 +55,14 @@ include __DIR__ . '/inc/layout_top.php';
   <h2>Configuración de Facturación ARCA (AFIP)</h2>
   <?php if (!empty($msg)) echo '<div class="muted" style="color:green;">' . htmlspecialchars($msg) . '</div>'; ?>
   <form method="post" autocomplete="off">
-    <label>CUIT<br><input type="text" name="cuit" value="<?php echo htmlspecialchars($config['cuit'] ?? ''); ?>" required></label><br><br>
-    <label>Certificado (PEM)<br><textarea name="cert" rows="4" style="width:100%;" required><?php echo htmlspecialchars($config['cert'] ?? ''); ?></textarea></label><br><br>
-    <label>Clave privada (PEM)<br><textarea name="key" rows="4" style="width:100%;" required><?php echo htmlspecialchars($config['key'] ?? ''); ?></textarea></label><br><br>
+    <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
+    <label>CUIT<br><input type="text" name="cuit" value="<?php echo e(isset($config['cuit']) ? $config['cuit'] : ''); ?>" required></label><br><br>
+    <label>Certificado (PEM)<br><textarea name="cert" rows="4" style="width:100%;" placeholder="Dejar vacío para conservar el actual"></textarea></label><br><br>
+    <label>Clave privada (PEM)<br><textarea name="key" rows="4" style="width:100%;" placeholder="Dejar vacío para conservar la actual"></textarea></label><br><br>
     <label>Modo:<br>
       <select name="modo">
-        <option value="homologacion" <?php if(($config['modo'] ?? '')==='homologacion')echo 'selected';?>>Homologación (pruebas)</option>
-        <option value="produccion" <?php if(($config['modo'] ?? '')==='produccion')echo 'selected';?>>Producción</option>
+        <option value="homologacion" <?php if((isset($config['modo']) ? $config['modo'] : '')==='homologacion')echo 'selected';?>>Homologación (pruebas)</option>
+        <option value="produccion" <?php if((isset($config['modo']) ? $config['modo'] : '')==='produccion')echo 'selected';?>>Producción</option>
       </select>
     </label><br><br>
     <button class="btn" type="submit">Guardar configuración</button>

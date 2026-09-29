@@ -3,6 +3,14 @@ require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/unified_tickets.php';
 $title = "Check-in – TICKEX";
 
+function tickex_checkin_first_value($row, $keys, $default) {
+  if (!is_array($row)) return $default;
+  foreach ($keys as $key) {
+    if (isset($row[$key])) return $row[$key];
+  }
+  return $default;
+}
+
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $pdo = db();
@@ -15,7 +23,7 @@ function get_staff_event_ids($pdo, $staffId) {
   return $rows ? array_map('intval', $rows) : array();
 }
 
-$codigo = isset($_GET['c']) ? trim($_GET['c']) : '';
+$codigo = isset($_GET['c']) ? trim($_GET['c']) : (isset($_POST['c']) ? trim((string)$_POST['c']) : '');
 // Soporte para URL segura ?t=TOKEN (generada por el engine de pago)
 if ($codigo === '' && !empty($_GET['t'])) {
   require_once __DIR__ . '/inc/secure_links.php';
@@ -28,7 +36,7 @@ if ($codigo === '' && !empty($_GET['t'])) {
     if ($codRow !== false) $codigo = (string)$codRow;
   }
 }
-$eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : 0;
+$eventoIdGet = isset($_GET['evento_id']) ? (int)$_GET['evento_id'] : (isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0);
 $eventoId = $eventoIdGet;
 
 // Si está logueado, saco rol
@@ -174,25 +182,25 @@ if (!$ticket && !empty($scanCandidates)) {
         if ($rowB && tickex_chk_bridge_paid($rowB)) {
           $nombre = '';
           if (isset($rowB['first_name']) || isset($rowB['last_name'])) {
-            $nombre = trim((string)($rowB['first_name'] ?? '') . ' ' . (string)($rowB['last_name'] ?? ''));
+            $nombre = trim((string)tickex_checkin_first_value($rowB, array('first_name'), '') . ' ' . (string)tickex_checkin_first_value($rowB, array('last_name'), ''));
           }
-          if ($nombre === '') $nombre = (string)($rowB['buyer_name'] ?? ($rowB['nombre'] ?? 'Entrada SenForms'));
-          $email = (string)($rowB['buyer_email'] ?? ($rowB['email'] ?? ''));
-          $tipo = (string)($rowB['selected_type_name'] ?? ($rowB['selected_type'] ?? ($rowB['ticket_type'] ?? 'Tickex / SenForms')));
-          $bridgeRef = (string)($rowB['ticket_ref'] ?? ($rowB['order_id'] ?? ($rowB['codigo'] ?? '')));
+          if ($nombre === '') $nombre = (string)tickex_checkin_first_value($rowB, array('buyer_name','nombre'), 'Entrada SenForms');
+          $email = (string)tickex_checkin_first_value($rowB, array('buyer_email','email'), '');
+          $tipo = (string)tickex_checkin_first_value($rowB, array('selected_type_name','selected_type','ticket_type'), 'Tickex / SenForms');
+          $bridgeRef = (string)tickex_checkin_first_value($rowB, array('ticket_ref','order_id','codigo'), '');
           $isChecked = isset($rowB['is_checked_in']) ? (int)$rowB['is_checked_in'] : (isset($rowB['checked_in']) ? (int)$rowB['checked_in'] : 0);
           $ticket = array(
             'source' => 'TICKEX',
-            'id' => (int)($rowB['id'] ?? ($rowB['legacy_ticket_id'] ?? 0)),
+            'id' => (int)tickex_checkin_first_value($rowB, array('id','legacy_ticket_id'), 0),
             'nombre' => $nombre,
             'email' => $email,
             'codigo' => $bridgeRef !== '' ? $bridgeRef : (string)$codigo,
             'tipo' => $tipo,
             'evento_id' => 0,
             'checked_in' => $isChecked,
-            'checked_in_at' => ($rowB['checked_in_at'] ?? null),
+            'checked_in_at' => tickex_checkin_first_value($rowB, array('checked_in_at'), null),
             'multiplier' => tickex_chk_bridge_multiplier($rowB),
-            'event_slug' => (string)($rowB['event_slug'] ?? ''),
+            'event_slug' => (string)tickex_checkin_first_value($rowB, array('event_slug'), ''),
             'bridge_ref' => $bridgeRef,
           );
         }
@@ -235,7 +243,7 @@ if ($isLogged) {
 
 $eventoOk = false;
 if ($ticket) {
-  $eidEntrada = (int)($ticket['evento_id'] ?? 0);
+  $eidEntrada = (int)tickex_checkin_first_value($ticket, array('evento_id'), 0);
   if ($eventoId > 0 && $eidEntrada > 0 && $eidEntrada === $eventoId) {
     $eventoOk = true;
   } elseif ($eventoId > 0 && $ticket['source'] === 'TICKEX' && !empty($ticket['event_slug'])) {
@@ -289,6 +297,12 @@ if ($ticket && $isLogged && $tipoGlobal === 'admin_evento') {
 
 $hizoCheckinAhora = false;
 $mensaje = '';
+$csrf = tickex_csrf_token();
+$checkinSubmission = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_checkin';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!$checkinSubmission || !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : ''))) {
+  http_response_code(403);
+  exit('Solicitud vencida o inválida.');
+}
 
 if ($ticket && $ticket['source'] === 'TICKEX') {
   $uses = get_bridge_checkin_used_counts($pdo, array((int)$ticket['id']));
@@ -299,7 +313,7 @@ if ($ticket && $ticket['source'] === 'TICKEX') {
   $ticket['checked_in'] = ($used >= (int)$ticket['multiplier']) ? 1 : 0;
 }
 
-if ($ticket && $puedeCheckin && $eventoOk) {
+if ($ticket && $puedeCheckin && $eventoOk && $checkinSubmission) {
   $canConsume = true;
   if ($ticket['source'] === 'TICKEX') {
     $usedNow = isset($ticket['used_count']) ? (int)$ticket['used_count'] : 0;
@@ -326,22 +340,22 @@ if ($ticket && $puedeCheckin && $eventoOk) {
             $hizoCheckinAhora = true;
             $mensaje = "Check-in SenForms/Tickex realizado (" . (int)$use['used'] . "/" . (int)$use['max'] . ").";
             tickex_log_qr_attempt($pdo, array(
-              'evento_id' => (int)($ticket['evento_id'] ?? 0),
+              'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
               'source' => 'TICKEX',
-              'source_ticket_id' => (int)($ticket['id'] ?? 0),
-              'ticket_ref' => (string)($ticket['bridge_ref'] ?? $ticket['codigo'] ?? $codigo),
-              'attendee_name' => (string)($ticket['nombre'] ?? ''),
+              'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+              'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('bridge_ref','codigo'), $codigo),
+              'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
               'result' => 'ok',
               'detail' => 'checkin_' . (int)$use['used'] . '_de_' . (int)$use['max'],
             ));
           } else {
             $mensaje = "Esta entrada SenForms/Tickex ya agotó sus ingresos.";
             tickex_log_qr_attempt($pdo, array(
-              'evento_id' => (int)($ticket['evento_id'] ?? 0),
+              'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
               'source' => 'TICKEX',
-              'source_ticket_id' => (int)($ticket['id'] ?? 0),
-              'ticket_ref' => (string)($ticket['bridge_ref'] ?? $ticket['codigo'] ?? $codigo),
-              'attendee_name' => (string)($ticket['nombre'] ?? ''),
+              'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+              'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('bridge_ref','codigo'), $codigo),
+              'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
               'result' => 'duplicate',
               'detail' => 'intento_repetido_tickex',
             ));
@@ -349,11 +363,11 @@ if ($ticket && $puedeCheckin && $eventoOk) {
         } else {
           $mensaje = "No se pudo actualizar check-in de SenForms en este entorno.";
           tickex_log_qr_attempt($pdo, array(
-            'evento_id' => (int)($ticket['evento_id'] ?? 0),
+            'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
             'source' => 'TICKEX',
-            'source_ticket_id' => (int)($ticket['id'] ?? 0),
-            'ticket_ref' => (string)($ticket['bridge_ref'] ?? $ticket['codigo'] ?? $codigo),
-            'attendee_name' => (string)($ticket['nombre'] ?? ''),
+            'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+            'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('bridge_ref','codigo'), $codigo),
+            'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
             'result' => 'error',
             'detail' => 'tabla_bridge_inexistente',
           ));
@@ -361,11 +375,11 @@ if ($ticket && $puedeCheckin && $eventoOk) {
       } catch (Exception $e) {
         $mensaje = "No se pudo realizar check-in SenForms/Tickex.";
         tickex_log_qr_attempt($pdo, array(
-          'evento_id' => (int)($ticket['evento_id'] ?? 0),
+          'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
           'source' => 'TICKEX',
-          'source_ticket_id' => (int)($ticket['id'] ?? 0),
-          'ticket_ref' => (string)($ticket['bridge_ref'] ?? $ticket['codigo'] ?? $codigo),
-          'attendee_name' => (string)($ticket['nombre'] ?? ''),
+          'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+          'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('bridge_ref','codigo'), $codigo),
+          'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
           'result' => 'error',
           'detail' => 'excepcion_tickex',
         ));
@@ -378,11 +392,11 @@ if ($ticket && $puedeCheckin && $eventoOk) {
       $hizoCheckinAhora = true;
       $mensaje = "Check-in realizado correctamente.";
       tickex_log_qr_attempt($pdo, array(
-        'evento_id' => (int)($ticket['evento_id'] ?? 0),
+        'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
         'source' => 'STR',
-        'source_ticket_id' => (int)($ticket['id'] ?? 0),
-        'ticket_ref' => (string)($ticket['codigo'] ?? $codigo),
-        'attendee_name' => (string)($ticket['nombre'] ?? ''),
+        'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+        'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('codigo'), $codigo),
+        'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
         'result' => 'ok',
         'detail' => 'checkin_realizado',
       ));
@@ -391,59 +405,65 @@ if ($ticket && $puedeCheckin && $eventoOk) {
     if ($ticket['source'] === 'TICKEX') {
       $mensaje = "Esta entrada SenForms/Tickex ya agotó sus ingresos.";
       tickex_log_qr_attempt($pdo, array(
-        'evento_id' => (int)($ticket['evento_id'] ?? 0),
+        'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
         'source' => 'TICKEX',
-        'source_ticket_id' => (int)($ticket['id'] ?? 0),
-        'ticket_ref' => (string)($ticket['bridge_ref'] ?? $ticket['codigo'] ?? $codigo),
-        'attendee_name' => (string)($ticket['nombre'] ?? ''),
+        'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+        'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('bridge_ref','codigo'), $codigo),
+        'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
         'result' => 'duplicate',
         'detail' => 'intento_repetido_tickex',
       ));
     } else {
       $mensaje = "Esta entrada ya estaba checkeada.";
       tickex_log_qr_attempt($pdo, array(
-        'evento_id' => (int)($ticket['evento_id'] ?? 0),
+        'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
         'source' => 'STR',
-        'source_ticket_id' => (int)($ticket['id'] ?? 0),
-        'ticket_ref' => (string)($ticket['codigo'] ?? $codigo),
-        'attendee_name' => (string)($ticket['nombre'] ?? ''),
+        'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+        'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('codigo'), $codigo),
+        'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
         'result' => 'duplicate',
         'detail' => 'intento_repetido_str',
       ));
     }
   }
+} elseif ($ticket && $puedeCheckin && $eventoOk) {
+  $mensaje = 'Entrada válida. Confirmá el ingreso para registrar el check-in.';
 } elseif ($ticket && $puedeCheckin && !$eventoOk) {
   $mensaje = "Este ticket no pertenece a tu evento.";
   tickex_log_qr_attempt($pdo, array(
     'evento_id' => (int)$eventoId,
-    'source' => (string)($ticket['source'] ?? 'UNKNOWN'),
-    'source_ticket_id' => (int)($ticket['id'] ?? 0),
-    'ticket_ref' => (string)($ticket['codigo'] ?? $codigo),
-    'attendee_name' => (string)($ticket['nombre'] ?? ''),
+    'source' => (string)tickex_checkin_first_value($ticket, array('source'), 'UNKNOWN'),
+    'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+    'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('codigo'), $codigo),
+    'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
     'result' => 'denied',
     'detail' => 'ticket_fuera_de_evento',
   ));
 } elseif ($ticket && !$puedeCheckin) {
   $mensaje = "Entrada válida. Para hacer check-in, iniciá sesión en Puerta.";
-  tickex_log_qr_attempt($pdo, array(
-    'evento_id' => (int)($ticket['evento_id'] ?? 0),
-    'source' => (string)($ticket['source'] ?? 'UNKNOWN'),
-    'source_ticket_id' => (int)($ticket['id'] ?? 0),
-    'ticket_ref' => (string)($ticket['codigo'] ?? $codigo),
-    'attendee_name' => (string)($ticket['nombre'] ?? ''),
-    'result' => 'denied',
-    'detail' => 'sin_permiso_checkin',
-  ));
+  if ($isLogged) {
+    tickex_log_qr_attempt($pdo, array(
+      'evento_id' => (int)tickex_checkin_first_value($ticket, array('evento_id'), 0),
+      'source' => (string)tickex_checkin_first_value($ticket, array('source'), 'UNKNOWN'),
+      'source_ticket_id' => (int)tickex_checkin_first_value($ticket, array('id'), 0),
+      'ticket_ref' => (string)tickex_checkin_first_value($ticket, array('codigo'), $codigo),
+      'attendee_name' => (string)tickex_checkin_first_value($ticket, array('nombre'), ''),
+      'result' => 'denied',
+      'detail' => 'sin_permiso_checkin',
+    ));
+  }
 } elseif (!$ticket && $codigo !== '') {
-  tickex_log_qr_attempt($pdo, array(
-    'evento_id' => (int)$eventoId,
-    'source' => 'UNKNOWN',
-    'source_ticket_id' => 0,
-    'ticket_ref' => (string)$codigo,
-    'attendee_name' => '',
-    'result' => 'error',
-    'detail' => 'codigo_no_valido',
-  ));
+  if ($isLogged) {
+    tickex_log_qr_attempt($pdo, array(
+      'evento_id' => (int)$eventoId,
+      'source' => 'UNKNOWN',
+      'source_ticket_id' => 0,
+      'ticket_ref' => (string)$codigo,
+      'attendee_name' => '',
+      'result' => 'error',
+      'detail' => 'codigo_no_valido',
+    ));
+  }
 }
 
 $baseUrl    = 'https://str.tickex.com.ar';
@@ -500,13 +520,23 @@ $qrUrl      = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' .
 
         <?php if(isset($ticket['multiplier']) && (int)$ticket['multiplier'] > 1): ?>
           <div class="flash warn">Reconocido como 2x1 (<?php echo (int)$ticket['multiplier']; ?> ingresos).</div>
-          <div class="muted" style="margin-bottom:8px;">Usos registrados: <?php echo (int)($ticket['used_count'] ?? 0); ?>/<?php echo (int)$ticket['multiplier']; ?></div>
+          <div class="muted" style="margin-bottom:8px;">Usos registrados: <?php echo (int)tickex_checkin_first_value($ticket, array('used_count'), 0); ?>/<?php echo (int)$ticket['multiplier']; ?></div>
         <?php endif; ?>
 
         <?php if($mensaje): ?>
           <div class="flash <?php echo ($eventoOk && $puedeCheckin) ? 'ok' : 'warn'; ?>">
             <?php echo e($mensaje); ?>
           </div>
+        <?php endif; ?>
+
+        <?php if($puedeCheckin && $eventoOk && (int)$ticket['checked_in'] === 0): ?>
+          <form method="post" action="checkin.php" style="margin:14px 0;">
+            <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+            <input type="hidden" name="action" value="confirm_checkin">
+            <input type="hidden" name="c" value="<?php echo e($codigo); ?>">
+            <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
+            <button class="btn" type="submit" style="width:100%;background:var(--ok);color:#04150a;">Confirmar ingreso</button>
+          </form>
         <?php endif; ?>
 
         <p>

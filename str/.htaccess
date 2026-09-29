@@ -6,3 +6,7 @@
   # redirect that could change POST to GET or discard the ApiKey header.
   RewriteRule ^notification/tcwbh/?$ totalcoin_webhook.php [END]
 </IfModule>
+
+<FilesMatch "^arca_config\.json$">
+  Require all denied
+</FilesMatch>

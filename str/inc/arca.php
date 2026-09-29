@@ -2,11 +2,32 @@
 // inc/arca.php
 // Funciones para integración con ARCA/AFIP (facturación electrónica)
 
+function arca_config_file_path() {
+    $override = getenv('TICKEX_ARCA_CONFIG_FILE');
+    if ($override !== false && trim($override) !== '') return $override;
+    return dirname(dirname(__DIR__)) . '/.secrets/arca_config.json';
+}
+
 function arca_get_config() {
-    $file = __DIR__ . '/../arca_config.json';
-    if (!file_exists($file)) return null;
+    $file = arca_config_file_path();
+    if (!is_file($file)) {
+        // Read existing installations until their secret is migrated.
+        $file = __DIR__ . '/../arca_config.json';
+    }
+    if (!is_file($file)) return null;
     $data = json_decode(file_get_contents($file), true);
-    return $data;
+    return is_array($data) ? $data : null;
+}
+
+function arca_save_config($data) {
+    $file = arca_config_file_path();
+    $dir = dirname($file);
+    if (!is_dir($dir) && !mkdir($dir, 0700, true)) return false;
+    if (!is_writable($dir)) return false;
+    $saved = file_put_contents($file, json_encode($data), LOCK_EX);
+    if ($saved === false) return false;
+    @chmod($file, 0600);
+    return true;
 }
 
 // TODO: Implementar autenticación WSAA y emisión de factura (WSFEv1)

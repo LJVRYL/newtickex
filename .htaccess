@@ -1,5 +1,6 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  RewriteRule (^|/)\.secrets(/|$) - [F,L]
   # Si el archivo/folder no existe, redirige todo a app.php
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
