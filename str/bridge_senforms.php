@@ -23,25 +23,29 @@ $selectedEventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : $currentE
 $flash = array();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('La sesión venció. Actualizá la página.');
+    }
+    $action = (isset($_POST['action']) ? $_POST['action'] : '');
     try {
         if ($action === 'move_archive') {
-            $ttId = (int)($_POST['ticket_type_id'] ?? 0);
-            $from = (int)($_POST['from_event_id'] ?? 0);
+            $ttId = (int)((isset($_POST['ticket_type_id']) ? $_POST['ticket_type_id'] : 0));
+            $from = (int)((isset($_POST['from_event_id']) ? $_POST['from_event_id'] : 0));
             if ($ttId <= 0 || $from <= 0) throw new InvalidArgumentException('Datos incompletos');
             sba_move_ticket_type($ttId, $from, $archiveEventId);
             $flash[] = array('type'=>'ok','msg'=>'TicketType movido al evento archivo (#'.$archiveEventId.')');
             $selectedEventId = $from; // permanecer en evento actual
         } elseif ($action === 'create_tt') {
             $evId = isset($_POST['event_id']) && $_POST['event_id'] !== '' ? (int)$_POST['event_id'] : $currentEventId;
-            $name = $_POST['name'] ?? '';
-            $price = $_POST['price'] ?? '0';
+            $name = (isset($_POST['name']) ? $_POST['name'] : '');
+            $price = (isset($_POST['price']) ? $_POST['price'] : '0');
             sba_create_ticket_type($evId, $name, $price);
             $flash[] = array('type'=>'ok','msg'=>'TicketType creado en evento #'.$evId);
             $selectedEventId = $evId;
         } elseif ($action === 'rename_tt') {
-            $ttId = (int)($_POST['ticket_type_id'] ?? 0);
-            $name = $_POST['name'] ?? '';
+            $ttId = (int)((isset($_POST['ticket_type_id']) ? $_POST['ticket_type_id'] : 0));
+            $name = (isset($_POST['name']) ? $_POST['name'] : '');
             sba_rename_ticket_type($ttId, $name);
             $flash[] = array('type'=>'ok','msg'=>'Nombre actualizado');
         }
@@ -94,7 +98,7 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Crear TicketType</h3>
-  <form method="post" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+  <form method="post" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <input type="hidden" name="action" value="create_tt">
     <div>
       <label>Evento</label>
@@ -139,7 +143,7 @@ include __DIR__.'/inc/layout_top.php';
             <tr>
               <td><?php echo (int)$tk['Id']; ?></td>
               <td>
-                <form method="post" style="display:flex;gap:6px;align-items:center;">
+                <form method="post" style="display:flex;gap:6px;align-items:center;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
                   <input type="hidden" name="action" value="rename_tt">
                   <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
                   <input type="text" name="name" value="<?php echo e($tk['Name']); ?>" style="min-width:200px;">
@@ -151,6 +155,7 @@ include __DIR__.'/inc/layout_top.php';
               <td style="display:flex;gap:6px;flex-wrap:wrap;">
                 <?php if ((int)$selectedEventId !== (int)$archiveEventId): ?>
                   <form method="post" onsubmit="return confirm('Mover TicketType #<?php echo (int)$tk['Id']; ?> al evento archivo?');">
+                    <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
                     <input type="hidden" name="action" value="move_archive">
                     <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
                     <input type="hidden" name="from_event_id" value="<?php echo (int)$selectedEventId; ?>">

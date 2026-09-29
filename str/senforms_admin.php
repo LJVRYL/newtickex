@@ -17,30 +17,34 @@ if (!in_array($rol, array('super_admin','superadmin'), true)) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('La sesión venció. Actualizá la página.');
+    }
     $action = isset($_POST['action']) ? $_POST['action'] : '';
     try {
         if ($action === 'update_price') {
-            $id = (int)($_POST['ticket_type_id'] ?? 0);
-            $price = $_POST['price'] ?? '0';
+            $id = (int)((isset($_POST['ticket_type_id']) ? $_POST['ticket_type_id'] : 0));
+            $price = (isset($_POST['price']) ? $_POST['price'] : '0');
             sf_update_ticket_type_price($id, $price);
             flash('ok', 'Precio actualizado');
         } elseif ($action === 'update_limit') {
-            $eventId = (int)($_POST['event_id'] ?? 0);
-            $limit = $_POST['limit'] ?? '0';
+            $eventId = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
+            $limit = (isset($_POST['limit']) ? $_POST['limit'] : '0');
             sf_update_event_limit($eventId, $limit);
             flash('ok', 'Límite actualizado');
         } elseif ($action === 'create_event') {
             $data = array(
-                'name'         => trim($_POST['name'] ?? ''),
-                'start'        => trim($_POST['start'] ?? ''),
-                'end'          => trim($_POST['end'] ?? ''),
-                'location'     => trim($_POST['location'] ?? ''),
-                'site'         => trim($_POST['site'] ?? ''),
-                'flyer'        => trim($_POST['flyer'] ?? ''),
-                'limit'        => (int)($_POST['limit'] ?? 0),
+                'name'         => trim((isset($_POST['name']) ? $_POST['name'] : '')),
+                'start'        => trim((isset($_POST['start']) ? $_POST['start'] : '')),
+                'end'          => trim((isset($_POST['end']) ? $_POST['end'] : '')),
+                'location'     => trim((isset($_POST['location']) ? $_POST['location'] : '')),
+                'site'         => trim((isset($_POST['site']) ? $_POST['site'] : '')),
+                'flyer'        => trim((isset($_POST['flyer']) ? $_POST['flyer'] : '')),
+                'limit'        => (int)((isset($_POST['limit']) ? $_POST['limit'] : 0)),
                 'active'       => !empty($_POST['active']) ? 1 : 0,
-                'ticket_name'  => trim($_POST['ticket_name'] ?? ''),
-                'ticket_price' => $_POST['ticket_price'] ?? '0',
+                'ticket_name'  => trim((isset($_POST['ticket_name']) ? $_POST['ticket_name'] : '')),
+                'ticket_price' => (isset($_POST['ticket_price']) ? $_POST['ticket_price'] : '0'),
             );
             $newId = sf_create_event($data);
             flash('ok', 'Evento creado con ID '.$newId);
@@ -72,7 +76,7 @@ include __DIR__.'/inc/layout_top.php';
 
 <div class="card" style="margin-top:12px;">
   <h3 style="margin-top:0;">Crear evento</h3>
-  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <input type="hidden" name="action" value="create_event">
     <div>
       <label>Nombre</label>
@@ -126,7 +130,7 @@ include __DIR__.'/inc/layout_top.php';
     <h3 style="margin-top:0;">Evento #<?php echo (int)$ev['Id']; ?> — <?php echo e($ev['Name']); ?></h3>
     <div class="muted" style="font-size:12px;">SiteName: <?php echo e($ev['SiteName']); ?> | Límite: <?php echo (int)$ev['TicketAmountLimit']; ?> | Activo: <?php echo $ev['Active'] ? 'Sí' : 'No'; ?></div>
 
-    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
       <input type="hidden" name="action" value="update_limit">
       <input type="hidden" name="event_id" value="<?php echo (int)$ev['Id']; ?>">
       <div>
@@ -156,7 +160,7 @@ include __DIR__.'/inc/layout_top.php';
                 <?php if ($sales > 0): ?>
                   <div class="muted">$<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?> (bloqueado por ventas)</div>
                 <?php else: ?>
-                  <form method="post" style="display:flex;gap:6px;align-items:center;">
+                  <form method="post" style="display:flex;gap:6px;align-items:center;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
                     <input type="hidden" name="action" value="update_price">
                     <input type="hidden" name="ticket_type_id" value="<?php echo (int)$tk['Id']; ?>">
                     <input type="number" step="0.01" min="0" name="price" value="<?php echo htmlspecialchars($tk['Price'], ENT_QUOTES, 'UTF-8'); ?>" style="width:120px;">

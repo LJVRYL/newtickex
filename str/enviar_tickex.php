@@ -1,6 +1,6 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/manual_ticket_issuance.php';
@@ -58,7 +58,28 @@ foreach ($eventos as $ev) {
 $errors = array();
 $success = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_tickex') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
+    } else {
+        $deleteId = isset($_POST['tickex_id']) ? (int)$_POST['tickex_id'] : 0;
+        if ($rol === 'admin_evento') {
+            $delete = $pdo->prepare("DELETE FROM entradas WHERE id=:id AND tc_order_request_id LIKE 'manual-%' AND evento_id IN (SELECT id FROM eventos WHERE creado_por_admin_id=:admin)");
+            $delete->execute(array(':id'=>$deleteId, ':admin'=>(int)$cu['id']));
+        } else {
+            $delete = $pdo->prepare("DELETE FROM entradas WHERE id=:id AND tc_order_request_id LIKE 'manual-%'");
+            $delete->execute(array(':id'=>$deleteId));
+        }
+        if ($delete->rowCount() === 1) {
+            flash('ok', 'Tickex eliminado.');
+            header('Location: enviar_tickex.php');
+            exit;
+        }
+        $errors[] = 'No se encontró el Tickex o no tenés permiso para eliminarlo.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST['action'] !== 'delete_tickex')) {
     $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
     $tipoId   = isset($_POST['tipo_id']) ? (int)$_POST['tipo_id'] : 0;
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
@@ -266,22 +287,19 @@ include __DIR__.'/inc/layout_top.php';
   </form>
 
   <?php
-    // Eliminar tickex si se pide
-    if (isset($_GET['del_tickex']) && (int)$_GET['del_tickex'] > 0) {
-      $delId = (int)$_GET['del_tickex'];
-      $pdo->prepare("DELETE FROM entradas WHERE id = ?")->execute(array($delId));
-      echo '<div class="flash ok">Tickex eliminado.</div>';
-    }
-
     // Buscar últimos Tickex emitidos manualmente mediante una orden auditable.
-    $where = "WHERE tc_order_request_id LIKE 'manual-%'";
+    $where = "WHERE en.tc_order_request_id LIKE 'manual-%'";
     $params = array();
+    if ($rol === 'admin_evento') {
+      $where .= ' AND ev.creado_por_admin_id=:history_admin';
+      $params[':history_admin'] = (int)$cu['id'];
+    }
     if (isset($_GET['buscar']) && trim($_GET['buscar']) !== '') {
       $q = '%'.trim($_GET['buscar']).'%';
-      $where .= " AND (email LIKE :q OR nombre LIKE :q OR codigo LIKE :q)";
+      $where .= " AND (en.email LIKE :q OR en.nombre LIKE :q OR en.codigo LIKE :q OR ev.nombre LIKE :q)";
       $params[':q'] = $q;
     }
-    $sql = "SELECT * FROM entradas $where ORDER BY id DESC LIMIT 20";
+    $sql = "SELECT en.*,ev.nombre AS evento_nombre FROM entradas en INNER JOIN eventos ev ON ev.id=en.evento_id $where ORDER BY en.id DESC LIMIT 20";
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $ultimos = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -310,11 +328,11 @@ include __DIR__.'/inc/layout_top.php';
             <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
             <td><?php echo e($u['codigo']); ?></td>
             <td><?php echo e($u['tipo']); ?></td>
-            <td><?php echo (int)$u['evento_id']; ?></td>
+            <td><?php echo e($u['evento_nombre']); ?></td>
             <td><?php echo e($u['fecha_registro']); ?></td>
             <td style="white-space:nowrap;">
               <a class="btn secondary" style="padding:6px 10px;" href="ticket.php?c=<?php echo urlencode((string)$u['codigo']); ?>" target="_blank" rel="noopener" title="Ver ticket" aria-label="Ver ticket">👁</a>
-              <a class="btn danger" style="padding:6px 10px;" href="enviar_tickex.php?del_tickex=<?php echo (int)$u['id']; ?>" onclick="return confirm('¿Eliminar este tickex?');" title="Eliminar" aria-label="Eliminar">🗑</a>
+              <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este Tickex?');"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="delete_tickex"><input type="hidden" name="tickex_id" value="<?php echo (int)$u['id']; ?>"><button class="btn danger" style="padding:6px 10px;" type="submit" title="Eliminar" aria-label="Eliminar">🗑</button></form>
             </td>
           </tr>
         <?php endforeach; ?>

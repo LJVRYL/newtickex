@@ -29,6 +29,11 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 
 $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+    http_response_code(403);
+    exit('La sesión venció. Actualizá la página.');
+}
+
 // aceptar id o evento_id
 $eventoId = 0;
 if (isset($_GET['id'])) $eventoId = (int)$_GET['id'];
@@ -638,6 +643,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <!-- Formulario para agregar ingreso -->
   <form id="formManualIncome" style="margin-bottom:16px;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="evento_id" value="<?php echo (int)$eventoId; ?>">
     
     <div class="pe-manual-form-grid" style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px;">
@@ -874,6 +880,7 @@ document.querySelectorAll('.btn-delete-income').forEach(btn => {
         const incomeId = this.dataset.id;
         const formData = new FormData();
         formData.append('id', incomeId);
+        formData.append('_csrf', '<?php echo e($csrf); ?>');
         fetch('delete_manual_income.php', { method: 'POST', body: formData })
           .then(r => r.json())
           .then(data => {

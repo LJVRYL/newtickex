@@ -41,10 +41,14 @@ if (!$sfAdminUrl || trim($sfAdminUrl) === '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('La sesión venció. Actualizá la página.');
+    }
+    $action = (isset($_POST['action']) ? $_POST['action'] : '');
     try {
         if ($action === 'pick_event') {
-            $site = trim($_POST['site'] ?? '');
+            $site = trim((isset($_POST['site']) ? $_POST['site'] : ''));
             if ($site !== '') {
                 $ev = sf_find_event_by_site($site);
                 if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
@@ -54,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } elseif ($action === 'pick_by_id') {
-            $eid = (int)($_POST['event_id'] ?? 0);
+            $eid = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
             if ($eid > 0) {
                 $ev = sf_get_event($eid);
                 if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
@@ -64,17 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } elseif ($action === 'search' && $isSuper) {
-            $q = trim($_POST['q'] ?? '');
+            $q = trim((isset($_POST['q']) ? $_POST['q'] : ''));
             if ($q !== '') {
                 $searchResults = sf_find_events_like($q);
                 if (!$searchResults) flash('warn', 'No se encontraron eventos que coincidan.');
             }
         } elseif ($action === 'create_ticket_type') {
-            $eid = (int)($_POST['event_id'] ?? 0);
+            $eid = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
             $ev = sf_get_event($eid);
             if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
-                $name = trim($_POST['name'] ?? '');
-                $price = $_POST['price'] ?? '0';
+                $name = trim((isset($_POST['name']) ? $_POST['name'] : ''));
+                $price = (isset($_POST['price']) ? $_POST['price'] : '0');
                 $newId = sf_create_ticket_type($eid, $name, $price);
                 set_local_tickettype_state($pdoLocal, $eid, $newId, true);
                 flash('ok', 'Tipo creado (Id '.$newId.') y activado en STR.');
@@ -83,11 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('err', $ev ? 'No tenés permiso para ese evento.' : 'Evento no encontrado.');
             }
         } elseif ($action === 'rename_ticket_type') {
-            $ttid = (int)($_POST['ticket_type_id'] ?? 0);
-            $eid = (int)($_POST['event_id'] ?? 0);
+            $ttid = (int)((isset($_POST['ticket_type_id']) ? $_POST['ticket_type_id'] : 0));
+            $eid = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
             $ev = sf_get_event($eid);
             if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
-                $name = trim($_POST['name'] ?? '');
+                $name = trim((isset($_POST['name']) ? $_POST['name'] : ''));
                 sf_rename_ticket_type($ttid, $name);
                 flash('ok', 'Nombre actualizado.');
                 $selectedEvent = $ev;
@@ -95,11 +99,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('err', $ev ? 'No tenés permiso para ese evento.' : 'Evento no encontrado.');
             }
         } elseif ($action === 'update_price') {
-            $ttid = (int)($_POST['ticket_type_id'] ?? 0);
-            $eid = (int)($_POST['event_id'] ?? 0);
+            $ttid = (int)((isset($_POST['ticket_type_id']) ? $_POST['ticket_type_id'] : 0));
+            $eid = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
             $ev = sf_get_event($eid);
             if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
-                $price = $_POST['price'] ?? '0';
+                $price = (isset($_POST['price']) ? $_POST['price'] : '0');
                 sf_update_ticket_type_price($ttid, $price);
                 flash('ok', 'Precio actualizado.');
                 $selectedEvent = $ev;
@@ -107,8 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('err', $ev ? 'No tenés permiso para ese evento.' : 'Evento no encontrado.');
             }
         } elseif ($action === 'toggle_active') {
-            $ttid = (int)($_POST['ticket_type_id'] ?? 0);
-            $eid = (int)($_POST['event_id'] ?? 0);
+            $ttid = (int)((isset($_POST['ticket_type_id']) ? $_POST['ticket_type_id'] : 0));
+            $eid = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
             $ev = sf_get_event($eid);
             if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
                 $newState = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 0;
@@ -119,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('err', $ev ? 'No tenés permiso para ese evento.' : 'Evento no encontrado.');
             }
         } elseif ($action === 'import_tickets') {
-            $eid = (int)($_POST['event_id'] ?? 0);
+            $eid = (int)((isset($_POST['event_id']) ? $_POST['event_id'] : 0));
             $ev = sf_get_event($eid);
             if ($ev && cat_sf_event_allowed($ev, $mappedSlugList, $isSuper)) {
                 $stats = sf_import_tickets_to_cache($pdoLocal, $eid);
@@ -163,7 +167,7 @@ include __DIR__.'/inc/layout_top.php';
 <?php if ($isSuper): ?>
   <div class="card" style="margin-top:12px;">
     <h3 style="margin-top:0;">Seleccionar evento SenForms</h3>
-    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
       <input type="hidden" name="action" value="pick_event">
       <div>
         <label>SiteName (slug)</label>
@@ -174,7 +178,7 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </form>
 
-    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;">
+    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
       <input type="hidden" name="action" value="pick_by_id">
       <div>
         <label>Event Id</label>
@@ -185,7 +189,7 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </form>
 
-    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;">
+    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
       <input type="hidden" name="action" value="search">
       <div>
         <label>Buscar (nombre o slug)</label>
@@ -209,7 +213,7 @@ include __DIR__.'/inc/layout_top.php';
                 <?php echo e($row['EventStartDate']); ?> → <?php echo e($row['EventEndDate']); ?>
               </td>
               <td>
-                <form method="post" style="margin:0;">
+                <form method="post" style="margin:0;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
                   <input type="hidden" name="action" value="pick_by_id">
                   <input type="hidden" name="event_id" value="<?php echo (int)$row['Id']; ?>">
                   <button class="btn secondary" type="submit">Usar</button>
@@ -252,7 +256,7 @@ include __DIR__.'/inc/layout_top.php';
         <tr>
           <td><?php echo (int)$t['Id']; ?></td>
           <td>
-            <form method="post" style="display:flex;gap:6px;align-items:center;">
+            <form method="post" style="display:flex;gap:6px;align-items:center;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
               <input type="hidden" name="action" value="rename_ticket_type">
               <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
               <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -265,7 +269,7 @@ include __DIR__.'/inc/layout_top.php';
               <div class="muted">$<?php echo htmlspecialchars($t['Price'], ENT_QUOTES, 'UTF-8'); ?> (bloqueado por ventas)</div>
               <div class="muted" style="font-size:12px;">Crea un tipo nuevo para cambiar precio.</div>
             <?php else: ?>
-              <form method="post" style="display:flex;gap:6px;align-items:center;">
+              <form method="post" style="display:flex;gap:6px;align-items:center;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
                 <input type="hidden" name="action" value="update_price">
                 <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
                 <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -276,7 +280,7 @@ include __DIR__.'/inc/layout_top.php';
           </td>
           <td><?php echo $sales; ?></td>
           <td>
-            <form method="post" style="margin:0;">
+            <form method="post" style="margin:0;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
               <input type="hidden" name="action" value="toggle_active">
               <input type="hidden" name="ticket_type_id" value="<?php echo (int)$t['Id']; ?>">
               <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
@@ -292,7 +296,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <div class="card" style="margin-top:12px;">
     <h4 style="margin:0 0 6px;">Crear nuevo tipo</h4>
-    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+    <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
       <input type="hidden" name="action" value="create_ticket_type">
       <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
       <div>
@@ -316,7 +320,7 @@ include __DIR__.'/inc/layout_top.php';
       <p class="muted" style="margin:0;">Guarda Tickets (Price, SelectedType, PaymentState) en SQLite para reportes.</p>
       <div class="muted" style="font-size:12px;margin-top:4px;">Última sync: <?php echo $cacheSummary['last_sync'] ? e($cacheSummary['last_sync']) : '—'; ?> | Filas: <?php echo (int)$cacheSummary['rows']; ?> | Pagados: <?php echo (int)$cacheSummary['paid']; ?></div>
     </div>
-    <form method="post" style="justify-self:end;">
+    <form method="post" style="justify-self:end;"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
       <input type="hidden" name="action" value="import_tickets">
       <input type="hidden" name="event_id" value="<?php echo (int)$selectedEvent['Id']; ?>">
       <button class="btn" type="submit">Importar ahora</button>
@@ -333,7 +337,7 @@ include __DIR__.'/inc/layout_top.php';
           <?php $sumTotal += (float)$r['total_real']; ?>
           <tr>
             <td><?php echo e($r['selected_type']); ?></td>
-            <td><?php echo e($r['ticket_type_name'] ?? ''); ?></td>
+            <td><?php echo e((isset($r['ticket_type_name']) ? $r['ticket_type_name'] : '')); ?></td>
             <td><?php echo (int)$r['qty']; ?></td>
             <td>$<?php echo number_format((float)$r['total_real'], 2, '.', ','); ?></td>
           </tr>
