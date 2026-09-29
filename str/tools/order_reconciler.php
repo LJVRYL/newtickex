@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../inc/bootstrap.php';
 require_once __DIR__ . '/../inc/order_processing.php';
 require_once __DIR__ . '/../inc/totalcoin_confirmation.php';
+require_once __DIR__ . '/../inc/order_reconciliation.php';
 
 $pdo = db();
 
@@ -25,7 +26,7 @@ try {
 }
 
 $eventoId = isset($argv[1]) ? (int)$argv[1] : 0;
-$statusWhere = "payment_status = 'pending' AND ref IS NOT NULL AND ref <> '' AND created_at >= datetime('now', '-7 days')";
+$statusWhere = tickex_totalcoin_pending_status_where();
 $statusParams = array();
 if ($eventoId > 0) {
     $statusWhere .= ' AND evento_id = :status_eid';
