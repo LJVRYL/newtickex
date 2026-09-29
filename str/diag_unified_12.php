@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 /**
  * diag_unified_12.php
  * Diagnóstico rápido para evento 12: muestra mapping, slugs del bridge y muestras de filas

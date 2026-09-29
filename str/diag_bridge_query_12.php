@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 /**
  * diag_bridge_query_12.php
  * Muestra exactamente qué query se ejecuta para el bridge en evento 12

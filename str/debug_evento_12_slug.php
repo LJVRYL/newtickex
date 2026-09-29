@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 require_once __DIR__.'/inc/bootstrap.php';
 
 $pdo = db();
@@ -14,7 +15,7 @@ if ($evento) {
     echo "<h2>Datos STR:</h2>";
     echo "<pre>" . json_encode($evento, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "</pre>";
     
-    $slug = $evento['slug'] ?? '';
+    $slug = isset($evento['slug']) ? $evento['slug'] : '';
     echo "<h2>Slug: <code>$slug</code></h2>";
     
     if ($slug) {

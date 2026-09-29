@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 /**
  * Script de diagnóstico simple de estructura de BD
  */

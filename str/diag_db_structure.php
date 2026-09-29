@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 /**
  * Diagnóstico de estructura de BD para refactor panel_evento.php
  * Ejecutar: php -S 127.0.0.1:8080 -t str
