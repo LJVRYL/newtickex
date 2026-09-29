@@ -83,6 +83,7 @@ $okMsg = '';
 
 $token = isset($_GET['token']) ? trim($_GET['token']) : '';
 $sessionId = isset($_SESSION['usuario_id']) ? (int)$_SESSION['usuario_id'] : 0;
+$csrf = tickex_csrf_token();
 
 $pdo = db();
 ensure_registro_pendientes($pdo);
@@ -96,7 +97,7 @@ if ($token === '' && $sessionId > 0) {
     $errores[] = 'No encontramos tu registro. Pedí otro email de registro.';
   }
 } elseif ($token !== '') {
-  $st = $pdo->prepare('SELECT * FROM registro_pendientes WHERE token = :t LIMIT 1');
+  $st = $pdo->prepare("SELECT * FROM registro_pendientes WHERE token = :t AND creado_en >= datetime('now','-24 hours') LIMIT 1");
   $st->execute(array(':t' => $token));
   $row = $st->fetch(PDO::FETCH_ASSOC);
   if (!$row) {
@@ -107,15 +108,16 @@ if ($token === '' && $sessionId > 0) {
   $row = null;
 }
 
-$nombre   = $row['nombre'] ?? '';
-$apellido = $row['apellido'] ?? '';
-$apodo    = $row['apodo'] ?? '';
-$dni      = $row['dni'] ?? '';
-$genero   = $row['genero'] ?? '';
-$email    = $row['email'] ?? '';
-$nextUrl  = $row['next_url'] ?? '';
-$fotoPath = $row['foto_path'] ?? '';
-$passHash = $row['password_hash'] ?? '';
+$nombre   = isset($row['nombre']) ? $row['nombre'] : '';
+$apellido = isset($row['apellido']) ? $row['apellido'] : '';
+$apodo    = isset($row['apodo']) ? $row['apodo'] : '';
+$dni      = isset($row['dni']) ? $row['dni'] : '';
+$genero   = isset($row['genero']) ? $row['genero'] : '';
+$email    = isset($row['email']) ? $row['email'] : '';
+$nextUrl  = isset($row['next_url']) ? $row['next_url'] : '';
+$producerSignup = $nextUrl === 'empezar.php';
+$fotoPath = isset($row['foto_path']) ? $row['foto_path'] : '';
+$passHash = isset($row['password_hash']) ? $row['password_hash'] : '';
 $passNueva = '';
 $passRepite = '';
 
@@ -128,10 +130,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
   $passNueva  = isset($_POST['pass_nueva']) ? trim($_POST['pass_nueva']) : '';
   $passRepite = isset($_POST['pass_repite']) ? trim($_POST['pass_repite']) : '';
 
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        $errores[] = 'La sesión venció. Volvé a abrir el enlace de registro.';
+    }
     if ($nombre === '' || $apellido === '') {
         $errores[] = 'Nombre y apellido son obligatorios.';
     }
-    if ($dni === '') {
+    if (!$producerSignup && $dni === '') {
         $errores[] = 'El DNI es obligatorio.';
     }
 
@@ -174,25 +179,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
   // Validar contraseña obligatoria en este paso
   if ($passNueva === '' || $passRepite === '') {
     $errores[] = 'Debés definir una contraseña para tu cuenta.';
-  } elseif (strlen($passNueva) < 6) {
-    $errores[] = 'La contraseña debe tener al menos 6 caracteres.';
+  } elseif (strlen($passNueva) < 10) {
+    $errores[] = 'La contraseña debe tener al menos 10 caracteres.';
   } elseif ($passNueva !== $passRepite) {
     $errores[] = 'Las contraseñas no coinciden.';
   }
 
     // Manejar foto de perfil (opcional)
-    $subida = $_FILES['foto'] ?? null;
+    $subida = isset($_FILES['foto']) ? $_FILES['foto'] : null;
     if ($subida && isset($subida['tmp_name']) && is_uploaded_file($subida['tmp_name'])) {
-        $ext = strtolower(pathinfo($subida['name'], PATHINFO_EXTENSION));
-        $permitidos = array('jpg','jpeg','png');
-        if (!in_array($ext, $permitidos, true)) {
+        $imageInfo = @getimagesize($subida['tmp_name']);
+        $mime = is_array($imageInfo) && isset($imageInfo['mime']) ? strtolower((string)$imageInfo['mime']) : '';
+        $mimeExtensions = array('image/jpeg' => 'jpg', 'image/png' => 'png');
+        if (!isset($mimeExtensions[$mime])) {
             $errores[] = 'Formato de foto no permitido (solo JPG o PNG).';
         } elseif ($subida['size'] > 2 * 1024 * 1024) {
             $errores[] = 'La foto es muy pesada (máx 2 MB).';
         } else {
+            $ext = $mimeExtensions[$mime];
             $destDir = __DIR__ . '/uploads/perfiles';
             if (!is_dir($destDir)) {
-                @mkdir($destDir, 0777, true);
+                @mkdir($destDir, 0750, true);
             }
             $filename = 'perfil_' . (int)$row['id'] . '_' . time() . '.' . $ext;
             $destPath = $destDir . '/' . $filename;
@@ -205,35 +212,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
     }
 
     if (empty($errores)) {
-      // log de versión anterior
-      $pdo->prepare('INSERT INTO registro_pendientes_log (reg_id,email,nombre,apellido,apodo,dni,genero,foto_path,created_at) VALUES (:id,:em,:n,:a,:ap,:dni,:g,:fp,:c)')
-        ->execute(array(
-          ':id' => (int)$row['id'],
-          ':em' => $email,
-          ':n'  => $row['nombre'] ?? '',
-          ':a'  => $row['apellido'] ?? '',
-          ':ap' => $row['apodo'] ?? '',
-          ':dni'=> $row['dni'] ?? '',
-          ':g'  => $row['genero'] ?? '',
-          ':fp' => $row['foto_path'] ?? '',
-          ':c'  => date('Y-m-d H:i:s'),
-        ));
-
         $newHash = function_exists('password_hash') ? password_hash($passNueva, PASSWORD_DEFAULT) : md5($passNueva);
+        // Los apodos vacíos no representan una identidad y deben guardarse como
+        // NULL. SQLite considera dos cadenas vacías iguales en un índice UNIQUE.
+        $apodoDb = $apodo === '' ? null : $apodo;
 
-        $stmtUp = $pdo->prepare('UPDATE registro_pendientes SET nombre=:n, apellido=:a, apodo=:ap, dni=:dni, genero=:g, foto_path=:fp, completado_en=:c, password_hash=:ph WHERE id=:id');
-        $stmtUp->execute(array(
-          ':n'  => $nombre,
-          ':a'  => $apellido,
-          ':ap' => $apodo,
-          ':dni'=> $dni,
-          ':g'  => $genero,
-          ':fp' => $fotoPath,
-          ':c'  => date('Y-m-d H:i:s'),
-          ':ph' => $newHash,
-          ':id' => (int)$row['id'],
-        ));
+        try {
+          $pdo->beginTransaction();
 
+          // log de versión anterior
+          $pdo->prepare('INSERT INTO registro_pendientes_log (reg_id,email,nombre,apellido,apodo,dni,genero,foto_path,created_at) VALUES (:id,:em,:n,:a,:ap,:dni,:g,:fp,:c)')
+            ->execute(array(
+              ':id' => (int)$row['id'],
+              ':em' => $email,
+              ':n'  => isset($row['nombre']) ? $row['nombre'] : '',
+              ':a'  => isset($row['apellido']) ? $row['apellido'] : '',
+              ':ap' => isset($row['apodo']) ? $row['apodo'] : '',
+              ':dni'=> isset($row['dni']) ? $row['dni'] : '',
+              ':g'  => isset($row['genero']) ? $row['genero'] : '',
+              ':fp' => isset($row['foto_path']) ? $row['foto_path'] : '',
+              ':c'  => date('Y-m-d H:i:s'),
+            ));
+
+          $stmtUp = $pdo->prepare('UPDATE registro_pendientes SET nombre=:n, apellido=:a, apodo=:ap, dni=:dni, genero=:g, foto_path=:fp, completado_en=:c, password_hash=:ph WHERE id=:id');
+          $stmtUp->execute(array(
+            ':n'  => $nombre,
+            ':a'  => $apellido,
+            ':ap' => $apodoDb,
+            ':dni'=> $dni,
+            ':g'  => $genero,
+            ':fp' => $fotoPath,
+            ':c'  => date('Y-m-d H:i:s'),
+            ':ph' => $newHash,
+            ':id' => (int)$row['id'],
+          ));
+
+          $pdo->commit();
+        } catch (PDOException $e) {
+          if ($pdo->inTransaction()) $pdo->rollBack();
+          $detail = strtolower((string)$e->getMessage());
+          if ((string)$e->getCode() === '23000' || strpos($detail, 'unique constraint') !== false || strpos($detail, 'not unique') !== false) {
+            $errores[] = 'Ese Tickex ID ya está en uso. Elegí otro.';
+          } else {
+            error_log('[Registration] profile update failed: ' . $e->getMessage());
+            $errores[] = 'No pudimos guardar tus datos en este momento. Intentá nuevamente.';
+          }
+        }
+
+      if (empty($errores)) {
+        tickex_clear_identity_session();
+        session_regenerate_id(true);
+        $_SESSION['auth_context'] = 'user';
         $_SESSION['email']      = $email;
         $_SESSION['first_name'] = $nombre;
         $_SESSION['last_name']  = $apellido;
@@ -246,9 +275,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $row) {
 
         $okMsg = 'Registro completado. Ya podés continuar con tu compra.';
 
-        $dest = $nextUrl !== '' ? $nextUrl : 'panel_usuario.php';
+        $dest = ($nextUrl !== '' && strpos($nextUrl, '://') === false && substr($nextUrl, 0, 2) !== '//') ? $nextUrl : 'panel_usuario.php';
         header('Location: ' . $dest);
         exit;
+      }
     }
 }
 
@@ -284,6 +314,7 @@ include __DIR__.'/inc/layout_top.php';
 <?php if ($row): ?>
 <div class="card" style="max-width:640px;margin:0 auto 24px auto;">
   <form method="post" enctype="multipart/form-data" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+    <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8'); ?>">
     <div style="grid-column:1 / -1;">
       <label>Email</label>
       <input type="email" value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>" disabled>
@@ -297,6 +328,7 @@ include __DIR__.'/inc/layout_top.php';
       <label>Apellido</label>
       <input name="apellido" required value="<?php echo htmlspecialchars($apellido, ENT_QUOTES, 'UTF-8'); ?>">
     </div>
+    <?php if (!$producerSignup): ?>
     <div>
       <label>Tickex ID (opcional)</label>
       <input name="apodo" value="<?php echo htmlspecialchars($apodo, ENT_QUOTES, 'UTF-8'); ?>" placeholder="ej: leo123 (si lo dejás vacío, usaremos #ID)">
@@ -314,14 +346,16 @@ include __DIR__.'/inc/layout_top.php';
         <option value="X" <?php echo $genero==='X'?'selected':''; ?>>X</option>
       </select>
     </div>
+    <?php endif; ?>
     <div>
-      <label>Contraseña (mín 6)</label>
+      <label>Contraseña (mínimo 10)</label>
       <input type="password" name="pass_nueva" required autocomplete="new-password" value="<?php echo htmlspecialchars($passNueva, ENT_QUOTES, 'UTF-8'); ?>">
     </div>
     <div>
       <label>Repetir contraseña</label>
       <input type="password" name="pass_repite" required autocomplete="new-password" value="<?php echo htmlspecialchars($passRepite, ENT_QUOTES, 'UTF-8'); ?>">
     </div>
+    <?php if (!$producerSignup): ?>
     <div>
       <label>Foto de perfil (JPG/PNG, máx 2 MB)</label>
       <input type="file" name="foto" accept="image/jpeg,image/png">
@@ -332,10 +366,11 @@ include __DIR__.'/inc/layout_top.php';
         </div>
       <?php endif; ?>
     </div>
+    <?php endif; ?>
     <div style="grid-column:1 / -1;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="btn" type="submit">Guardar y continuar</button>
       <?php if ($nextUrl): ?>
-        <a class="btn secondary" href="<?php echo htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8'); ?>">Volver al checkout</a>
+        <a class="btn secondary" href="<?php echo htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8'); ?>"><?php echo $producerSignup ? 'Volver al inicio' : 'Volver al checkout'; ?></a>
       <?php endif; ?>
     </div>
   </form>

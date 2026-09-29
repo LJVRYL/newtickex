@@ -85,6 +85,12 @@ $requestPath = $requestPath === '/' ? '/' : rtrim((string)$requestPath, '/');
 if ($page === 'login.php' || $requestPath === '/ingresar') {
   $bodyClass .= ' page-login';
 }
+if ($page === 'login_admin.php') {
+  $bodyClass .= ' page-login page-login-admin';
+}
+if ($page === 'registro_usuario.php') {
+  $bodyClass .= ' page-login page-registration';
+}
 if ($page === 'panel_staff.php') {
   $bodyClass .= ' page-staff-dashboard';
 }
