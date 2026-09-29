@@ -1,12 +1,13 @@
 <?php
 // panel_revendedor.php - Dashboard básico para revendedores (clientes)
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()) . '?next=' . urlencode(tickex_route('reseller_home', array())));
   exit;
 }
 
@@ -42,7 +43,7 @@ try {
 if (!$cliente) {
   $_SESSION = array();
   session_destroy();
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()));
   exit;
 }
 
@@ -60,7 +61,7 @@ if (!$rev) {
   http_response_code(403);
   $title = 'Acceso restringido';
   include __DIR__ . '/inc/layout_top.php';
-  echo '<div class="card" style="max-width:700px;margin:32px auto;"><h2>Acceso restringido</h2><p>No tenés una cuenta de revendedor activa.</p><a class="btn secondary" href="panel_usuario.php">⬅ Volver</a></div>';
+  echo '<div class="card" style="max-width:700px;margin:32px auto;"><h2>Acceso restringido</h2><p>No tenés una cuenta de revendedor activa.</p><a class="btn secondary" href="' . e(tickex_route('customer_home', array())) . '">⬅ Volver</a></div>';
   include __DIR__ . '/inc/layout_bottom.php';
   exit;
 }
@@ -111,9 +112,9 @@ try {
   $stO->execute(array(':rid' => $revId));
   while ($o = $stO->fetch(PDO::FETCH_ASSOC)) {
     $totalOrders++;
-    if (_tickex_is_paid_state($o['state'] ?? '')) {
+    if (_tickex_is_paid_state(isset($o['state']) ? $o['state'] : '')) {
       $totalPaidOrders++;
-      $totalPaidAmount += (float)($o['amount'] ?? 0);
+      $totalPaidAmount += (float)(isset($o['amount']) ? $o['amount'] : 0);
     }
   }
 } catch (Exception $e) {
@@ -129,8 +130,8 @@ try {
   $stW = $pdo->prepare('SELECT amount, estado FROM revendedor_retiros WHERE revendedor_id = :rid');
   $stW->execute(array(':rid' => $revId));
   while ($w = $stW->fetch(PDO::FETCH_ASSOC)) {
-    $amt = (float)($w['amount'] ?? 0);
-    $stt = (string)($w['estado'] ?? '');
+    $amt = (float)(isset($w['amount']) ? $w['amount'] : 0);
+    $stt = (string)(isset($w['estado']) ? $w['estado'] : '');
     if ($stt === 'paid') $paidWithdraw += $amt;
     if ($stt === 'pending') $pendingWithdraw += $amt;
   }
@@ -178,7 +179,7 @@ $title = 'Dashboard revendedor';
 include __DIR__ . '/inc/layout_top.php';
 
 $tickexId = ($cliente['apodo'] && $cliente['apodo'] !== '') ? (string)$cliente['apodo'] : ('#' . (int)$cliente['id']);
-$nombre = trim((string)($cliente['nombre'] ?? '') . ' ' . (string)($cliente['apellido'] ?? ''));
+$nombre = trim((string)(isset($cliente['nombre']) ? $cliente['nombre'] : '') . ' ' . (string)(isset($cliente['apellido']) ? $cliente['apellido'] : ''));
 if ($nombre === '') $nombre = (string)$cliente['email'];
 ?>
 
@@ -188,7 +189,7 @@ if ($nombre === '') $nombre = (string)$cliente['email'];
     <div class="muted" style="margin-top:4px;"><?php echo htmlspecialchars($nombre, ENT_QUOTES, 'UTF-8'); ?> — Tickex ID: <strong><?php echo htmlspecialchars($tickexId, ENT_QUOTES, 'UTF-8'); ?></strong></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="btn secondary" href="panel_usuario.php">⬅ Volver</a>
+    <a class="btn secondary" href="<?php echo e(tickex_route('customer_home', array())); ?>">⬅ Volver</a>
   </div>
 </div>
 
@@ -233,7 +234,7 @@ if ($nombre === '') $nombre = (string)$cliente['email'];
       <input type="hidden" name="action" value="save_cbu">
       <label>
         CBU
-        <input name="cbu" value="<?php echo htmlspecialchars((string)($cliente['cbu'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" placeholder="22 dígitos" required>
+        <input name="cbu" value="<?php echo htmlspecialchars((string)(isset($cliente['cbu']) ? $cliente['cbu'] : ''), ENT_QUOTES, 'UTF-8'); ?>" placeholder="22 dígitos" required>
       </label>
       <div>
         <button class="btn" type="submit">Guardar CBU</button>

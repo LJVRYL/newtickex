@@ -1,4 +1,5 @@
 ﻿<?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 session_start();
 
 // Determinar pestaña activa
@@ -147,9 +148,9 @@ function e($s) {
       <tr>
         <td><?php echo (int)$p['id']; ?></td>
         <td><?php echo e($p['email']); ?></td>
-        <td><?php echo e($p['nombre'] ?? ''); ?></td>
-        <td><?php echo e($p['apellido'] ?? ''); ?></td>
-        <td><?php echo e($p['apodo'] ?? ''); ?></td>
+        <td><?php echo e(isset($p['nombre']) ? $p['nombre'] : ''); ?></td>
+        <td><?php echo e(isset($p['apellido']) ? $p['apellido'] : ''); ?></td>
+        <td><?php echo e(isset($p['apodo']) ? $p['apodo'] : ''); ?></td>
         <td><?php echo !empty($p['completado_en']) ? '<span class="badge badge-verified">Completado</span>' : '<span class="badge badge-pending">Pendiente</span>'; ?></td>
         <td><?php echo e($p['creado_en']); ?></td>
       </tr>
