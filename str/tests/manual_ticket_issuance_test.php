@@ -51,11 +51,16 @@ $courtesy = tickex_manual_issue_package($pdo, array(
     'nombre' => 'Cortesia Manual',
     'admin_id' => 77,
     'restrict_to_admin' => true,
+    'request_id' => 'mobile-manual-1234567890abcdef1234567890abcdef',
 ));
 manual_test_ok((int)$courtesy['issued_quantity'] === 4, 'one 3x4 courtesy issues four independent QR entries');
 manual_test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WHERE tc_order_request_id='" . $courtesy['request_id'] . "'")->fetchColumn()) < 0.001, 'courtesy records no revenue');
 manual_test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=' . $typeId)->fetchColumn() === 12, 'courtesy still decrements four stock units');
 manual_test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE related_table='tc_orders' AND related_id=" . (int)$courtesy['order_id'] . " AND context='tickex_cortesia' AND mail_ok=1")->fetchColumn() === 1, 'courtesy uses its own consolidated email context');
+$repeat = tickex_manual_issue_package($pdo, array('evento_id' => $eventId, 'tipo_id' => $typeId, 'cantidad' => 1, 'modo' => 'courtesy', 'email' => 'cortesia@example.invalid', 'nombre' => 'Cortesia Manual', 'admin_id' => 77, 'restrict_to_admin' => true, 'request_id' => 'mobile-manual-1234567890abcdef1234567890abcdef'));
+manual_test_ok((int)$repeat['order_id'] === (int)$courtesy['order_id'], 'retry returns the same order');
+manual_test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=' . $typeId)->fetchColumn() === 12, 'retry does not consume stock twice');
+manual_test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE related_table='tc_orders' AND related_id=" . (int)$courtesy['order_id'] . " AND context='tickex_cortesia' AND mail_ok=1")->fetchColumn() === 1, 'retry does not send a second email');
 
 $denied = false;
 try {

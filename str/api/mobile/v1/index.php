@@ -1,0 +1,245 @@
+<?php
+// Mobile API v1. Uses Tickex's existing SQLite data, without loading the mutating web bootstrap.
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+require_once __DIR__ . '/../../../inc/mobile_events.php';
+require_once __DIR__ . '/../../../inc/mobile_auth.php';
+require_once __DIR__ . '/../../../inc/mobile_tickets.php';
+require_once __DIR__ . '/../../../inc/mobile_orders.php';
+require_once __DIR__ . '/../../../inc/mobile_staff.php';
+require_once __DIR__ . '/../../../inc/mobile_staff_gate.php';
+require_once __DIR__ . '/../../../inc/mobile_admin.php';
+require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
+$requestId = '';
+try {
+    $requestBytes = false;
+    if (function_exists('random_bytes')) $requestBytes = random_bytes(8);
+    elseif (function_exists('openssl_random_pseudo_bytes')) $requestBytes = openssl_random_pseudo_bytes(8);
+    if ($requestBytes !== false && strlen($requestBytes) === 8) {
+        $requestId = bin2hex($requestBytes);
+        header('X-Request-ID: ' . $requestId);
+    }
+} catch (Exception $ignored) {}
+
+function tickex_mobile_response($code, $payload)
+{
+    http_response_code($code);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function tickex_mobile_body()
+{
+    $contentType = isset($_SERVER['CONTENT_TYPE']) ? (string)$_SERVER['CONTENT_TYPE'] : '';
+    if (stripos($contentType, 'application/json') !== 0) tickex_mobile_response(415, array('error' => 'json_required'));
+    $raw = file_get_contents('php://input', false, null, 0, 8193);
+    if (strlen($raw) > 8192) tickex_mobile_response(413, array('error' => 'request_too_large'));
+    $data = json_decode($raw, true);
+    if (!is_array($data)) tickex_mobile_response(400, array('error' => 'invalid_json'));
+    return $data;
+}
+
+$path = parse_url(isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '', PHP_URL_PATH);
+$prefix = '/api/mobile/v1';
+if (strpos((string)$path, $prefix . '/') !== 0) tickex_mobile_response(404, array('error' => 'not_found'));
+$route = substr($path, strlen($prefix));
+$method = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'GET';
+$publicEvents = $method === 'GET' && ($route === '/events' || preg_match('~^/events/[1-9][0-9]*/?$~', $route));
+$login = $method === 'POST' && $route === '/auth/login';
+$adminLogin = $method === 'POST' && $route === '/auth/admin-login';
+$adminRoute = strpos($route, '/admin/') === 0;
+$privateRoute = in_array($route, array('/auth/logout', '/me', '/me/tickets', '/me/orders', '/staff/events', '/checkout-intents'), true) || preg_match('~^/me/tickets/[1-9][0-9]*/?$~', $route) || preg_match('~^/orders/[1-9][0-9]*/?$~', $route) || preg_match('~^/checkout-intents/mobile-[a-f0-9]{32}/?$~', $route) || preg_match('~^/staff/events/[1-9][0-9]*/(stats|search)/?$~', $route) || in_array($route, array('/staff/check-in', '/staff/check-in/undo'), true);
+if (!$publicEvents && !$login && !$adminLogin && !$adminRoute && !$privateRoute) tickex_mobile_response(404, array('error' => 'not_found'));
+
+$dbFile = getenv('TICKEX_DB_FILE');
+if (!is_string($dbFile) || trim($dbFile) === '') $dbFile = __DIR__ . '/../../../save_the_rave.sqlite';
+if (!is_file($dbFile)) tickex_mobile_response(503, array('error' => 'temporarily_unavailable'));
+
+try {
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec('PRAGMA busy_timeout = 5000');
+    if ($publicEvents) {
+        $pdo->exec('PRAGMA query_only = ON');
+        $id = preg_match('~^/events/([1-9][0-9]*)/?$~', $route, $match) ? (int)$match[1] : null;
+        $events = tickex_mobile_public_events($pdo, $id);
+        if ($id !== null && count($events) === 0) tickex_mobile_response(404, array('error' => 'not_found'));
+        $data = array();
+        foreach ($events as $event) {
+            $projected = tickex_mobile_event($event, tickex_mobile_ticket_types($pdo, (int)$event['id'], tickex_mobile_global_available($pdo, $event)));
+            if ($id === null) unset($projected['ticketTypes'], $projected['description']);
+            $data[] = $projected;
+        }
+        tickex_mobile_response(200, $id === null ? $data : $data[0]);
+    }
+    if ($login) {
+        $body = tickex_mobile_body();
+        $session = tickex_mobile_login($pdo, isset($body['email']) ? $body['email'] : '', isset($body['password']) ? $body['password'] : '', isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '');
+        if (!$session) { error_log('mobile_api auth_failed request_id=' . $requestId); tickex_mobile_response(401, array('error' => 'invalid_credentials')); }
+        tickex_mobile_response(200, $session);
+    }
+    if ($adminLogin) {
+        $body = tickex_mobile_body();
+        $session = tickex_mobile_admin_login($pdo, isset($body['email']) ? $body['email'] : '', isset($body['password']) ? $body['password'] : '', isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '');
+        if (!$session) { error_log('mobile_api admin_auth_failed request_id=' . $requestId); tickex_mobile_response(401, array('error' => 'invalid_credentials')); }
+        tickex_mobile_response(200, $session);
+    }
+    if ($adminRoute) {
+        $adminToken = tickex_mobile_bearer();
+        $admin = tickex_mobile_authenticated_admin($pdo, $adminToken);
+        if (!$admin) tickex_mobile_response(401, array('error' => 'unauthorized'));
+        if ($route === '/admin/me' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_profile($admin));
+        if ($route === '/admin/logout' && $method === 'POST') { tickex_mobile_admin_logout($pdo, $adminToken); tickex_mobile_response(200, array('ok' => true)); }
+        if ($route === '/admin/events' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_events($pdo, $admin));
+        if ($route === '/admin/events' && $method === 'POST') {
+            $created = tickex_mobile_admin_create_event($pdo, $admin, tickex_mobile_body());
+            if (isset($created['error'])) tickex_mobile_response($created['error'] === 'slug_in_use' ? 409 : 422, $created);
+            error_log('mobile_api admin_event_created request_id=' . $requestId . ' event_id=' . (int)$created['id']);
+            tickex_mobile_response(201, $created);
+        }
+        if ($method === 'GET' && preg_match('~^/admin/events/([1-9][0-9]*)/?$~', $route, $adminRead)) {
+            $detail = tickex_mobile_admin_event_detail($pdo, $admin, (int)$adminRead[1]);
+            if ($detail === null) tickex_mobile_response(404, array('error' => 'not_found'));
+            tickex_mobile_response(200, $detail);
+        }
+        if ($method === 'PATCH' && preg_match('~^/admin/events/([1-9][0-9]*)/?$~', $route, $adminEdit)) {
+            $eventId = (int)$adminEdit[1];
+            if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
+            $edit = tickex_mobile_body();
+            if (count($edit) === 1 && isset($edit['venue'])) {
+                $result = tickex_mobile_admin_update_venue($pdo, $admin, $eventId, $edit['venue']);
+                if ($result === null) tickex_mobile_response(422, array('error' => 'invalid_venue'));
+            } else {
+                $result = tickex_mobile_admin_edit_event($pdo, $admin, $eventId, $edit);
+                if (isset($result['error'])) tickex_mobile_response($result['error'] === 'not_found' ? 404 : 422, $result);
+            }
+            error_log('mobile_api admin_event_updated request_id=' . $requestId . ' event_id=' . $eventId);
+            tickex_mobile_response(200, $result);
+        }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/(dashboard|sales|ticket-types|attendees)/?$~', $route, $adminMatch)) {
+            $eventId = (int)$adminMatch[1];
+            if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
+            if ($adminMatch[2] === 'attendees' && $method === 'POST') {
+                $search = tickex_mobile_body();
+                $query = isset($search['query']) ? (string)$search['query'] : '';
+                if (strlen(trim($query)) < 2 || strlen($query) > 80) tickex_mobile_response(422, array('error' => 'invalid_search'));
+                tickex_mobile_response(200, tickex_mobile_admin_attendees($pdo, $eventId, $query));
+            }
+            if ($method === 'GET') {
+                if ($adminMatch[2] === 'dashboard') tickex_mobile_response(200, tickex_mobile_admin_dashboard($pdo, $eventId));
+                if ($adminMatch[2] === 'sales') tickex_mobile_response(200, tickex_mobile_admin_sales($pdo, $eventId));
+                if ($adminMatch[2] === 'ticket-types') tickex_mobile_response(200, tickex_mobile_admin_ticket_types($pdo, $eventId));
+            }
+        }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/staff/?$~', $route, $adminStaff)) {
+            $eventId = (int)$adminStaff[1];
+            if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
+            if ($method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_staff($pdo, $admin, $eventId));
+            if ($method === 'POST') {
+                $body = tickex_mobile_body();
+                $clientId = isset($body['clientId']) ? (int)$body['clientId'] : 0;
+                $roleCode = isset($body['roleCode']) ? trim((string)$body['roleCode']) : '';
+                $assigned = isset($body['assigned']) ? $body['assigned'] : null;
+                $result = tickex_mobile_admin_assign_staff($pdo, $admin, $eventId, $clientId, $roleCode, $assigned);
+                if (isset($result['error'])) tickex_mobile_response($result['error'] === 'staff_not_found' ? 404 : 422, $result);
+                error_log('mobile_api admin_staff_assignment request_id=' . $requestId . ' event_id=' . $eventId . ' client_id=' . $clientId);
+                tickex_mobile_response(200, $result);
+            }
+        }
+        if ($method === 'POST' && preg_match('~^/admin/events/([1-9][0-9]*)/send-tickex/?$~', $route, $adminSend)) {
+            $eventId = (int)$adminSend[1];
+            if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
+            $sent = tickex_mobile_admin_send_ticket($pdo, $admin, $eventId, tickex_mobile_body(), isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? $_SERVER['HTTP_IDEMPOTENCY_KEY'] : '');
+            if (isset($sent['error'])) tickex_mobile_response($sent['error'] === 'forbidden' ? 403 : ($sent['error'] === 'issuance_failed' ? 409 : 422), $sent);
+            error_log('mobile_api admin_ticket_sent request_id=' . $requestId . ' event_id=' . $eventId . ' order_id=' . $sent['orderId']);
+            tickex_mobile_response(200, $sent);
+        }
+        tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+    }
+    $token = tickex_mobile_bearer();
+    $client = tickex_mobile_authenticated_client($pdo, $token);
+    if (!$client) tickex_mobile_response(401, array('error' => 'unauthorized'));
+    if ($route === '/auth/logout' && $method === 'POST') {
+        tickex_mobile_logout($pdo, $token);
+        tickex_mobile_response(200, array('ok' => true));
+    }
+    if ($route === '/me' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_profile($client));
+    if ($route === '/me' && $method === 'PATCH') {
+        $body = tickex_mobile_body();
+        $profile = tickex_mobile_update_profile($pdo, $client['id'], isset($body['firstName']) ? $body['firstName'] : '', isset($body['lastName']) ? $body['lastName'] : '');
+        if (!$profile) tickex_mobile_response(422, array('error' => 'invalid_profile'));
+        error_log('mobile_api profile_updated request_id=' . $requestId);
+        tickex_mobile_response(200, $profile);
+    }
+    if ($route === '/me/tickets' && $method === 'GET') {
+        $tickets = tickex_mobile_tickets($pdo, $client['email'], null);
+        foreach ($tickets as &$ticket) unset($ticket['qrPayload']);
+        unset($ticket);
+        tickex_mobile_response(200, $tickets);
+    }
+    if ($route === '/me/orders' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_orders_for_client($pdo, $client['email']));
+    if ($route === '/staff/events' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_staff_events($pdo, $client['id']));
+    if (in_array($method, array('GET', 'POST'), true) && preg_match('~^/staff/events/([1-9][0-9]*)/(stats|search)/?$~', $route, $staffMatch)) {
+        $eventId = (int)$staffMatch[1];
+        $permission = $staffMatch[2] === 'stats' ? 'dashboard_view' : 'tickets_validate';
+        if (!tickex_mobile_gate_permission($pdo, $client['id'], $eventId, $permission)) tickex_mobile_response(403, array('error' => 'forbidden'));
+        if ($staffMatch[2] === 'stats') {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            tickex_mobile_response(200, tickex_mobile_gate_stats($pdo, $eventId));
+        }
+        if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+        $searchBody = tickex_mobile_body();
+        $query = isset($searchBody['query']) ? (string)$searchBody['query'] : '';
+        if (strlen(trim($query)) < 2 || strlen($query) > 80) tickex_mobile_response(422, array('error' => 'invalid_search'));
+        tickex_mobile_response(200, tickex_mobile_gate_search($pdo, $eventId, $query));
+    }
+    if ($route === '/staff/check-in' && $method === 'POST') {
+        $body = tickex_mobile_body();
+        $eventId = isset($body['eventId']) ? (int)$body['eventId'] : 0;
+        if (!tickex_mobile_gate_permission($pdo, $client['id'], $eventId, 'checkin_scan')) tickex_mobile_response(403, array('error' => 'forbidden'));
+        $result = tickex_mobile_gate_checkin($pdo, $client['id'], $eventId, isset($body['ticketId']) ? (int)$body['ticketId'] : 0, isset($body['code']) ? $body['code'] : '');
+        if (isset($result['error'])) tickex_mobile_response($result['error'] === 'already_checked_in' ? 409 : ($result['error'] === 'not_found' ? 404 : 422), $result);
+        error_log('mobile_api staff_checkin request_id=' . $requestId . ' event_id=' . $eventId);
+        tickex_mobile_response(200, $result);
+    }
+    if ($route === '/staff/check-in/undo' && $method === 'POST') {
+        $body = tickex_mobile_body();
+        $eventId = isset($body['eventId']) ? (int)$body['eventId'] : 0;
+        if (!tickex_mobile_gate_permission($pdo, $client['id'], $eventId, 'checkin_scan')) tickex_mobile_response(403, array('error' => 'forbidden'));
+        $result = tickex_mobile_gate_undo($pdo, $client['id'], $eventId, isset($body['ticketId']) ? (int)$body['ticketId'] : 0);
+        if (isset($result['error'])) tickex_mobile_response($result['error'] === 'not_found' ? 404 : 409, $result);
+        error_log('mobile_api staff_undo request_id=' . $requestId . ' event_id=' . $eventId);
+        tickex_mobile_response(200, $result);
+    }
+    if ($route === '/checkout-intents' && $method === 'POST') {
+        $body = tickex_mobile_body();
+        $key = isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? (string)$_SERVER['HTTP_IDEMPOTENCY_KEY'] : '';
+        $intent = tickex_mobile_create_checkout_intent($pdo, $client, isset($body['eventId']) ? $body['eventId'] : 0, $key);
+        if (isset($intent['error'])) tickex_mobile_response($intent['error'] === 'idempotency_conflict' || $intent['error'] === 'checkout_intent_expired' ? 409 : 422, $intent);
+        error_log('mobile_api checkout_intent_created request_id=' . $requestId . ' event_id=' . (int)$intent['eventId']);
+        tickex_mobile_response(201, $intent);
+    }
+    if ($method === 'GET' && preg_match('~^/checkout-intents/(mobile-[a-f0-9]{32})/?$~', $route, $match)) {
+        $intent = tickex_mobile_checkout_intent_status($pdo, $client, $match[1]);
+        if ($intent === null) tickex_mobile_response(404, array('error' => 'not_found'));
+        tickex_mobile_response(200, $intent);
+    }
+    if ($method === 'GET' && preg_match('~^/me/tickets/([1-9][0-9]*)/?$~', $route, $match)) {
+        $tickets = tickex_mobile_tickets($pdo, $client['email'], (int)$match[1]);
+        if (count($tickets) === 0) tickex_mobile_response(404, array('error' => 'not_found'));
+        tickex_mobile_response(200, $tickets[0]);
+    }
+    if ($method === 'GET' && preg_match('~^/orders/([1-9][0-9]*)/?$~', $route, $match)) {
+        $order = tickex_mobile_order_for_client($pdo, (int)$match[1], $client['email']);
+        if ($order === null) tickex_mobile_response(404, array('error' => 'not_found'));
+        tickex_mobile_response(200, $order);
+    }
+    header('Allow: GET, POST, PATCH');
+    tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+} catch (Exception $error) {
+    error_log('mobile_api failure request_id=' . $requestId . ' class=' . get_class($error));
+    tickex_mobile_response(503, array('error' => 'temporarily_unavailable'));
+}

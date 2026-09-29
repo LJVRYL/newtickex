@@ -73,14 +73,29 @@ if (!function_exists('tickex_manual_issue_package')) {
 
         $qrQuantity = tickex_ticket_qr_quantity(isset($ticketType['qr_quantity']) ? $ticketType['qr_quantity'] : 1);
         $issuedQuantity = tickex_ticket_issued_quantity($packageQuantity, $qrQuantity);
+        $packagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
+        $total = round($packagePrice * $packageQuantity, 2);
+        $requestId = isset($data['request_id']) ? trim((string)$data['request_id']) : tickex_manual_request_id();
+        if (!preg_match('/^(?:manual-[a-f0-9]{24,40}|mobile-manual-[a-f0-9]{32})$/', $requestId)) throw new InvalidArgumentException('Referencia de emisión inválida.');
+        if (isset($data['request_id'])) {
+            $existing = $pdo->prepare('SELECT id, evento_id, buyer_email, payment_provider, selected_tickets_json, amount, processing_status, email_status, email_last_error FROM tc_orders WHERE request_id = :request_id LIMIT 1');
+            $existing->execute(array(':request_id' => $requestId));
+            $order = $existing->fetch(PDO::FETCH_ASSOC);
+            if ($order) {
+                $lines = json_decode((string)$order['selected_tickets_json'], true);
+                $firstLine = is_array($lines) && isset($lines[0]) ? $lines[0] : array();
+                if ((int)$order['evento_id'] !== $eventId || strtolower((string)$order['buyer_email']) !== strtolower($email) || (string)$order['payment_provider'] !== $mode || (int)(isset($firstLine['id']) ? $firstLine['id'] : 0) !== $ticketTypeId || (int)(isset($firstLine['qty']) ? $firstLine['qty'] : 0) !== $packageQuantity) throw new InvalidArgumentException('La referencia de emisión ya se usó para otra solicitud.');
+                $count = $pdo->prepare('SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = :request_id');
+                $count->execute(array(':request_id' => $requestId));
+                $actualIssued = (int)$count->fetchColumn();
+                if ((string)$order['processing_status'] !== 'issued' || $actualIssued !== $issuedQuantity) throw new RuntimeException('La emisión anterior no terminó correctamente; requiere revisión antes de reintentar.');
+                return array('order_id' => (int)$order['id'], 'request_id' => $requestId, 'issued_quantity' => $actualIssued, 'package_quantity' => $packageQuantity, 'qr_quantity' => $qrQuantity, 'total' => (float)$order['amount'], 'mode' => $mode, 'email_status' => (string)$order['email_status'], 'email_error' => (string)$order['email_last_error']);
+            }
+        }
         $available = isset($ticketType['cantidad_disponible']) ? (int)$ticketType['cantidad_disponible'] : 0;
         if ($available < $issuedQuantity) {
             throw new RuntimeException('Stock insuficiente: se necesitan ' . $issuedQuantity . ' lugares y quedan ' . $available . '.');
         }
-
-        $packagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
-        $total = round($packagePrice * $packageQuantity, 2);
-        $requestId = tickex_manual_request_id();
         $selected = json_encode(array(array(
             'id' => (int)$ticketType['id'],
             'name' => (string)$ticketType['nombre'],
