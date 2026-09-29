@@ -508,11 +508,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stC->execute(array(':id' => $clienteId));
             $c = $stC->fetch(PDO::FETCH_ASSOC);
             if ($c) {
-              $nombre = trim((string)($c['apodo'] ?? ''));
+              $nombre = trim((string)(isset($c['apodo']) ? $c['apodo'] : ''));
               if ($nombre === '') {
-                $nombre = trim((string)($c['nombre'] ?? '') . ' ' . (string)($c['apellido'] ?? ''));
+                $nombre = trim((string)(isset($c['nombre']) ? $c['nombre'] : '') . ' ' . (string)(isset($c['apellido']) ? $c['apellido'] : ''));
               }
-              if ($nombre === '') $nombre = (string)($c['email'] ?? 'Revendedor');
+              if ($nombre === '') $nombre = (string)(isset($c['email']) ? $c['email'] : 'Revendedor');
             }
           } catch (Exception $e) {}
           if ($nombre === '') $nombre = 'Revendedor';
@@ -651,9 +651,6 @@ include __DIR__ . '/inc/layout_top.php';
     <div>
       <h1 style="margin:0;">Revendedores</h1>
       <div class="muted" style="margin-top:4px;">Compartí links con <strong>?aff=ID</strong> para atribuir ventas por cookie.</div>
-      <div class="muted" style="margin-top:8px;font-size:12px;background:#1a1a2e;padding:8px;border-radius:4px;">
-        Debug: tipoGlobal=<strong><?php echo e($tipoGlobal); ?></strong> | adminId=<strong><?php echo (int)$adminId; ?></strong>
-      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <a class="btn secondary" href="panel_admin.php">⬅ Volver</a>
@@ -737,9 +734,9 @@ include __DIR__ . '/inc/layout_top.php';
               <td><?php echo (int)$s['id']; ?></td>
               <td>
                 <div style="font-weight:700;">#<?php echo (int)$s['cliente_id']; ?></div>
-                <div class="muted" style="font-size:12px;"><?php echo e((string)($s['cliente_email'] ?? '')); ?></div>
+                <div class="muted" style="font-size:12px;"><?php echo e((string)(isset($s['cliente_email']) ? $s['cliente_email'] : '')); ?></div>
               </td>
-              <td><?php echo e((string)($s['mensaje'] ?? '')); ?></td>
+              <td><?php echo e((string)(isset($s['mensaje']) ? $s['mensaje'] : '')); ?></td>
               <td>
                 <form method="post" style="display:inline;">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
@@ -791,9 +788,9 @@ include __DIR__ . '/inc/layout_top.php';
                   <div class="muted" style="font-size:12px;">Cliente #<?php echo (int)$si['cliente_id']; ?></div>
                 <?php endif; ?>
               </td>
-              <td><?php echo e((string)($si['rol_staff'] ?? 'staff_evento')); ?></td>
-              <td><?php echo e((string)($si['mensaje'] ?? '')); ?></td>
-              <td><?php echo e((string)($si['created_at'] ?? '')); ?></td>
+              <td><?php echo e((string)(isset($si['rol_staff']) ? $si['rol_staff'] : 'staff_evento')); ?></td>
+              <td><?php echo e((string)(isset($si['mensaje']) ? $si['mensaje'] : '')); ?></td>
+              <td><?php echo e((string)(isset($si['created_at']) ? $si['created_at'] : '')); ?></td>
               <td>
                 <?php if ($si['estado'] === 'pending'): ?>
                   <span class="badge" style="background:#854d0e;color:#fef3c7;">Pendiente</span>
@@ -837,7 +834,7 @@ include __DIR__ . '/inc/layout_top.php';
               <td>#<?php echo (int)$r['revendedor_id']; ?></td>
               <td><?php echo !empty($r['cliente_id']) ? ('#' . (int)$r['cliente_id']) : '<span class="muted">—</span>'; ?></td>
               <td>$<?php echo number_format((float)$r['amount'], 2, ',', '.'); ?></td>
-              <td><?php echo e((string)($r['cbu'] ?? '')); ?></td>
+              <td><?php echo e((string)(isset($r['cbu']) ? $r['cbu'] : '')); ?></td>
               <td>
                 <form method="post" style="display:inline;">
                   <input type="hidden" name="csrf" value="<?php echo e($csrf); ?>">
@@ -877,12 +874,12 @@ include __DIR__ . '/inc/layout_top.php';
 
       <label>
         Código (opcional)
-        <input type="text" name="codigo" value="<?php echo e((string)($edit['codigo'] ?? '')); ?>" placeholder="ej: juan_afiliado">
+        <input type="text" name="codigo" value="<?php echo e((string)(isset($edit['codigo']) ? $edit['codigo'] : '')); ?>" placeholder="ej: juan_afiliado">
       </label>
 
       <label>
         Comisión (%)
-        <input type="number" step="0.01" min="0" max="100" name="comision_percent" value="<?php echo e((string)($edit['comision_percent'] ?? '0')); ?>">
+        <input type="number" step="0.01" min="0" max="100" name="comision_percent" value="<?php echo e((string)(isset($edit['comision_percent']) ? $edit['comision_percent'] : '0')); ?>">
       </label>
 
       <?php if (!empty($edit['cliente_id'])): ?>
@@ -911,7 +908,8 @@ include __DIR__ . '/inc/layout_top.php';
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
     <h2 style="margin:0;">Listado</h2>
     <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Buscar por nombre/código/ID" style="min-width:240px;">
+      <label for="revendedores-buscar" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Buscar revendedor por nombre, código o ID</label>
+      <input type="text" id="revendedores-buscar" name="q" value="<?php echo e($q); ?>" placeholder="Buscar por nombre/código/ID" style="min-width:240px;">
       <button class="btn secondary" type="submit">Buscar</button>
       <?php if ($q !== ''): ?>
         <a class="btn secondary" href="admin_revendedores.php">Limpiar</a>
