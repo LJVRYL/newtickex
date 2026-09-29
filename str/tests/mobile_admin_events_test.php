@@ -43,4 +43,10 @@ $staff = tickex_mobile_admin_assign_staff($pdo, $owner, $eventId, 101, 'puerta',
 admin_event_assert($staff['members'][0]['assigned'], 'assigns authorized staff');
 $staff = tickex_mobile_admin_assign_staff($pdo, $owner, $eventId, 101, '', false);
 admin_event_assert(!$staff['members'][0]['assigned'], 'removes staff assignment');
+$pdo->exec('CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY, evento_id INTEGER, nombre TEXT, precio REAL, cantidad_total INTEGER, cantidad_disponible INTEGER, visible_publico INTEGER, qr_quantity INTEGER)');
+$pdo->exec("INSERT INTO tipos_entrada VALUES (10, $eventId, 'General', 100, 20, 20, 1, 1)");
+$stock = tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 20, 'available' => 5, 'visible' => false));
+admin_event_assert($stock[0]['available'] === 5 && !$stock[0]['visible'] && $stock[0]['total'] === 5, 'owner adjusts stock and visibility');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 20, 'available' => 0, 'visible' => false))['error'] === 'stock_changed', 'stale stock edit rejected');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $other, $eventId, 10, array('expectedAvailable' => 5, 'available' => 0, 'visible' => false))['error'] === 'forbidden', 'other producer cannot edit stock');
 echo "mobile admin events PASS\n";

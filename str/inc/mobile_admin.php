@@ -146,10 +146,10 @@ function tickex_mobile_admin_dashboard($pdo, $eventId)
     $tickets = $pdo->prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN checked_in = 1 THEN 1 ELSE 0 END) AS used FROM entradas WHERE evento_id = :event');
     $tickets->execute(array(':event' => $eventId));
     $t = $tickets->fetch(PDO::FETCH_ASSOC);
-    $orders = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN payment_status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed, SUM(CASE WHEN payment_status = 'confirmed' THEN amount ELSE 0 END) AS gross FROM tc_orders WHERE evento_id = :event");
+    $orders = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN payment_status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed, SUM(CASE WHEN payment_status = 'confirmed' THEN amount ELSE 0 END) AS gross, SUM(CASE WHEN payment_status = 'pending' AND payment_provider = 'mercadopago' THEN 1 ELSE 0 END) AS pending_mp FROM tc_orders WHERE evento_id = :event");
     $orders->execute(array(':event' => $eventId));
     $o = $orders->fetch(PDO::FETCH_ASSOC);
-    return array('eventId' => (string)$eventId, 'tickets' => (int)$t['total'], 'checkedIn' => (int)$t['used'], 'orders' => (int)$o['total'], 'confirmedOrders' => (int)$o['confirmed'], 'confirmedGross' => (float)$o['gross'], 'salesPaused' => tickex_event_sales_paused($pdo, $eventId));
+    return array('eventId' => (string)$eventId, 'tickets' => (int)$t['total'], 'checkedIn' => (int)$t['used'], 'orders' => (int)$o['total'], 'confirmedOrders' => (int)$o['confirmed'], 'confirmedGross' => (float)$o['gross'], 'pendingPaymentOrders' => (int)$o['pending_mp'], 'salesPaused' => tickex_event_sales_paused($pdo, $eventId));
 }
 function tickex_mobile_admin_sales($pdo, $eventId)
 {
@@ -166,6 +166,31 @@ function tickex_mobile_admin_ticket_types($pdo, $eventId)
     $out = array();
     foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) $out[] = array('id' => (string)$row['id'], 'name' => (string)$row['nombre'], 'price' => (float)$row['precio'], 'total' => $row['cantidad_total'] === null ? null : (int)$row['cantidad_total'], 'available' => $row['cantidad_disponible'] === null ? null : (int)$row['cantidad_disponible'], 'visible' => (int)$row['visible_publico'] === 1, 'qrQuantity' => isset($row['qr_quantity']) ? max(1, (int)$row['qr_quantity']) : 1);
     return $out;
+}
+function tickex_mobile_admin_update_ticket_type($pdo, $admin, $eventId, $typeId, $body)
+{
+    if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) return array('error' => 'forbidden');
+    if ($typeId <= 0 || !isset($body['expectedAvailable']) || !isset($body['available']) || !isset($body['visible']) || !is_bool($body['visible'])) return array('error' => 'invalid_type');
+    $expected = filter_var($body['expectedAvailable'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 0, 'max_range' => 1000000)));
+    $available = filter_var($body['available'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 0, 'max_range' => 1000000)));
+    if ($expected === false || $available === false) return array('error' => 'invalid_stock');
+    $pdo->beginTransaction();
+    try {
+        $read = $pdo->prepare('SELECT cantidad_disponible FROM tipos_entrada WHERE id = :type AND evento_id = :event LIMIT 1');
+        $read->execute(array(':type' => $typeId, ':event' => $eventId));
+        $current = $read->fetchColumn();
+        if ($current === false) { $pdo->rollBack(); return array('error' => 'not_found'); }
+        if ((int)$current !== $expected) { $pdo->rollBack(); return array('error' => 'stock_changed'); }
+        $change = $available - $expected;
+        $write = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = :available, cantidad_total = CASE WHEN cantidad_total IS NULL THEN NULL ELSE MAX(0, cantidad_total + :change) END, visible_publico = :visible WHERE id = :type AND evento_id = :event AND cantidad_disponible = :expected');
+        $write->execute(array(':available' => $available, ':change' => $change, ':visible' => $body['visible'] ? 1 : 0, ':type' => $typeId, ':event' => $eventId, ':expected' => $expected));
+        if ($write->rowCount() !== 1) { $pdo->rollBack(); return array('error' => 'stock_changed'); }
+        $pdo->commit();
+    } catch (Exception $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+    return tickex_mobile_admin_ticket_types($pdo, $eventId);
 }
 function tickex_mobile_admin_attendees($pdo, $eventId, $query)
 {

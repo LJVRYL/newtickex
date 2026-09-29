@@ -134,6 +134,13 @@ try {
                 if ($adminMatch[2] === 'ticket-types') tickex_mobile_response(200, tickex_mobile_admin_ticket_types($pdo, $eventId));
             }
         }
+        if ($method === 'PATCH' && preg_match('~^/admin/events/([1-9][0-9]*)/ticket-types/([1-9][0-9]*)/?$~', $route, $typeEdit)) {
+            $eventId = (int)$typeEdit[1];
+            $result = tickex_mobile_admin_update_ticket_type($pdo, $admin, $eventId, (int)$typeEdit[2], tickex_mobile_body());
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'stock_changed' ? 409 : ($result['error'] === 'not_found' ? 404 : 422)), $result);
+            error_log('mobile_api admin_stock_updated request_id=' . $requestId . ' event_id=' . $eventId . ' type_id=' . (int)$typeEdit[2]);
+            tickex_mobile_response(200, $result);
+        }
         if (preg_match('~^/admin/events/([1-9][0-9]*)/staff/?$~', $route, $adminStaff)) {
             $eventId = (int)$adminStaff[1];
             if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
