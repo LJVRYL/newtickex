@@ -13,6 +13,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="superadmin_emails.php">Emails</a>
     <a href="superadmin_email_templates.php">Plantillas Emails</a>
     <a href="superadmin_economia_general.php">Economía</a>
+    <a href="superadmin_sites.php">Sitios de productores</a>
     <a href="facturacion_admin.php">Facturación</a>
     <a href="mercadopago_config.php">Mercado Pago</a>
     <a href="secundarios.php">Staff</a>
