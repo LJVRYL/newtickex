@@ -6,6 +6,7 @@ require_once __DIR__.'/inc/produccion.php';
 require_once __DIR__.'/inc/venues.php';
 require_once __DIR__.'/inc/senforms.php';
 require_once __DIR__.'/inc/event_trash.php';
+require_once __DIR__.'/inc/event_lifecycle.php';
 
 require_login();
 $csrf = function_exists('tickex_csrf_token') ? tickex_csrf_token() : '';
@@ -26,7 +27,7 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
     exit;
 }
 
-$adminId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : (isset($cu['id'])?(int)$cu['id']:0);
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
 // aceptar id o evento_id
 $eventoId = 0;
@@ -137,6 +138,11 @@ function get_staff_cost_by_event($pdo, $eventoId) {
   } catch (Exception $e) {
     return 0;
   }
+}
+
+if ($eventoId <= 0) {
+  include __DIR__.'/inc/event_management_list.php';
+  exit;
 }
 
 // Lista de eventos (vista general)

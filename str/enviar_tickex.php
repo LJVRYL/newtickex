@@ -4,6 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require_once __DIR__.'/inc/bootstrap.php';
 require_once __DIR__.'/inc/manual_ticket_issuance.php';
+require_once __DIR__.'/inc/event_lifecycle.php';
 require_login();
 $cu = current_user();
 $rol = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
@@ -18,14 +19,18 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 $pdo = db();
 
 // Eventos visibles
-$evSql = ($rol === 'admin_evento') ? "SELECT id, nombre FROM eventos WHERE creado_por_admin_id = :aid ORDER BY id DESC" : "SELECT id, nombre FROM eventos ORDER BY id DESC";
+$evSql = ($rol === 'admin_evento') ? "SELECT id, nombre, fecha_desde, fecha_hasta FROM eventos WHERE borrado_en IS NULL AND creado_por_admin_id = :aid ORDER BY id DESC" : "SELECT id, nombre, fecha_desde, fecha_hasta FROM eventos WHERE borrado_en IS NULL ORDER BY id DESC";
 $stEv = $pdo->prepare($evSql);
 if ($rol === 'admin_evento') {
     $stEv->execute(array(':aid'=>(int)$cu['id']));
 } else {
     $stEv->execute();
 }
-$eventos = $stEv->fetchAll(PDO::FETCH_ASSOC);
+$eventos = array_values(array_filter($stEv->fetchAll(PDO::FETCH_ASSOC), function($event) {
+    return tickex_event_is_current($event);
+}));
+$eventosPermitidos = array();
+foreach ($eventos as $eventoPermitido) $eventosPermitidos[(int)$eventoPermitido['id']] = true;
 
 $tiposPorEvento = array();
 foreach ($eventos as $ev) {
@@ -61,10 +66,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
     $mode     = isset($_POST['modo']) ? (string)$_POST['modo'] : 'courtesy';
     $quantity = isset($_POST['cantidad']) ? (int)$_POST['cantidad'] : 1;
+    if ($mode === 'courtesy') $quantity = 1;
     $hidden   = (isset($_POST['oculto']) && in_array($rol, array('super_admin','superadmin'), true)) ? 1 : 0;
 
     if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
+    if ($eventoId > 0 && !isset($eventosPermitidos[$eventoId])) $errors[] = 'Ese evento ya terminó o no está disponible para tu cuenta.';
     if ($tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
     if (!in_array($mode, array('courtesy','manual_transfer'), true)) $errors[] = 'Seleccioná una modalidad válida.';
     if ($quantity < 1 || $quantity > 20) $errors[] = 'La cantidad de promociones debe estar entre 1 y 20.';
