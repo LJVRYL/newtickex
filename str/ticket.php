@@ -97,13 +97,13 @@ if ($eventoId > 0) {
 }
 
 // QR apunta a checkin (que SOLO checkinea con sesión puerta)
-$baseUrl    = 'https://str.tickex.com.ar';
-$checkinUrl = $baseUrl . '/checkin.php?c=' . urlencode($codigo);
+$baseUrl    = tickex_public_base_url('https://str.tickex.com.ar');
+$checkinUrl = tickex_secure_checkin_url($pdo, $baseUrl, (int)$entrada['id'], $codigo);
 // QR externo por ahora (simple)
 $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=' . urlencode($checkinUrl);
 
-$ticketLink = (isset($_SERVER['HTTP_HOST']) ? 'http://'.$_SERVER['HTTP_HOST'] : $baseUrl).'/ticket.php?c='.urlencode($codigo);
-$mensajeBase = "Hola, aqui tienes tu entrada:\nEvento: " . ($eventoNombre ?: 'TICKEX') . "\nNombre: " . $nombre . "\nTipo: " . $tipoDesc . "\nCódigo: " . $codigo . "\nVer ticket: " . $ticketLink;
+$ticketLink = tickex_secure_ticket_url($pdo, $baseUrl, (int)$entrada['id'], $codigo);
+$mensajeBase = "Hola, aqui tienes tu entrada:\nEvento: " . ($eventoNombre ?: 'TICKEX') . "\nNombre: " . $nombre . "\nTipo: " . $tipoDesc . "\nVer ticket: " . $ticketLink;
 $waMensaje = $mensajeBase;
 $mailSubject = 'Tu entrada - ' . ($eventoNombre ?: 'TICKEX');
 $mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
@@ -146,6 +146,10 @@ $mailBody = $mensajeBase . "\n\nMostrá el QR en la puerta.";
 <body>
   <div class="wrap ticket-wrap">
     <div class="card" style="text-align:center;">
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:18px;">
+        <img src="tickex-isotipo.svg" alt="" style="width:39px;height:39px;display:block;">
+        <span aria-label="tickex." style="font:800 31px/1 system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:-1.8px;color:#F7F8FC;">tickex<b style="color:#90F3AF;font-weight:900;">.</b></span>
+      </div>
       <h2>Entrada digital</h2>
 
       <?php if($eventoNombre !== ''): ?>

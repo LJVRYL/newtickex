@@ -5,6 +5,7 @@ error_reporting(E_ALL);
 
 session_start();
 require_once __DIR__ . '/inc/notificaciones.php';
+require_once __DIR__ . '/inc/secure_links.php';
 
 $flashOk = '';
 $flashError = '';
@@ -274,10 +275,9 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
 ?>
 <div class="card" style="max-width:900px;margin:0 auto 16px auto;">
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-    <div>
-      <img src="tickex-logo_sobre_oscuro.svg"
-           alt="Tickex"
-           style="height:80px;display:block;">
+    <div style="display:flex;align-items:center;gap:10px;min-height:48px;">
+      <img src="tickex-isotipo.svg" alt="" style="width:39px;height:39px;display:block;">
+      <span aria-label="tickex." style="font:800 31px/1 system-ui,-apple-system,'Segoe UI',Arial,sans-serif;letter-spacing:-1.8px;color:#F7F8FC;">tickex<b style="color:#90F3AF;font-weight:900;">.</b></span>
     </div>
     <div>
       <?php if (!$isApp): ?>
@@ -406,7 +406,7 @@ $isApp = (!empty($_COOKIE['tickex_app']) && (string)$_COOKIE['tickex_app'] === '
               $loc = '';
               if (isset($t['lugar']) && $t['lugar']) $loc = $t['lugar'];
               elseif (isset($t['ubicacion']) && $t['ubicacion']) $loc = $t['ubicacion'];
-              $ticketUrl = 'ticket.php?c=' . urlencode($t['codigo']);
+              $ticketUrl = tickex_secure_ticket_url($pdo, tickex_public_base_url(''), (int)$t['id'], (string)$t['codigo']);
             ?>
             <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);display:flex;gap:12px;align-items:stretch;width:100%;">
               <div style="flex:0 0 140px;height:140px;display:flex;align-items:center;justify-content:center;background:var(--panel-3);border-radius:8px;margin:12px 0 12px 12px;overflow:hidden;">
