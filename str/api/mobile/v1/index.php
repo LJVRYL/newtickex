@@ -149,6 +149,20 @@ try {
                 tickex_mobile_response(200, $result);
             }
         }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/sales-control/?$~', $route, $salesControl)) {
+            $eventId = (int)$salesControl[1];
+            if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
+            if ($method === 'GET') tickex_mobile_response(200, array('eventId' => (string)$eventId, 'paused' => tickex_event_sales_paused($pdo, $eventId)));
+            if ($method === 'POST') {
+                $body = tickex_mobile_body();
+                if (!isset($body['paused']) || !is_bool($body['paused'])) tickex_mobile_response(422, array('error' => 'invalid_state'));
+                $reason = isset($body['reason']) ? trim((string)$body['reason']) : '';
+                if ($body['paused'] && $reason === '') tickex_mobile_response(422, array('error' => 'reason_required'));
+                $result = tickex_event_sales_set_paused($pdo, $eventId, (int)$admin['id'], $body['paused'], $reason);
+                error_log('mobile_api sales_control_updated request_id=' . $requestId . ' event_id=' . $eventId . ' paused=' . ($body['paused'] ? '1' : '0'));
+                tickex_mobile_response(200, $result);
+            }
+        }
         if ($method === 'POST' && preg_match('~^/admin/events/([1-9][0-9]*)/send-tickex/?$~', $route, $adminSend)) {
             $eventId = (int)$adminSend[1];
             if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
@@ -216,6 +230,8 @@ try {
     }
     if ($route === '/checkout-intents' && $method === 'POST') {
         $body = tickex_mobile_body();
+        require_once __DIR__ . '/../../../inc/event_sales_control.php';
+        if (tickex_event_sales_paused($pdo, isset($body['eventId']) ? $body['eventId'] : 0)) tickex_mobile_response(409, array('error' => 'sales_paused'));
         $key = isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? (string)$_SERVER['HTTP_IDEMPOTENCY_KEY'] : '';
         $intent = tickex_mobile_create_checkout_intent($pdo, $client, isset($body['eventId']) ? $body['eventId'] : 0, $key);
         if (isset($intent['error'])) tickex_mobile_response($intent['error'] === 'idempotency_conflict' || $intent['error'] === 'checkout_intent_expired' ? 409 : 422, $intent);

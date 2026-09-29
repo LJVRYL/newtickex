@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/order_processing.php';
+require_once __DIR__ . '/event_sales_control.php';
 
 if (!function_exists('tickex_manual_ensure_order_columns')) {
     function tickex_manual_ensure_order_columns($pdo)
@@ -92,6 +93,7 @@ if (!function_exists('tickex_manual_issue_package')) {
                 return array('order_id' => (int)$order['id'], 'request_id' => $requestId, 'issued_quantity' => $actualIssued, 'package_quantity' => $packageQuantity, 'qr_quantity' => $qrQuantity, 'total' => (float)$order['amount'], 'mode' => $mode, 'email_status' => (string)$order['email_status'], 'email_error' => (string)$order['email_last_error']);
             }
         }
+        if (tickex_event_sales_paused($pdo, $eventId)) throw new RuntimeException('Las ventas y emisiones del evento están pausadas.');
         $available = isset($ticketType['cantidad_disponible']) ? (int)$ticketType['cantidad_disponible'] : 0;
         if ($available < $issuedQuantity) {
             throw new RuntimeException('Stock insuficiente: se necesitan ' . $issuedQuantity . ' lugares y quedan ' . $available . '.');

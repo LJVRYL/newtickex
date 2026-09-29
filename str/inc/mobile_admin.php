@@ -1,5 +1,6 @@
 <?php
 // Producer mobile credentials are verified against the web admin account, never a consumer email alone.
+require_once __DIR__ . '/event_sales_control.php';
 function tickex_mobile_admin_login($pdo, $email, $password, $remoteAddress)
 {
     $email = strtolower(trim((string)$email));
@@ -148,7 +149,7 @@ function tickex_mobile_admin_dashboard($pdo, $eventId)
     $orders = $pdo->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN payment_status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed, SUM(CASE WHEN payment_status = 'confirmed' THEN amount ELSE 0 END) AS gross FROM tc_orders WHERE evento_id = :event");
     $orders->execute(array(':event' => $eventId));
     $o = $orders->fetch(PDO::FETCH_ASSOC);
-    return array('eventId' => (string)$eventId, 'tickets' => (int)$t['total'], 'checkedIn' => (int)$t['used'], 'orders' => (int)$o['total'], 'confirmedOrders' => (int)$o['confirmed'], 'confirmedGross' => (float)$o['gross']);
+    return array('eventId' => (string)$eventId, 'tickets' => (int)$t['total'], 'checkedIn' => (int)$t['used'], 'orders' => (int)$o['total'], 'confirmedOrders' => (int)$o['confirmed'], 'confirmedGross' => (float)$o['gross'], 'salesPaused' => tickex_event_sales_paused($pdo, $eventId));
 }
 function tickex_mobile_admin_sales($pdo, $eventId)
 {

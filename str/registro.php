@@ -6,6 +6,7 @@ tickex_send_security_headers();
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 require_once __DIR__ . '/inc/mail.php';
+require_once __DIR__ . '/inc/event_sales_control.php';
 
 // Solo POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -94,6 +95,7 @@ $dbFile = __DIR__ . '/save_the_rave.sqlite';
 try {
     $pdo = new PDO('sqlite:' . $dbFile);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    if (tickex_event_sales_paused($pdo, 1)) { http_response_code(409); echo json_encode(array('ok' => false, 'error' => 'La emisión de entradas está pausada.')); exit; }
 
     // Aseguramos que la tabla exista (si ya existe, no la toca)
     $pdo->exec("

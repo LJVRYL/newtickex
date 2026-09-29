@@ -32,4 +32,12 @@ $data['email'] = 'qa@example.invalid'; $data['request_id'] = $failedId;
 $failedRetryRejected = false;
 try { tickex_manual_issue_package($pdo, $data); } catch (RuntimeException $error) { $failedRetryRejected = true; }
 manual_idempotency_assert($failedRetryRejected, 'failed issuance is never reported as a successful retry');
+tickex_event_sales_set_paused($pdo, 1, 7, true, 'Aforo completo');
+$data['request_id'] = 'mobile-manual-fedcba0987654321fedcba0987654321';
+$pausedRejected = false;
+try { tickex_manual_issue_package($pdo, $data); } catch (RuntimeException $error) { $pausedRejected = strpos($error->getMessage(), 'pausadas') !== false; }
+manual_idempotency_assert($pausedRejected, 'new manual issuance is blocked while event sales are paused');
+$data['request_id'] = $requestId;
+$repeatWhilePaused = tickex_manual_issue_package($pdo, $data);
+manual_idempotency_assert((int)$repeatWhilePaused['order_id'] === 3, 'idempotent status lookup still works after pause');
 echo "manual ticket idempotency PASS\n";

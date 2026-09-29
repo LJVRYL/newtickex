@@ -4,6 +4,7 @@ tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
+require_once __DIR__ . '/inc/event_sales_control.php';
 
 if (!function_exists('e')) {
   function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -119,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
       }
 
+      if ($flashErr === '' && tickex_event_sales_paused($pdo, $eventoPost)) $flashErr = 'Las ventas de este evento están pausadas.';
       if ($flashErr === '') {
         try {
           $cols = detect_table_columns($pdo, 'entradas');
@@ -159,13 +161,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
           $sql = 'INSERT INTO entradas (' . implode(',', $insertCols) . ') VALUES (' . implode(',', $insertVals) . ')';
           $pdo->beginTransaction();
+          if (tickex_event_sales_paused($pdo, $eventoPost)) throw new Exception('Las ventas del evento están pausadas.');
+          if ($modo !== 'monto' && $tipoSeleccionadoId > 0) {
+            $stUpd = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = cantidad_disponible - 1 WHERE id = :id AND evento_id = :event AND cantidad_disponible > 0');
+            $stUpd->execute(array(':id' => $tipoSeleccionadoId, ':event' => $eventoPost));
+            if ($stUpd->rowCount() !== 1) throw new Exception('No hay cupo disponible.');
+          }
           $stIns = $pdo->prepare($sql);
           $stIns->execute($params);
-
-          if ($modo !== 'monto' && $tipoSeleccionadoId > 0) {
-            $stUpd = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = CASE WHEN cantidad_disponible > 0 THEN cantidad_disponible - 1 ELSE 0 END WHERE id = :id');
-            $stUpd->execute(array(':id' => $tipoSeleccionadoId));
-          }
 
           log_checkin_audit($pdo, array(
             'actor_user_id' => $usuarioId,

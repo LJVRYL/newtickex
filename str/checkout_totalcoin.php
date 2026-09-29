@@ -12,6 +12,7 @@ require_once __DIR__ . '/inc/ticket_packages.php';
 require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
 require_once __DIR__ . '/inc/checkout_ticket_catalog.php';
+require_once __DIR__ . '/inc/event_sales_control.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -630,6 +631,7 @@ if (!function_exists('_tickex_validate_buyer_fields')) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = isset($_POST['action']) ? (string)$_POST['action'] : 'preview';
+  if ($action === 'pay' && tickex_event_sales_paused(db(), $eventId)) $errors[] = 'La venta de entradas está pausada para este evento.';
   $isLoggedCliente = isset($_SESSION['usuario_id']) && (int)$_SESSION['usuario_id'] > 0;
 
   // Para poder trazar cualquier fallo del paso de pago

@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/event_sales_control.php';
 
 if (!function_exists('tickex_access_uuid')) {
     function tickex_access_uuid()
@@ -293,6 +294,10 @@ if (!function_exists('tickex_access_issue_entry')) {
         );
 
         $effectiveStatus = tickex_access_effective_status($linkRow);
+        if (tickex_event_sales_paused($pdo, (int)$linkRow['evento_id'])) {
+            tickex_access_log_attempt($pdo, array_merge($baseAttempt, array('result' => 'blocked_event_sales', 'detail' => 'Emisión pausada para el evento.')));
+            return array('ok' => false, 'error' => 'La emisión de entradas está pausada para este evento.', 'trace_id' => $traceId);
+        }
         if ($effectiveStatus !== 'active') {
             $r = 'blocked_' . $effectiveStatus;
             tickex_access_log_attempt($pdo, array_merge($baseAttempt, array('result' => $r, 'detail' => 'El link no está activo.')));
@@ -386,6 +391,11 @@ if (!function_exists('tickex_access_issue_entry')) {
 
         try {
             $pdo->beginTransaction();
+            if (tickex_event_sales_paused($pdo, (int)$linkRow['evento_id'])) {
+                $pdo->rollBack();
+                tickex_access_log_attempt($pdo, array_merge($baseAttempt, array('result' => 'blocked_event_sales', 'detail' => 'Emisión pausada al confirmar.')));
+                return array('ok' => false, 'error' => 'La emisión de entradas está pausada para este evento.', 'trace_id' => $traceId);
+            }
 
             $usedTx = tickex_access_used_count($pdo, (int)$linkRow['id']);
             if ($maxUses > 0 && $usedTx >= $maxUses) {

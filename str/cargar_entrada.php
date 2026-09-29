@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/event_sales_control.php';
 
 if (!function_exists('e')) {
   function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -46,6 +47,7 @@ if (isset($_POST['evento_id'])) $eventoId = (int)$_POST['evento_id'];
 if ($eventoId <= 0) { http_response_code(400); echo "Falta evento_id"; exit; }
 tickex_require_event_access($pdo, $eventoId, isset($cu) ? $cu : null);
 $isEmbed = false;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && tickex_event_sales_paused($pdo, $eventoId)) { http_response_code(409); echo 'Las ventas y emisiones de este evento están pausadas.'; exit; }
 if (isset($_GET['embed'])) {
   $isEmbed = $_GET['embed'] !== '0' && $_GET['embed'] !== 'false';
 } elseif (isset($_POST['embed'])) {

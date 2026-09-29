@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_sales_control.php';
 $title = "Nueva entrada (Puerta)";
 
 require_login();
@@ -59,6 +60,8 @@ $pagoRaw = '';
 
 if ($_SERVER['REQUEST_METHOD']==='POST') {
 
+    if (tickex_event_sales_paused($pdo, $eventoId)) $errores[] = 'Las ventas de este evento están pausadas.';
+
     $nombre = trim(isset($_POST['nombre']) ? $_POST['nombre'] : '');
     $tipoSel = (int)(isset($_POST['tipo_id']) ? $_POST['tipo_id'] : 0);
     $pagoRaw = trim(isset($_POST['pago']) ? $_POST['pago'] : '');
@@ -91,9 +94,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         }
 
         $disp = (int)$te['cantidad_disponible'];
-        if ($disp<=0) {
-            $errores[]="⚠️ Ojo: este tipo no tiene cupos disponibles (igual se va a registrar).";
-        }
+        if ($disp<=0) $errores[]="No hay cupos disponibles para este tipo.";
 
         // generar código
         if (function_exists('random_bytes')) {
@@ -107,6 +108,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
         try {
             $pdo->beginTransaction();
+            if (tickex_event_sales_paused($pdo, $eventoId)) throw new Exception('Las ventas de este evento están pausadas.');
+            $stUpd = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = cantidad_disponible - 1 WHERE id = :type AND evento_id = :event AND cantidad_disponible > 0');
+            $stUpd->execute(array(':type' => $tipoSel, ':event' => $eventoId));
+            if ($stUpd->rowCount() !== 1) throw new Exception('No hay cupo disponible.');
 
             if ($hasEventoIdEntradas) {
                 $stIns = $pdo->prepare("
@@ -120,12 +125,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     ':nom'=>$nombre,
                     ':fec'=>$fecha,
                     ':cod'=>$codigo,
-      
+                    ':tipo'=>$te['nombre'],
                     ':monto'=>$monto
                 ));
-  
+            } else {
                 $stIns = $pdo->prepare("
-                    IN
+                    INSERT INTO entradas
                       (nombre, email, fecha_registro, codigo, checked_in, checked_in_at, tipo, monto_pagado)
                     VALUES
                       (:nom,'',:fec,:cod,0,NULL,:tipo,:monto)
@@ -137,15 +142,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     ':tipo'=>$te['nombre'],
                     ':monto'=>$monto
                 ));
-            }
-
-            if ($disp>0) {
-                $stUpd = $pdo->prepare("
-                    UPDATE tipos_entrada
-                    SET cantidad_disponible = cantidad_disponible - 1
-                    WHERE id=? AND cantidad_disponible>0
-                ");
-                $stUpd->execute(array($tipoSel));
             }
 
             $pdo->commit();
