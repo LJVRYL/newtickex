@@ -6,7 +6,8 @@ require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -17,10 +18,7 @@ if (!$isAllowed) {
 
 $pdo = db();
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 $fRegistered = isset($_GET['f_registered']) ? trim((string)$_GET['f_registered']) : '';
 $fBlocked = isset($_GET['f_blocked']) ? trim((string)$_GET['f_blocked']) : '';
@@ -75,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   } else {
     $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
     $emailAction = isset($_POST['email']) ? trim((string)$_POST['email']) : '';
-    $adminId = isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+    $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
     if ($action === 'import_csv') {
       $fileOk = isset($_FILES['csv_file']) && is_array($_FILES['csv_file']) && isset($_FILES['csv_file']['error']) && (int)$_FILES['csv_file']['error'] === UPLOAD_ERR_OK;
