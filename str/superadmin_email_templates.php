@@ -3,6 +3,7 @@ require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/mail.php';
 
 require_login();
+$csrf = tickex_csrf_token();
 $cu = current_user();
 $rol = isset($cu['tipo_global']) ? $cu['tipo_global'] : (isset($cu['rol']) ? $cu['rol'] : '');
 if (!in_array($rol, array('super_admin','superadmin'), true)) {
@@ -30,6 +31,10 @@ function load_template_by_id($pdo, $id)
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+        http_response_code(403);
+        exit('Solicitud inválida.');
+    }
     $action = isset($_POST['action']) ? $_POST['action'] : '';
 
     if ($action === 'create') {
@@ -190,6 +195,7 @@ include __DIR__ . '/inc/layout_top.php';
   <div style="flex:1 1 auto;"></div>
 
   <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
     <input type="hidden" name="action" value="create">
     <input name="context" placeholder="nuevo_context" style="min-width:180px;" required>
     <input name="name" placeholder="Nombre" style="min-width:200px;">
@@ -235,6 +241,7 @@ include __DIR__ . '/inc/layout_top.php';
     <h3 style="margin-top:0;">Editar plantilla: <?php echo e($editRow['context']); ?></h3>
 
     <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="save">
       <input type="hidden" name="id" value="<?php echo (int)$editRow['id']; ?>">
 
@@ -302,6 +309,7 @@ include __DIR__ . '/inc/layout_top.php';
   <div class="card" style="max-width:1100px;margin:16px auto;">
     <h3 style="margin-top:0;">Enviar manual (prueba / emergencia)</h3>
     <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <input type="hidden" name="action" value="send_test">
       <input type="hidden" name="id" value="<?php echo (int)$editRow['id']; ?>">
 
