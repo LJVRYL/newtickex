@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/routes.php';
 
 require_once __DIR__ . '/communication_templates.php';
 require_once __DIR__ . '/communication_campaigns.php';
@@ -70,9 +71,9 @@ if (!function_exists('event_newsletters_base_url')) {
         $host = isset($_SERVER['HTTP_HOST']) ? trim((string)$_SERVER['HTTP_HOST']) : '';
         if ($host !== '' && stripos($host, 'localhost') === false && strpos($host, '127.0.0.1') === false) {
             $https = !empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off';
-            return ($https ? 'https://' : 'http://') . $host;
+            return tickex_public_base_url(($https ? 'https://' : 'http://') . $host);
         }
-        return 'https://str.tickex.com.ar';
+        return 'https://www.tickex.com.ar';
     }
 }
 

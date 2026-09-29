@@ -49,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
         $error = 'La sesión venció. Volvé a abrir el enlace del email.';
     } elseif ($pass1 === '' || $pass2 === '') {
         $error = 'La contraseña es obligatoria.';
-    } elseif (strlen($pass1) < 6) {
-        $error = 'La contraseña debe tener al menos 6 caracteres.';
+    } elseif (strlen($pass1) < 10) {
+        $error = 'La contraseña debe tener al menos 10 caracteres.';
     } elseif ($pass1 !== $pass2) {
         $error = 'Las contraseñas no coinciden.';
     }
@@ -58,51 +58,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
     if ($error === '') {
         $newHash = function_exists('password_hash') ? password_hash($pass1, PASSWORD_DEFAULT) : md5($pass1);
 
-        // Actualizar en registro_pendientes (clientes)
+        $pdo->beginTransaction();
         try {
-            // asegurar columna
-            try {
-                $cols = $pdo->query('PRAGMA table_info(registro_pendientes)')->fetchAll(PDO::FETCH_ASSOC);
-                $hasPass = false;
-                foreach ($cols as $c) {
-                    if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPass = true; break; }
-                }
-                if (!$hasPass) {
-                    $pdo->exec('ALTER TABLE registro_pendientes ADD COLUMN password_hash TEXT');
-                }
-            } catch (Exception $e) {
-                // ignore alter errors
+            $updated = tickex_password_reset_update_accounts($pdo, $emailToken, $newHash);
+            if ($updated < 1) {
+                throw new RuntimeException('No se encontró una cuenta actualizable.');
             }
-            $stmtCli = $pdo->prepare('UPDATE registro_pendientes SET password_hash = :h WHERE email = :e COLLATE NOCASE');
-            $stmtCli->execute(array(':h' => $newHash, ':e' => $emailToken));
-        } catch (Exception $e) {
-            // ignore
-        }
-
-        // Actualizar en usuarios si existe columna y fila
-        try {
-            $colsU = $pdo->query('PRAGMA table_info(usuarios)')->fetchAll(PDO::FETCH_ASSOC);
-            $hasPwdU = false;
-            foreach ($colsU as $c) {
-                if (isset($c['name']) && $c['name'] === 'password_hash') { $hasPwdU = true; break; }
+            $consume = $pdo->prepare('UPDATE password_reset_tokens SET consumido_en = datetime("now") WHERE token = :t AND consumido_en IS NULL');
+            $consume->execute(array(':t' => $token));
+            if ($consume->rowCount() !== 1) {
+                throw new RuntimeException('El enlace ya fue utilizado.');
             }
-            if ($hasPwdU) {
-                $stmtU = $pdo->prepare('UPDATE usuarios SET password_hash = :h WHERE email = :e COLLATE NOCASE');
-                $stmtU->execute(array(':h' => $newHash, ':e' => $emailToken));
-            }
+            $pdo->commit();
+            $okMsg = 'Tu contraseña se actualizó. Ya podés iniciar sesión con la nueva clave.';
         } catch (Exception $e) {
-            // ignore
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $error = 'No se pudo actualizar la contraseña. Pedí un nuevo enlace.';
         }
-
-        // Marcar token como usado
-        try {
-            $pdo->prepare('UPDATE password_reset_tokens SET consumido_en = datetime("now") WHERE token = :t')
-                ->execute(array(':t' => $token));
-        } catch (Exception $e) {
-            // ignore
-        }
-
-        $okMsg = 'Tu contraseña se actualizó. Ya podés iniciar sesión con la nueva clave.';
     }
 }
 
@@ -132,7 +104,7 @@ require __DIR__ . '/inc/layout_top.php';
   </div>
   <form method="post">
     <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
-    <label for="pass1">Nueva contraseña (mín 6)</label>
+    <label for="pass1">Nueva contraseña (mínimo 10)</label>
     <input type="password" id="pass1" name="pass1" required autocomplete="new-password" value="<?php echo e($pass1); ?>">
 
     <label for="pass2">Repetir contraseña</label>

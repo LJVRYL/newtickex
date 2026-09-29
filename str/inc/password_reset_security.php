@@ -36,7 +36,7 @@ if (!function_exists('tickex_password_reset_account_exists')) {
     function tickex_password_reset_account_exists($pdo, $email)
     {
         $normalized = tickex_password_reset_normalize_email($email);
-        foreach (array('usuarios', 'registro_pendientes') as $table) {
+        foreach (array('usuarios_admin', 'usuarios', 'registro_pendientes') as $table) {
             try {
                 $st = $pdo->prepare('SELECT 1 FROM ' . $table . ' WHERE email = :email COLLATE NOCASE LIMIT 1');
                 $st->execute(array(':email' => $normalized));
@@ -46,6 +46,40 @@ if (!function_exists('tickex_password_reset_account_exists')) {
             }
         }
         return false;
+    }
+}
+
+if (!function_exists('tickex_password_reset_update_accounts')) {
+    function tickex_password_reset_update_accounts($pdo, $email, $passwordHash)
+    {
+        $normalized = tickex_password_reset_normalize_email($email);
+        $updated = 0;
+        $targets = array(
+            array('table' => 'usuarios_admin', 'column' => 'password'),
+            array('table' => 'usuarios', 'column' => 'password_hash'),
+            array('table' => 'registro_pendientes', 'column' => 'password_hash'),
+        );
+        foreach ($targets as $target) {
+            try {
+                $columns = $pdo->query('PRAGMA table_info(' . $target['table'] . ')')->fetchAll(PDO::FETCH_ASSOC);
+                $available = false;
+                foreach ($columns as $column) {
+                    if (isset($column['name']) && $column['name'] === $target['column']) {
+                        $available = true;
+                        break;
+                    }
+                }
+                if (!$available) continue;
+                $statement = $pdo->prepare(
+                    'UPDATE ' . $target['table'] . ' SET ' . $target['column'] . ' = :hash WHERE email = :email COLLATE NOCASE'
+                );
+                $statement->execute(array(':hash' => $passwordHash, ':email' => $normalized));
+                $updated += $statement->rowCount();
+            } catch (Exception $e) {
+                // Algunas instalaciones históricas no contienen todas las tablas.
+            }
+        }
+        return $updated;
     }
 }
 
