@@ -1335,6 +1335,11 @@ include __DIR__.'/inc/layout_top.php';
       <div style="font-size:14px;color:var(--muted);margin-bottom:10px;">Selecciona cuántas entradas de cada tipo deseas comprar.</div>
 
       <div id="stepSelect">
+        <?php if (empty($entryOptions)): ?>
+          <p class="flash" role="status" style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);">
+            No hay entradas disponibles para este evento en este momento.
+          </p>
+        <?php endif; ?>
         <?php foreach ($entryOptions as $idx => $opt): 
           $avail = $opt['avail'];
           if ($avail === null) {
@@ -1391,7 +1396,7 @@ include __DIR__.'/inc/layout_top.php';
             <?php if ($checkoutServicePercent > 0): ?><div class="muted" style="font-size:13px;">Costo de servicio <?php echo e(number_format($checkoutServicePercent, 2, ',', '.')); ?>%: <span id="serviceDisplay">$0</span></div><?php endif; ?>
             <div style="font-size:18px;font-weight:700;">Total a pagar: <span id="totalDisplay">$0</span></div>
           </div>
-          <button class="btn" type="button" id="btnContinue">Comprar entradas</button>
+          <button class="btn" type="button" id="btnContinue" <?php echo empty($entryOptions) ? 'disabled' : ''; ?>>Comprar entradas</button>
         </div>
       </div>
 
