@@ -5,6 +5,7 @@ tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/unified_tickets.php';
 require_once __DIR__ . '/inc/event_sales_control.php';
+require_once __DIR__ . '/inc/staff_operations.php';
 
 if (!function_exists('e')) {
   function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -16,6 +17,7 @@ if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
 }
 
 $pdo = db();
+tickex_staff_operations_ensure_schema($pdo);
 $usuarioId = (int)$_SESSION['usuario_id'];
 $title = 'Venta en puerta';
 
@@ -46,6 +48,11 @@ foreach ($eventosStaff as $ev) {
 if (!$activeEvent && !empty($eventosStaff)) {
   $activeEvent = $eventosStaff[0];
   $activeEventId = (int)$activeEvent['id'];
+}
+$accessProfile = $activeEventId > 0 ? tickex_staff_event_access_profile($pdo, $usuarioId, $activeEventId) : null;
+if ($activeEventId > 0 && (!$accessProfile || !in_array('sales_view', $accessProfile['permissions'], true))) {
+  http_response_code(403);
+  exit('Tu rol no permite registrar ventas en este evento.');
 }
 
 $tiposPuerta = array();

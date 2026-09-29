@@ -472,6 +472,7 @@ include __DIR__.'/inc/layout_top.php';
     <a class="btn pe-action-btn" href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>">Entradas disponibles</a>
     <a class="btn pe-action-btn" href="access_links.php?evento_id=<?php echo (int)$eventoId; ?>">Checkout free</a>
     <a class="btn pe-action-btn" href="secundarios.php?evento_id=<?php echo (int)$eventoId; ?>">Asignar staff</a>
+    <a class="btn pe-action-btn" href="staff_operaciones.php?evento_id=<?php echo (int)$eventoId; ?>">Operación de staff</a>
     <a class="btn pe-action-btn" href="produccion.php?evento_id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Asignar artística</a>
     <a class="btn pe-action-btn" href="venues.php?evento_id=<?php echo (int)$eventoId; ?>">Venue</a>
     <a class="btn pe-action-btn" href="comunicacion_newsletter.php?event_id=<?php echo (int)$eventoId; ?>">Ir al newsletter</a>

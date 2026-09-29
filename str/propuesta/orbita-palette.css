@@ -1,0 +1,59 @@
+/* Public Tickex palette verified at https://www.tickex.com.ar/ on 2026-09-23.
+   Orbita keeps its layout and the approved #90f3af green accent. */
+:root{
+  --bg:#060810;--surface:#0e1424;--panel:#0e1424;--panel2:#121a2f;
+  --ink:#f7f8fc;--muted:#a8b0c3;--line:rgba(255,255,255,.1);
+  --violet:#7456f4;--violet2:#9c7cff;--green:#90f3af;--acid:#9c7cff;--black:#060810;
+  --control-border:#7d879e;
+}
+body{background:radial-gradient(circle at 80% 0,rgba(116,86,244,.18),transparent 27%),radial-gradient(circle at 8% 33%,rgba(50,200,100,.08),transparent 24%),var(--bg)}
+.review-nav{background:rgba(6,8,16,.9)}
+.wordmark{display:inline-flex;align-items:center}
+.wordmark>.wordmark-text{display:block;color:var(--ink);font:inherit;letter-spacing:inherit;line-height:1}
+.wordmark>.wordmark-text>span{color:var(--green)}
+.wordmark>img{align-self:center;vertical-align:middle}
+.hero:before{background:radial-gradient(ellipse at 54% 65%,rgba(116,86,244,.24),transparent 64%)}
+.hero .eyebrow,.margin-intro .eyebrow{color:var(--green)}
+.signal{box-shadow:0 0 15px #90f3af66}
+h1 em,.hero-copy>h2 em{color:#b6a7ff}
+.primary-link{background:linear-gradient(135deg,var(--violet),#5939d8);color:var(--ink);box-shadow:0 12px 32px rgba(116,86,244,.25)}
+.primary-link:hover{background:linear-gradient(135deg,#6849e6,#4d2ec4);color:var(--ink)}
+.header-link:hover,footer a:hover{color:#c6baff}
+.hero-orbit{border-color:rgba(156,124,255,.2)}
+.label-line{background:var(--violet2)}
+.real-product{border-color:rgba(156,124,255,.38);background:var(--panel)}
+.real-product figcaption{background:var(--panel2);color:#c7ccda}
+.product-zoom{background:var(--panel)}
+.zoom-label{background:rgba(14,20,36,.95);border-color:var(--control-border)}
+.product-zoom:hover .zoom-label{background:var(--violet);color:var(--ink)}
+.concept-label{color:#c6baff}
+.wallet-shell{background:#f7f8fc;color:#121a2f;border-color:#cbc9df}
+.wallet-logo>span{color:#126c36}
+.wallet-avatar-symbol{background:var(--panel)}
+.wallet-balance{background:linear-gradient(135deg,var(--violet),#5939d8);color:var(--ink)}
+.wallet-balance:after{border-color:rgba(255,255,255,.24)}
+.wallet-tag{border-color:rgba(255,255,255,.45)}
+.wallet-actions svg{background:#fff;border-color:#d7d6e4}
+.wallet-next,.wallet-bottom{border-color:#cccddd}
+.wallet-next span,.wallet-bottom{color:#505973}
+.wallet-bottom .active{color:#5631bf}
+.concept-note{background:rgba(14,20,36,.96);border-color:rgba(156,124,255,.35);color:#d3d7e2}
+.hero-foot>span:last-child>span{color:var(--violet2)}
+.ecosystem{background:var(--panel);color:var(--ink);border-top:1px solid var(--line)}
+.section-intro>.eyebrow,.section-intro p:not(.eyebrow),.step,.flow-detail,.bridge-copy,.account-notes,.future-line .eyebrow,.future-line p:last-child,.future-status{color:var(--muted)}
+.bridge-line,.bridge-line:last-of-type:after{background:transparent;border-color:#7e6fa5}
+.bridge-line{background:#7e6fa5}
+.brand-core{background:var(--panel2);border:1px solid rgba(156,124,255,.35);box-shadow:0 10px 32px rgba(116,86,244,.15)}
+.margin-strip{background:linear-gradient(135deg,#171e3d,#321d65);color:var(--ink);border:1px solid rgba(116,86,244,.5)}
+.equation>div>span,.operator{color:#c3c9d8}
+.equation .equation-result>span,.equation .equation-result strong{color:var(--green)}
+.future-line{border-color:rgba(255,255,255,.18)}
+.future-symbol{color:var(--violet2)}
+.future-status strong{color:var(--ink)}
+.ecosystem a:focus-visible,.ecosystem:focus-visible{outline-color:var(--violet2)}
+.screen-dialog{border-color:var(--control-border);background:var(--panel);color:var(--ink)}
+.screen-dialog::backdrop{background:rgba(6,8,16,.92)}
+.dialog-header{background:var(--panel2)}
+.dialog-header button{border-color:var(--control-border)}
+.dialog-header button:hover{background:#321d65}
+@media(max-width:560px){.equation .equation-result{border-color:rgba(156,124,255,.32)}}

@@ -1,0 +1,36 @@
+<?php
+require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/communication_execution_engine.php';
+require_login();
+$pdo=db(); $cu=current_user(); $adminId=tickex_admin_id($cu);
+if(!tickex_is_super_admin($cu)) abort_404('No tenés permiso.');
+communication_execution_ensure_schema($pdo);
+$error='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+    if(!tickex_csrf_verify(isset($_POST['_csrf'])?(string)$_POST['_csrf']:'')) $error='La sesión venció. Actualizá la página.';
+    else try {
+        $target=isset($_POST['admin_id'])?(int)$_POST['admin_id']:0;
+        communication_delivery_policy_save($pdo,$target,$_POST,$adminId);
+        flash('ok',$target===0?'Política general actualizada.':'Límite del organizador actualizado.');
+        header('Location: superadmin_email_delivery.php'); exit;
+    } catch(Exception $e){$error=$e->getMessage();}
+}
+$global=communication_delivery_policy_get($pdo,0);
+$rows=communication_delivery_policy_dashboard($pdo);
+$csrf=tickex_csrf_token(); $flashes=flash_get_all();
+$title='Entrega de emails'; include __DIR__.'/inc/layout_top.php';
+?>
+<style>
+.delivery-page{max-width:1200px;margin:0 auto;display:grid;gap:16px}.delivery-hero{padding:29px;background:radial-gradient(circle at 88% 0,rgba(68,215,238,.16),transparent 30%),linear-gradient(135deg,#171b38,#35226e)}.delivery-kicker{color:#5edbef;text-transform:uppercase;letter-spacing:.13em;font-size:11px;font-weight:900}.delivery-hero h1{font-size:clamp(32px,5vw,48px);letter-spacing:-.04em;margin:6px 0}.delivery-hero p{color:#c5c8d8;margin:0;max-width:760px}.delivery-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}.policy-form{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px;align-items:end}.policy-form label{font-size:11px;color:var(--muted)}.policy-form input{margin-top:5px}.policy-toggles{display:flex;gap:16px;flex-wrap:wrap;grid-column:1/-1}.policy-toggles label{font-size:13px}.delivery-list{display:grid;gap:10px}.delivery-org{padding:15px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.02)}.delivery-org form{display:grid;grid-template-columns:minmax(190px,1.25fr) repeat(4,minmax(110px,.6fr)) auto;gap:9px;align-items:end}.delivery-name strong,.delivery-name small{display:block}.delivery-name small{color:var(--muted)}.delivery-meter{height:6px;background:#0b0e1c;border-radius:99px;overflow:hidden;margin-top:8px}.delivery-meter span{display:block;height:100%;background:linear-gradient(90deg,#42d8ee,#7651ff)}.delivery-note{color:var(--muted);font-size:12px}.delivery-state{display:inline-block;padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:10px;text-transform:uppercase}.delivery-state.live{color:#7fe7b2}.delivery-state.pause{color:#ffba77}@media(max-width:980px){.policy-form{grid-template-columns:1fr 1fr}.delivery-org form{grid-template-columns:1fr 1fr}.delivery-name{grid-column:1/-1}}@media(max-width:560px){.policy-form,.delivery-org form{grid-template-columns:1fr}}
+</style>
+<main class="delivery-page">
+<section class="card delivery-hero"><div class="delivery-kicker">Escalabilidad y seguridad</div><h1>Entrega de emails</h1><p>Controlá el ritmo de las campañas, evitá sobrecargas y definí reintentos automáticos. Los tickets y correos transaccionales siguen teniendo prioridad y no entran en estos límites.</p></section>
+<?php foreach($flashes as $f):?><div class="flash <?php echo e($f['type']);?>"><?php echo e($f['msg']);?></div><?php endforeach;?><?php if($error!==''):?><div class="flash err"><?php echo e($error);?></div><?php endif;?>
+<section class="card"><div class="delivery-head"><div><div class="delivery-kicker">Regla predeterminada</div><h2>Política general</h2><p class="delivery-note"><?php echo empty($global['enforcement_enabled'])?'Modo observación: medimos sin detener campañas.':'Modo activo: los límites se aplican antes de cada envío.';?></p></div><span class="delivery-state <?php echo !empty($global['paused'])?'pause':'live';?>"><?php echo !empty($global['paused'])?'Envíos pausados':'Operativo';?></span></div>
+<form method="post" class="policy-form"><input type="hidden" name="_csrf" value="<?php echo e($csrf);?>"><input type="hidden" name="admin_id" value="0">
+<label>Límite por hora<input type="number" name="hourly_limit" min="1" value="<?php echo (int)$global['hourly_limit'];?>"></label><label>Límite por día<input type="number" name="daily_limit" min="1" value="<?php echo (int)$global['daily_limit'];?>"></label><label>Intentos máximos<input type="number" name="max_attempts" min="1" max="10" value="<?php echo (int)$global['max_attempts'];?>"></label><label>Espera inicial (segundos)<input type="number" name="retry_base_seconds" min="0" max="86400" value="<?php echo (int)$global['retry_base_seconds'];?>"></label>
+<div class="policy-toggles"><label><input type="checkbox" name="enforcement_enabled" value="1"<?php echo !empty($global['enforcement_enabled'])?' checked':'';?>> Aplicar límites</label><label><input type="checkbox" name="paused" value="1"<?php echo !empty($global['paused'])?' checked':'';?>> Pausar campañas</label></div><button class="btn" type="submit">Guardar política</button></form></section>
+<section class="card"><div class="delivery-head"><div><div class="delivery-kicker">Uso por cuenta</div><h2>Organizadores</h2></div><a class="btn secondary" href="comunicacion_estado_motor.php">Ver cola</a></div><div class="delivery-list">
+<?php foreach($rows as $row):$pct=min(100,(int)round(((int)$row['sent_day']/max(1,(int)$row['daily_limit']))*100));?><article class="delivery-org"><form method="post"><input type="hidden" name="_csrf" value="<?php echo e($csrf);?>"><input type="hidden" name="admin_id" value="<?php echo (int)$row['id'];?>"><div class="delivery-name"><strong><?php echo e($row['display_name']);?></strong><small><?php echo e($row['email']);?></small><div class="delivery-note"><?php echo (int)$row['sent_hour'];?> enviados en 1 h · <?php echo (int)$row['sent_day'];?> en 24 h · <?php echo (int)$row['pending_commands'];?> campañas en cola</div><div class="delivery-meter"><span style="width:<?php echo $pct;?>%"></span></div></div><label>Por hora<input type="number" name="hourly_limit" min="1" value="<?php echo (int)$row['hourly_limit'];?>"></label><label>Por día<input type="number" name="daily_limit" min="1" value="<?php echo (int)$row['daily_limit'];?>"></label><label>Intentos<input type="number" name="max_attempts" min="1" max="10" value="<?php echo (int)$row['max_attempts'];?>"></label><label>Espera<input type="number" name="retry_base_seconds" min="0" max="86400" value="<?php echo (int)$row['retry_base_seconds'];?>"></label><div><label><input type="checkbox" name="enforcement_enabled" value="1"<?php echo !empty($row['enforcement_enabled'])?' checked':'';?>> Aplicar</label><label><input type="checkbox" name="paused" value="1"<?php echo !empty($row['paused'])?' checked':'';?>> Pausar</label><button class="btn secondary" type="submit">Actualizar</button></div></form></article><?php endforeach;?>
+<?php if(!$rows):?><p class="muted">Todavía no hay organizadores activos para mostrar.</p><?php endif;?></div></section>
+</main><?php include __DIR__.'/inc/layout_bottom.php';?>
