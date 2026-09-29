@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/event_capacity.php';
 $title = "Configurar entradas del evento";
 require_login();
 $pdo = db();
+tickex_event_capacity_ensure_schema($pdo);
 $eventoId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $cu = current_user();
 $tipoGlobal = isset($_SESSION['tipo_global'])
@@ -15,6 +17,22 @@ $okMsg = '';
 
 $adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 tickex_require_event_access($pdo, $eventoId, $cu);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
+  http_response_code(403);
+  exit('Solicitud vencida o inválida.');
+}
+$csrf = tickex_csrf_token();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_event_capacity') {
+  try {
+    $capacity = isset($_POST['capacidad_total']) ? (int)$_POST['capacidad_total'] : 0;
+    tickex_event_capacity_set($pdo, $eventoId, $capacity);
+    $okMsg = 'Cupo global del evento actualizado.';
+  } catch (Exception $e) {
+    $error = $e->getMessage();
+  }
+}
 
 // Actualizar cantidad_disponible solamente después de autenticar y validar propiedad.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_disponible') {
@@ -91,6 +109,7 @@ $colsTE = $pdo->query("PRAGMA table_info(tipos_entrada)")->fetchAll(PDO::FETCH_A
 $hasCategoria = false;
 $hasTipoVenta = false;
 $hasHoraLimite = false;
+$hasVentaHasta = false;
 $hasQrQuantity = false;
 $visCol = '';
 if (is_array($colsTE)) {
@@ -99,6 +118,7 @@ if (is_array($colsTE)) {
     if ($n === 'categoria') $hasCategoria = true;
     if ($n === 'tipo_venta') $hasTipoVenta = true;
     if ($n === 'hora_limite') $hasHoraLimite = true;
+    if ($n === 'venta_hasta') $hasVentaHasta = true;
     if ($n === 'qr_quantity') $hasQrQuantity = true;
     if ($visCol === '' && ($n === 'visible_publico' || $n === 'publico' || $n === 'venta_publico' || $n === 'visible')) {
       $visCol = (string)$c['name'];
@@ -117,8 +137,8 @@ try {
 // =======================
 // ELIMINAR TIPO DEL EVENTO (tachito)
 // =======================
-if (isset($_GET['del_te'])) {
-    $teId = (int)$_GET['del_te'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_type') {
+    $teId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 
     $st = $pdo->prepare("SELECT id FROM tipos_entrada WHERE id = ? AND evento_id = ?");
     $st->execute(array($teId, $eventoId));
@@ -216,6 +236,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_from_template']))
           $vals[] = ':hl';
           $params[':hl'] = $hora;
         }
+        if ($hasVentaHasta && array_key_exists('venta_hasta', $tpl)) {
+          $cols[] = 'venta_hasta';
+          $vals[] = ':venta_hasta';
+          $params[':venta_hasta'] = $tpl['venta_hasta'];
+        }
         if ($hasQrQuantity) {
           $cols[] = 'qr_quantity';
           $vals[] = ':qr_quantity';
@@ -262,6 +287,7 @@ if ($eventoId > 0) {
   $stEv->execute(array($eventoId));
   $evento = $stEv->fetch(PDO::FETCH_ASSOC);
 }
+$capacityStatus = tickex_event_capacity_status($pdo, $eventoId);
 
 // ===== Plantillas (Mis Entradas) del admin =====
 if ($hasTablaPlantillas) {
@@ -293,10 +319,10 @@ if ($fd === '' && $fh === '') {
 
 include __DIR__.'/inc/layout_top.php';
 ?>
-<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+<div class="card tx-ticket-nav" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
   <a class="btn secondary" href="editar_evento.php?id=<?php echo (int)$eventoId; ?>">✏ Editar datos del evento</a>
-  <a class="btn secondary" href="plantillas_entrada.php">⚙ Mis entradas (plantillas)</a>
+  <a class="btn secondary" href="mis_entradas.php">⚙ Mis entradas (plantillas)</a>
   <span style="flex:1 1 auto;"></span>
 </div>
 
@@ -307,7 +333,7 @@ include __DIR__.'/inc/layout_top.php';
   <div class="flash ok"><?php echo e($okMsg); ?></div>
 <?php endif; ?>
 
-<div class="card">
+<div class="card tx-ticket-event">
   <h2>Configurar entradas para: <?php echo e($evento['nombre']); ?></h2>
   <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;align-items:flex-start;">
     <div style="flex:1 1 220px;">
@@ -336,12 +362,31 @@ include __DIR__.'/inc/layout_top.php';
   </div>
 </div>
 
-<div class="card">
+<div class="card tx-ticket-capacity">
+  <h3>Cupo global del evento</h3>
+  <p class="muted">Es el límite físico total de personas. Todas las entradas —checkout, promociones, cortesías, puerta y manuales— consumen este mismo cupo.</p>
+  <form method="post" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+    <input type="hidden" name="action" value="update_event_capacity">
+    <div style="min-width:220px;">
+      <label for="capacidad_total">Capacidad total</label>
+      <input id="capacidad_total" type="number" name="capacidad_total" min="1" required value="<?php echo (int)$capacityStatus['limit']; ?>">
+    </div>
+    <button class="btn" type="submit">Guardar cupo global</button>
+  </form>
+  <div class="muted" style="margin-top:10px;">
+    Emitidos: <strong><?php echo (int)$capacityStatus['issued']; ?></strong> ·
+    Disponibles: <strong><?php echo $capacityStatus['available'] !== null ? (int)$capacityStatus['available'] : '-'; ?></strong>
+  </div>
+</div>
+
+<div class="card tx-ticket-templates">
   <h3>Agregar tipos desde Mis Entradas</h3>
   <?php if (empty($plantillas)): ?>
-    <div class="muted">No tenés plantillas activas. Crealas en <a href="plantillas_entrada.php">Mis Entradas</a>.</div>
+    <div class="muted">No tenés plantillas activas. Crealas en <a href="mis_entradas.php">Mis Entradas</a>.</div>
   <?php else: ?>
     <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
       <label for="tpl_id" class="muted">Plantilla:</label>
       <select name="tpl_id" id="tpl_id">
         <?php foreach ($plantillas as $tpl): ?>
@@ -360,7 +405,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php endif; ?>
 </div>
 
-<div class="card">
+<div class="card tx-ticket-types">
   <h3>Tipos de entrada del evento</h3>
   <div class="muted" style="margin-bottom:8px;">Total y disponible representan accesos reales. Cada QR emitido consume un acceso.</div>
 
@@ -386,24 +431,25 @@ include __DIR__.'/inc/layout_top.php';
       <tbody>
         <?php foreach ($tiposEvento as $te): ?>
           <tr>
-            <td><?php echo (int)$te['id']; ?></td>
+            <td data-label="ID"><?php echo (int)$te['id']; ?></td>
             <?php $cat = isset($te['categoria']) ? $te['categoria'] : ''; ?>
             <?php $tv  = isset($te['tipo_venta']) ? $te['tipo_venta'] : (isset($te['tipo'])?$te['tipo']:''); ?>
             <?php $hl  = isset($te['hora_limite']) ? $te['hora_limite'] : ''; ?>
-            <td><?php echo e($cat); ?></td>
-            <td><?php echo e($te['nombre']); ?></td>
-            <td><?php echo e($tv); ?></td>
-            <td>$<?php echo (int)$te['precio']; ?></td>
-            <td><?php echo (int)$te['cantidad_total']; ?></td>
-            <td>
+            <td data-label="Categoría"><?php echo e($cat); ?></td>
+            <td data-label="Nombre"><?php echo e($te['nombre']); ?></td>
+            <td data-label="Tipo venta"><?php echo e($tv); ?></td>
+            <td data-label="Precio">$<?php echo (int)$te['precio']; ?></td>
+            <td data-label="Total"><?php echo (int)$te['cantidad_total']; ?></td>
+            <td data-label="Disponible">
               <form method="post" id="type-config-<?php echo (int)$te['id']; ?>" style="margin:0;display:inline;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="update_disponible">
                 <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
                 <input type="number" name="cantidad_disponible" value="<?php echo (int)$te['cantidad_disponible']; ?>" min="0" style="width:60px;">
                 <button class="btn" type="submit" style="padding:2px 8px;font-size:13px;">Guardar</button>
               </form>
             </td>
-            <td>
+            <td data-label="QR/unidad">
               <?php $teQrQuantity = isset($te['qr_quantity']) ? max(1, min(10, (int)$te['qr_quantity'])) : 1; ?>
               <select name="qr_quantity" form="type-config-<?php echo (int)$te['id']; ?>" style="width:auto;min-width:72px;">
                 <?php for ($qrOpt = 1; $qrOpt <= 10; $qrOpt++): ?>
@@ -411,11 +457,12 @@ include __DIR__.'/inc/layout_top.php';
                 <?php endfor; ?>
               </select>
             </td>
-            <td><?php echo e($hl); ?></td>
+            <td data-label="Hora límite"><?php echo e($hl); ?></td>
             <?php if ($visCol): ?>
-            <td>
+            <td data-label="Visible">
               <?php $visOn = isset($te[$visCol]) ? (int)$te[$visCol] === 1 : true; ?>
               <form method="post" style="margin:0;display:inline;">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                 <input type="hidden" name="action" value="toggle_vis">
                 <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
                 <input type="hidden" name="val" value="<?php echo $visOn ? 0 : 1; ?>">
@@ -427,12 +474,13 @@ include __DIR__.'/inc/layout_top.php';
               </form>
             </td>
             <?php endif; ?>
-            <td>
-              <a class="btn secondary"
-                 href="configurar_entradas_evento.php?id=<?php echo (int)$eventoId; ?>&del_te=<?php echo (int)$te['id']; ?>"
-                 onclick="return confirm('¿Eliminar este tipo de entrada del evento?');">
-                🗑
-              </a>
+            <td data-label="Acciones">
+              <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este tipo de entrada del evento?');">
+                <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+                <input type="hidden" name="action" value="delete_type">
+                <input type="hidden" name="id" value="<?php echo (int)$te['id']; ?>">
+                <button class="btn secondary" type="submit" aria-label="Eliminar tipo de entrada">🗑</button>
+              </form>
             </td>
           </tr>
         <?php endforeach; ?>
@@ -441,7 +489,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php endif; ?>
 </div>
 
-<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;">
+<div class="card tx-ticket-publish" style="display:flex;gap:8px;flex-wrap:wrap;">
   <a class="btn" href="publicar_evento.php?id=<?php echo (int)$eventoId; ?>">✅ Publicar evento</a>
   <a class="btn secondary" href="comprar.php?id=<?php echo (int)$eventoId; ?>" target="_blank" rel="noopener">Ver CheckOut</a>
 </div>
