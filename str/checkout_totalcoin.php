@@ -13,6 +13,8 @@ require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
 require_once __DIR__ . '/inc/checkout_ticket_catalog.php';
 require_once __DIR__ . '/inc/event_sales_control.php';
+require_once __DIR__ . '/inc/event_capacity.php';
+require_once __DIR__ . '/inc/legal_center.php';
 require_once __DIR__ . '/inc/event_presentation.php';
 
 require_once __DIR__.'/inc/turnstile.php';
@@ -29,7 +31,11 @@ $paymentProviderPreferenceId = '';
 $paymentProviderFee = null;
 $checkoutServicePercent = 0;
 $checkoutMpCostPercent = 0;
+$checkoutOrganizerSharePercent = 0;
+$checkoutTickexMinimumPercent = 0;
 $checkoutBreakdown = null;
+$marketplaceSalesEnabled = true;
+$legalCheckoutRequired = false;
 $gatewayRequestId = '';
 $step = 'select';
 $csrfTok = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
@@ -314,9 +320,14 @@ if ($eventId > 0) {
         if ($paymentProvider === 'mercadopago') {
           $checkoutServicePercent = isset($eventPaymentConfig['service_charge_percent']) ? (float)$eventPaymentConfig['service_charge_percent'] : 0;
           $checkoutMpCostPercent = isset($eventPaymentConfig['mp_cost_estimate_percent']) ? (float)$eventPaymentConfig['mp_cost_estimate_percent'] : 0;
+          $checkoutOrganizerSharePercent = isset($eventPaymentConfig['organizer_share_percent']) ? (float)$eventPaymentConfig['organizer_share_percent'] : 0;
+          $checkoutTickexMinimumPercent = isset($eventPaymentConfig['tickex_min_checkout_percent']) ? (float)$eventPaymentConfig['tickex_min_checkout_percent'] : 0;
+          $marketplaceSalesEnabled = !empty($eventPaymentConfig['enforcement_enabled']);
         }
       } catch (Exception $_mpConfigError) {
-        $paymentProvider = 'totalcoin';
+        // Un error de configuración nunca debe enviar ventas del organizador a TotalCoin.
+        $paymentProvider = 'unavailable';
+        $marketplaceSalesEnabled = false;
       }
       if (isset($evRow['nombre']) && $evRow['nombre'] !== null) $eventName = $evRow['nombre'];
       if (isset($evRow['fecha_desde']) && $evRow['fecha_desde'] !== null) $eventDate = $evRow['fecha_desde'];
@@ -582,6 +593,35 @@ if (empty($entryOptions) && $allowLegacyFallback) {
   );
 }
 
+$globalCapacityAvailable = null;
+$globalCapacityError = false;
+if ($eventId > 0) {
+  try {
+    if (!isset($pdoLocal) || !($pdoLocal instanceof PDO)) throw new RuntimeException('No se pudo consultar el cupo.');
+    $globalCapacity = tickex_event_capacity_status($pdoLocal, $eventId);
+    $globalCapacityAvailable = $globalCapacity['available'];
+    if ($globalCapacityAvailable !== null) {
+      foreach ($entryOptions as &$capacityOption) {
+        $qrPerUnit = tickex_ticket_qr_quantity(isset($capacityOption['qr_quantity']) ? $capacityOption['qr_quantity'] : 1);
+        $globalPackages = tickex_ticket_package_capacity((int)$globalCapacityAvailable, $qrPerUnit);
+        $capacityOption['avail'] = $capacityOption['avail'] === null ? $globalPackages : min((int)$capacityOption['avail'], $globalPackages);
+        $capacityOption['available_qr'] = $capacityOption['available_qr'] === null ? (int)$globalCapacityAvailable : min((int)$capacityOption['available_qr'], (int)$globalCapacityAvailable);
+      }
+      unset($capacityOption);
+    }
+  } catch (Exception $_capacityError) {
+    $globalCapacityError = true;
+  }
+}
+
+$legalCheckoutDocs = array();
+try {
+  $legalCheckoutDocs = tickex_legal_documents(db(), false);
+  $legalCheckoutRequired = isset($legalCheckoutDocs['terms']) && isset($legalCheckoutDocs['privacy']);
+} catch (Exception $_legalError) {
+  $legalCheckoutRequired = false;
+}
+
 // Mapa rápido para validar selección en POST
 $optionMap = array();
 foreach ($entryOptions as $opt) {
@@ -722,13 +762,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $selIds = isset($_POST['selected_id']) ? $_POST['selected_id'] : (isset($_POST['ticket_id']) ? $_POST['ticket_id'] : array());
   $selQty = isset($_POST['selected_qty']) ? $_POST['selected_qty'] : (isset($_POST['qty']) ? $_POST['qty'] : array());
   list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors, $eventMaxPurchase);
+  if ($globalCapacityError) $errors[] = 'No se pudo verificar el cupo del evento. Intentá de nuevo.';
+  if ($globalCapacityAvailable !== null) {
+    $requestedQr = 0;
+    foreach ($selectedTickets as $selectedLine) {
+      $requestedQr += tickex_ticket_issued_quantity((int)$selectedLine['qty'], isset($selectedLine['qr_quantity']) ? $selectedLine['qr_quantity'] : 1);
+    }
+    if ($requestedQr > (int)$globalCapacityAvailable) $errors[] = 'No hay cupo suficiente para esa cantidad de entradas.';
+  }
 
   $ticketSubtotal = $total;
   $serviceFeeAmount = 0;
   if ($paymentProvider === 'mercadopago' && $ticketSubtotal > 0) {
-    $checkoutBreakdown = tickex_mp_checkout_breakdown($ticketSubtotal, $checkoutServicePercent, $checkoutMpCostPercent);
+    $checkoutBreakdown = tickex_mp_checkout_breakdown($ticketSubtotal, $checkoutServicePercent, $checkoutMpCostPercent, $checkoutOrganizerSharePercent, $checkoutTickexMinimumPercent);
     $serviceFeeAmount = (float)$checkoutBreakdown['service_fee'];
     $total = (float)$checkoutBreakdown['checkout_total'];
+    if (!$marketplaceSalesEnabled) $errors[] = 'Las ventas de este organizador todavía no están habilitadas. Conectá Mercado Pago o consultá con Tickex.';
+  } elseif ($paymentProvider === 'unavailable' && $ticketSubtotal > 0) {
+    $errors[] = 'El medio de pago de este evento no está disponible. No se generó ningún cobro.';
   }
 
   if ($total <= 0 && empty($selectedTickets)) {
@@ -773,6 +824,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $preview['create_account'] = $createAccount;
 
     _tickex_validate_buyer_fields($dni, $last, $first, $email, $errors);
+    if ($legalCheckoutRequired && empty($_POST['legal_acceptance'])) $errors[] = 'Tenés que aceptar los Términos y la Política de privacidad para continuar.';
 
     if (!empty($errors) && $lastDebugId !== '') {
       // Asegurar correlación si falla antes del gateway
@@ -896,6 +948,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $claimPdo = null;
         $claimFingerprint = '';
         $claimOwned = false;
+        $orderPersisted = false;
         try {
           $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
           if ($ticketsJson === false || $ticketsJson === null) $ticketsJson = '';
@@ -905,6 +958,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $claimResult = isset($claim['result']) ? (string)$claim['result'] : 'pending';
           if ($claimResult === 'ready' && !empty($claim['payment_url'])) {
             $paymentUrl = (string)$claim['payment_url'];
+            $gatewayRequestId = isset($claim['request_id']) ? (string)$claim['request_id'] : '';
           } elseif ($claimResult === 'acquired') {
             $claimOwned = true;
           } elseif ($claimResult === 'conflict') {
@@ -977,10 +1031,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
             } catch (Exception $_e) {}
 
-            if ($claimOwned && $claimPdo) {
-              tickex_totalcoin_checkout_claim_ready($claimPdo, $ref, $claimFingerprint, $requestId, $paymentUrl);
-            }
-
+            if ($requestId === '') throw new Exception('El proveedor no devolvió una referencia de orden.');
             if ($requestId !== '') {
               try {
                 $pdoSave = db();
@@ -1045,6 +1096,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':mp_cost_percent' => $paymentProvider === 'mercadopago' ? (float)$checkoutMpCostPercent : 0,
                 ':rid' => $requestId,
               ));
+              if ($legalCheckoutRequired) {
+                tickex_legal_record_acceptance($pdoSave, 'buyer', isset($_SESSION['usuario_id']) ? (int)$_SESSION['usuario_id'] : null, $email, 'checkout:' . $requestId, $_SERVER, array('terms', 'privacy', 'refunds'));
+              }
+              if ($claimOwned && $claimPdo) tickex_totalcoin_checkout_claim_ready($claimPdo, $ref, $claimFingerprint, $requestId, $paymentUrl);
+              $orderPersisted = true;
               try {
                 $evPdo = db();
                 $stOrdId = $evPdo->prepare("SELECT id FROM tc_orders WHERE request_id = :rid LIMIT 1");
@@ -1058,6 +1114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               } catch (Exception $_evEx) {}
             } catch (Exception $e) {
               try { error_log('[TotalCoin] failed to persist order: ' . $e->getMessage()); } catch (Exception $_e) {}
+              throw $e;
             }
               try {
                 // Structured instrumentation for Phase 0: record checkout persistence
@@ -1077,7 +1134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           // UX: Post-Redirect-Get interno (evita depender de redirects externos).
           if ($paymentUrl) {
             // Intentar extraer requestId para construir una URL interna de continuación.
-            $ridForGo = '';
+            $ridForGo = (string)$gatewayRequestId;
             try {
               $uGo = @parse_url($paymentUrl);
               if (is_array($uGo) && isset($uGo['query'])) {
@@ -1125,9 +1182,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $redirectFallback = array('auto' => true, 'reason' => ($ridForGo !== '' ? 'prg_unavailable' : 'no_rid'), 'hs_file' => (string)$hsFile, 'hs_line' => (int)$hsLine);
           }
         } catch (Exception $e) {
-          if ($claimOwned && $claimPdo && empty($paymentUrl)) {
+          if ($claimOwned && $claimPdo && !$orderPersisted) {
             try { tickex_totalcoin_checkout_claim_failed($claimPdo, $ref, $claimFingerprint, $e->getMessage()); } catch (Exception $_claimEx) {}
           }
+          if (!$orderPersisted) $paymentUrl = '';
           $debugId = $lastDebugId !== '' ? $lastDebugId : ('TC-' . date('Ymd-His') . '-' . substr(sha1((string)$ref . '|' . (string)$eventId . '|' . microtime(true)), 0, 8));
           // No exponer detalles internos del gateway al público
           try {
@@ -1370,6 +1428,12 @@ include __DIR__.'/inc/layout_top.php';
             </div>
           <?php endif; ?>
 
+          <?php if ($legalCheckoutRequired): ?>
+            <label style="grid-column:1 / -1;display:flex;gap:10px;align-items:flex-start;">
+              <input type="checkbox" name="legal_acceptance" value="1" style="margin-top:4px;" required>
+              <span>Acepto los <a href="legal.php?doc=terms" target="_blank">Términos y condiciones</a> y la <a href="legal.php?doc=privacy" target="_blank">Política de privacidad</a>.</span>
+            </label>
+          <?php endif; ?>
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn" type="submit">Confirmar y pagar</button>
             <a class="btn secondary" href="<?php echo e($_SERVER['REQUEST_URI']); ?>">Volver</a>
@@ -1496,6 +1560,12 @@ include __DIR__.'/inc/layout_top.php';
             </div>
           <?php endif; ?>
 
+          <?php if ($legalCheckoutRequired): ?>
+            <label style="grid-column:1 / -1;display:flex;gap:10px;align-items:flex-start;">
+              <input type="checkbox" name="legal_acceptance" value="1" style="margin-top:4px;" id="chkLegal" disabled>
+              <span>Acepto los <a href="legal.php?doc=terms" target="_blank">Términos y condiciones</a> y la <a href="legal.php?doc=privacy" target="_blank">Política de privacidad</a>.</span>
+            </label>
+          <?php endif; ?>
           <div style="grid-column:1 / -1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn" type="submit" id="btnPay">Confirmar y pagar</button>
             <button class="btn secondary" type="button" id="btnBack">Volver</button>
@@ -1529,6 +1599,7 @@ include __DIR__.'/inc/layout_top.php';
     const inpLast = document.getElementById('inpLast');
     const inpEmail = document.getElementById('inpEmail');
     const chkCreate = document.getElementById('chkCreate');
+    const chkLegal = document.getElementById('chkLegal');
 
     if (!form || !totalDisplay || !qtySelects.length) {
       return;
@@ -1566,6 +1637,7 @@ include __DIR__.'/inc/layout_top.php';
       if (inpLast) { inpLast.disabled = !on; inpLast.required = on; }
       if (inpEmail) { inpEmail.disabled = !on; inpEmail.required = on; }
       if (chkCreate) { chkCreate.disabled = !on; }
+      if (chkLegal) { chkLegal.disabled = !on; chkLegal.required = on; }
     }
 
     function goConfirm() {
