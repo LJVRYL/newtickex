@@ -14,6 +14,12 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="superadmin_email_templates.php">Plantillas Emails</a>
     <a href="superadmin_economia_general.php">Economía</a>
     <a href="superadmin_sites.php">Sitios de productores</a>
+    <a href="superadmin_soporte.php">Soporte de clientes</a>
+    <a href="superadmin_contactos.php">Consultas comerciales</a>
+    <a href="superadmin_suscripciones.php">Planes y suscripciones</a>
+    <a href="superadmin_legales.php">Legales</a>
+    <a href="superadmin_infraestructura.php">Infraestructura</a>
+    <a href="superadmin_email_delivery.php">Entrega de emails</a>
     <a href="facturacion_admin.php">Facturación</a>
     <a href="mercadopago_config.php">Mercado Pago</a>
     <a href="secundarios.php">Staff</a>
@@ -32,5 +38,7 @@ $isSuper = in_array($tg, array('super_admin','superadmin'), true);
     <a href="secundarios.php">Staff</a>
     <a href="mi_sitio.php">Mi Sitio</a>
     <a href="mi_perfil.php">Mi Perfil</a>
+    <a href="soporte.php">Ayuda y soporte</a>
+    <a href="suscripcion.php">Mi plan</a>
   <?php endif; ?>
 </nav>

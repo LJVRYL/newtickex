@@ -22,6 +22,8 @@ require_once __DIR__ . '/../inc/totalcoin_confirmation.php';
 $pdo = db();
 $pdo->exec("CREATE TABLE IF NOT EXISTS tc_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT UNIQUE, state TEXT, evento_id INTEGER, ref TEXT, amount REAL, buyer_first TEXT, buyer_last TEXT, buyer_email TEXT, selected_tickets_json TEXT, processed_at TEXT, updated_at TEXT, payment_status TEXT NOT NULL DEFAULT 'pending', payment_confirmed_at TEXT, processing_status TEXT NOT NULL DEFAULT 'pending', processing_started_at TEXT, email_status TEXT NOT NULL DEFAULT 'pending', email_attempts INTEGER NOT NULL DEFAULT 0, email_sent_at TEXT, email_last_error TEXT)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS entradas (id INTEGER PRIMARY KEY AUTOINCREMENT, evento_id INTEGER, nombre TEXT, email TEXT, fecha_registro TEXT, codigo TEXT, checked_in INTEGER, checked_in_at TEXT, tipo TEXT, monto_pagado REAL, tc_order_request_id TEXT, issuance_key TEXT UNIQUE)");
+$pdo->exec("CREATE TABLE IF NOT EXISTS eventos (id INTEGER PRIMARY KEY, capacidad_total INTEGER)");
+$pdo->exec("INSERT OR IGNORE INTO eventos (id) VALUES (1)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS tipos_entrada (id INTEGER PRIMARY KEY, evento_id INTEGER, nombre TEXT, tipo TEXT, precio REAL, cantidad_total INTEGER, cantidad_disponible INTEGER, qr_quantity INTEGER NOT NULL DEFAULT 1)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS order_events (id INTEGER PRIMARY KEY AUTOINCREMENT, tc_order_id INTEGER, request_id TEXT, event_type TEXT, payload_json TEXT, created_at TEXT)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS entrada_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, entrada_id INTEGER UNIQUE, token TEXT UNIQUE, created_at TEXT)");
@@ -34,6 +36,12 @@ $pdo->exec("INSERT OR REPLACE INTO tipos_entrada (id, evento_id, nombre, tipo, p
 
 require_once __DIR__ . '/../inc/order_processing.php';
 
+// La prueba corre sobre una copia que puede contener entradas históricas del
+// evento #1. Reservar cupo dentro de esa copia evita que esos datos ajenos al
+// fixture alteren el resultado del flujo que se está probando.
+$fixtureIssued = tickex_event_capacity_issued($pdo, 1);
+tickex_event_capacity_set($pdo, 1, $fixtureIssued + 100);
+
 $selected = json_encode(array(array('id' => 7, 'name' => 'General', 'qty' => 2, 'price' => 100, 'qr_quantity' => 1)));
 $pdo->prepare("INSERT INTO tc_orders (request_id, state, evento_id, ref, amount, buyer_first, buyer_last, buyer_email, selected_tickets_json, payment_status) VALUES ('test-rid', 'created', 1, 'test-ref', 200, 'Test', 'Buyer', 'test@example.invalid', :tickets, 'confirmed')")->execute(array(':tickets' => $selected));
 
@@ -43,7 +51,9 @@ $result = process_tc_order_row($pdo, $order);
 test_ok(!empty($result['processed']), 'confirmed order is processed');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'exactly requested quantity is issued');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entrada_tokens t INNER JOIN entradas e ON e.id = t.entrada_id WHERE e.tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'secure tokens are generated');
-test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE mail_ok = 1 AND context = 'entradas_compra'")->fetchColumn() === 1, 'fake transport records one consolidated email per order');
+$testOrderId = (int)$order['id'];
+$testOrderMailCountSql = "SELECT COUNT(*) FROM email_logs WHERE related_table = 'tc_orders' AND related_id = " . $testOrderId . " AND mail_ok = 1 AND context = 'entradas_compra'";
+test_ok((int)$pdo->query($testOrderMailCountSql)->fetchColumn() === 1, 'fake transport records one consolidated email per order');
 test_ok((int)$pdo->query("SELECT cantidad_disponible FROM tipos_entrada WHERE id = 7")->fetchColumn() === 8, 'normal tickets decrement one stock unit per QR');
 test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() - 200.0) < 0.001, 'normal ticket revenue is not duplicated');
 
@@ -51,7 +61,7 @@ $st->execute();
 $orderAgain = $st->fetch(PDO::FETCH_ASSOC);
 $resultAgain = process_tc_order_row($pdo, $orderAgain);
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() === 2, 'reprocessing does not duplicate entries');
-test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE mail_ok = 1 AND context = 'entradas_compra'")->fetchColumn() === 1, 'reprocessing does not duplicate successful emails');
+test_ok((int)$pdo->query($testOrderMailCountSql)->fetchColumn() === 1, 'reprocessing does not duplicate successful emails');
 
 $selectedTwo = json_encode(array(array('id' => 8, 'name' => 'Paquete de dos', 'qty' => 1, 'price' => 150, 'qr_quantity' => 2)));
 $pdo->prepare("INSERT INTO tc_orders (request_id, state, evento_id, ref, amount, buyer_first, buyer_last, buyer_email, selected_tickets_json, payment_status) VALUES ('bundle-two-rid', 'created', 1, 'bundle-two-ref', 150, 'Bundle', 'Two', 'two@example.invalid', :tickets, 'confirmed')")->execute(array(':tickets' => $selectedTwo));
@@ -73,7 +83,8 @@ test_ok((int)$pdo->query("SELECT cantidad_disponible FROM tipos_entrada WHERE id
 test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WHERE tc_order_request_id = 'bundle-four-rid'")->fetchColumn() - 300.0) < 0.001, 'four-QR package revenue equals package price');
 test_ok((int)$pdo->query("SELECT COUNT(*) FROM email_logs WHERE related_table = 'tc_orders' AND related_id = " . (int)$bundleFourOrder['id'] . " AND mail_ok = 1")->fetchColumn() === 1, 'four QR links are delivered in one email');
 $bundleFourMailBody = (string)$pdo->query("SELECT body FROM email_logs WHERE related_table = 'tc_orders' AND related_id = " . (int)$bundleFourOrder['id'] . " AND mail_ok = 1 LIMIT 1")->fetchColumn();
-test_ok(substr_count($bundleFourMailBody, 'ticket.php?') === 4, 'consolidated email contains all four ticket links');
+test_ok(substr_count($bundleFourMailBody, '/entrada/') === 4, 'consolidated email contains all four secure ticket links');
+test_ok(strpos($bundleFourMailBody, 'ticket.php?c=') === false, 'consolidated email never exposes legacy ticket codes');
 
 $bundleFourAgain = $pdo->query("SELECT * FROM tc_orders WHERE request_id = 'bundle-four-rid'")->fetch(PDO::FETCH_ASSOC);
 process_tc_order_row($pdo, $bundleFourAgain);
