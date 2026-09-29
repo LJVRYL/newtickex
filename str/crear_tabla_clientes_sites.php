@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // Script one-shot para crear la tabla clientes_sites en save_the_rave.sqlite
 // Ejecutar con: php crear_tabla_clientes_sites.php
 

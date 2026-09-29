@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/internal_cli_only.php';
 // Script rápido para crear/actualizar un sitio demo para admin_id = 1
 
 $dbFile = __DIR__ . '/save_the_rave.sqlite';
