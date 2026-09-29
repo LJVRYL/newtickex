@@ -174,21 +174,21 @@ include __DIR__ . '/inc/layout_top.php';
       <?php else: ?>
         <?php foreach ($rows as $r): ?>
           <?php
-            $res = strtolower((string)($r['result'] ?? ''));
+            $res = strtolower((string)(isset($r['result']) ? $r['result'] : ''));
             $resClass = '';
             if ($res === 'ok') $resClass = 'r-ok';
             elseif ($res === 'duplicate') $resClass = 'r-dup';
             elseif ($res === 'error' || $res === 'denied') $resClass = 'r-err';
           ?>
           <tr>
-            <td><?php echo e((string)($r['created_at'] ?? '')); ?></td>
-            <td>#<?php echo (int)($r['evento_id'] ?? 0); ?></td>
-            <td><?php echo e((string)($r['source'] ?? '')); ?></td>
-            <td><?php echo e((string)($r['ticket_ref'] ?? '')); ?></td>
-            <td><?php echo e((string)($r['attendee_name'] ?? '')); ?></td>
-            <td><?php echo e((string)($r['action'] ?? '')); ?></td>
-            <td class="<?php echo e($resClass); ?>"><?php echo e((string)($r['result'] ?? '')); ?></td>
-            <td><?php echo e((string)($r['detail'] ?? '')); ?></td>
+            <td><?php echo e((string)(isset($r['created_at']) ? $r['created_at'] : '')); ?></td>
+            <td>#<?php echo (int)(isset($r['evento_id']) ? $r['evento_id'] : 0); ?></td>
+            <td><?php echo e((string)(isset($r['source']) ? $r['source'] : '')); ?></td>
+            <td><?php echo e((string)(isset($r['ticket_ref']) ? $r['ticket_ref'] : '')); ?></td>
+            <td><?php echo e((string)(isset($r['attendee_name']) ? $r['attendee_name'] : '')); ?></td>
+            <td><?php echo e((string)(isset($r['action']) ? $r['action'] : '')); ?></td>
+            <td class="<?php echo e($resClass); ?>"><?php echo e((string)(isset($r['result']) ? $r['result'] : '')); ?></td>
+            <td><?php echo e((string)(isset($r['detail']) ? $r['detail'] : '')); ?></td>
           </tr>
         <?php endforeach; ?>
       <?php endif; ?>
