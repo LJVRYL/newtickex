@@ -1,8 +1,10 @@
 <?php
+require_once __DIR__ . '/routes.php';
 
 require_once __DIR__ . '/secure_links.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/event_sales_control.php';
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_access_uuid')) {
     function tickex_access_uuid()
@@ -163,13 +165,13 @@ if (!function_exists('tickex_access_base_url')) {
     function tickex_access_base_url()
     {
         $env = getenv('TICKEX_SITE_URL');
-        if (is_string($env) && trim($env) !== '') return rtrim(trim($env), '/');
+        if (is_string($env) && trim($env) !== '') return tickex_public_base_url($env);
         $host = isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '';
         if ($host !== '') {
             $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            return $scheme . '://' . $host;
+            return tickex_public_base_url($scheme . '://' . $host);
         }
-        return 'https://str.tickex.com.ar';
+        return tickex_public_base_url('');
     }
 }
 
@@ -396,6 +398,7 @@ if (!function_exists('tickex_access_issue_entry')) {
                 tickex_access_log_attempt($pdo, array_merge($baseAttempt, array('result' => 'blocked_event_sales', 'detail' => 'Emisión pausada al confirmar.')));
                 return array('ok' => false, 'error' => 'La emisión de entradas está pausada para este evento.', 'trace_id' => $traceId);
             }
+            tickex_event_capacity_assert_available($pdo, (int)$linkRow['evento_id'], 1);
 
             $usedTx = tickex_access_used_count($pdo, (int)$linkRow['id']);
             if ($maxUses > 0 && $usedTx >= $maxUses) {
@@ -474,8 +477,9 @@ if (!function_exists('tickex_access_issue_entry')) {
             $pdo->commit();
         } catch (Exception $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            tickex_access_log_attempt($pdo, array_merge($baseAttempt, array('result' => 'blocked_internal', 'detail' => $e->getMessage())));
-            return array('ok' => false, 'error' => 'No se pudo emitir la entrada.', 'trace_id' => $traceId);
+            $capacityBlocked = strpos($e->getMessage(), 'Cupo global insuficiente:') === 0;
+            tickex_access_log_attempt($pdo, array_merge($baseAttempt, array('result' => $capacityBlocked ? 'blocked_capacity' : 'blocked_internal', 'detail' => $e->getMessage())));
+            return array('ok' => false, 'error' => $capacityBlocked ? 'No hay cupo disponible.' : 'No se pudo emitir la entrada.', 'trace_id' => $traceId);
         }
 
         $ticketUrl = '';

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/event_capacity.php';
 /**
  * inc/unified_tickets.php
  * Funciones para unificar entradas de STR y Tickex/SenForms en panel_evento.php
@@ -219,10 +220,30 @@ function ensure_bridge_event_map_table($pdo) {
 }
 
 /**
+ * El bridge histórico pertenece únicamente a cuentas internas. Si la
+ * instalación todavía no tiene políticas de Mercado Pago conservamos el
+ * comportamiento legacy; cuando existen, los organizadores cliente quedan
+ * aislados aunque haya mappings huérfanos con el mismo ID de evento.
+ */
+function tickex_event_bridge_allowed($pdo, $evento_id) {
+    $evento_id = (int)$evento_id;
+    if ($evento_id <= 0) return false;
+    try {
+        if (!has_table($pdo, 'mercadopago_admin_policies')) return true;
+        $st = $pdo->prepare("SELECT COALESCE(p.account_type,'client') FROM eventos e LEFT JOIN mercadopago_admin_policies p ON p.admin_id=e.creado_por_admin_id WHERE e.id=:eid LIMIT 1");
+        $st->execute(array(':eid'=>$evento_id));
+        return $st->fetchColumn() === 'str_owner';
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
  * Obtener slugs mapeados para un evento STR
  * @return array lista de slugs (strings) o array vacío
  */
 function get_mapped_bridge_slugs($pdo, $evento_id) {
+    if (!tickex_event_bridge_allowed($pdo, $evento_id)) return array();
     $table = get_bridge_mapping_table_name($pdo);
     if (!$table) {
         return array();
@@ -253,6 +274,7 @@ function get_mapped_bridge_slugs($pdo, $evento_id) {
  */
 function set_bridge_mapping($pdo, $evento_id, $bridge_slug) {
     if (empty($bridge_slug)) return false;
+    if (!tickex_event_bridge_allowed($pdo, $evento_id)) return false;
     ensure_bridge_event_map_table($pdo);
     try {
         // eliminar mappings previos para este evento y agregar nuevo
@@ -279,6 +301,7 @@ function set_bridge_mapping($pdo, $evento_id, $bridge_slug) {
 function get_unified_entries($pdo, $evento_id, $filters = array()) {
     $entries = array();
     $colCheck = get_checkin_column($pdo);
+    $bridgeAllowed = tickex_event_bridge_allowed($pdo, $evento_id);
     
     // ===== ENTRADAS STR =====
     $where = array("evento_id = :eid");
@@ -389,7 +412,7 @@ function get_unified_entries($pdo, $evento_id, $filters = array()) {
         // error al obtener mapping
     }
     
-    if ($hasBridgeView || $hasBridgeTable) {
+    if ($bridgeAllowed && ($hasBridgeView || $hasBridgeTable)) {
         // Detectar columnas de cada candidato para elegir el mejor (prefiere tabla si trae selected_type_name)
         $bridgeColsView = array();
         $bridgeColsTable = array();
@@ -733,7 +756,7 @@ function get_unified_stats($pdo, $evento_id) {
         $strPaid = 0;
         
         foreach ($strRows as $row) {
-            $tipoUp = strtoupper(trim($row['tipo'] ?? ''));
+            $tipoUp = strtoupper(trim(isset($row['tipo']) ? $row['tipo'] : ''));
             $monto = isset($row['monto_pagado']) ? (float)$row['monto_pagado'] : 0;
             
             $isPaid = false;
@@ -766,6 +789,7 @@ function get_unified_stats($pdo, $evento_id) {
     
     // ===== CONTAR TICKEX/BRIDGE =====
     try {
+        if (!tickex_event_bridge_allowed($pdo, $evento_id)) throw new Exception('Bridge deshabilitado para organizadores cliente');
         // Detectar bridge (view y tabla)
         $hasBridgeView = false;
         $hasBridgeTable = false;
@@ -909,9 +933,19 @@ function get_unified_stats($pdo, $evento_id) {
     
     $stats['pendiente'] = $stats['total'] - $stats['checkins'];
     
-    // cantidad_total ya representa la capacidad inicial. No se le vuelven a
-    // sumar las entradas emitidas porque eso infla artificialmente el stock.
-    if ($stats['stock_total'] !== null) $stats['stock_total'] = $stockTotalInicial;
+    // El cupo global manda sobre las categorías. En eventos todavía no
+    // migrados, el helper conserva la suma histórica de cantidad_total.
+    try {
+        $capacity = tickex_event_capacity_status($pdo, $evento_id);
+        if ($capacity['limit'] !== null) {
+            $stats['stock_total'] = (int)$capacity['limit'];
+            $stats['disponibles'] = (int)$capacity['available'];
+        } elseif ($stats['stock_total'] !== null) {
+            $stats['stock_total'] = $stockTotalInicial;
+        }
+    } catch (Exception $e) {
+        if ($stats['stock_total'] !== null) $stats['stock_total'] = $stockTotalInicial;
+    }
     
     return $stats;
 }
@@ -1006,6 +1040,7 @@ function get_economic_stats($pdo, $evento_id) {
         'totalcoin_fee_3pct' => 0,
         'payment_processing_cost' => 0,
         'service_fee_charged' => 0,
+        'resultado_neto_base' => 0,
         'por_tipo' => array(), // array( tipo => array('cantidad' => X, 'monto' => Y), ... )
         'manual_income' => 0,
         'manual_income_ingresos' => 0,
@@ -1033,6 +1068,7 @@ function get_economic_stats($pdo, $evento_id) {
         
         // ==== TICKEX: entradas pagadas (is_paid = 1) con precio real del bridge ====
         try {
+            if (!tickex_event_bridge_allowed($pdo, $evento_id)) throw new Exception('Bridge deshabilitado para organizadores cliente');
             $bridgeGross = 0.0;
             // Detectar bridge (tabla o view)
             $candidates = array('v_senforms_bridge_status', 'senforms_bridge_tickets');
@@ -1160,7 +1196,6 @@ function get_economic_stats($pdo, $evento_id) {
                 $stats['bridge_gross'] = $bridgeGross;
                 $stats['bridge_fee_3pct'] = $bridgeFee;
                 $stats['bridge_net'] = $bridgeGross - $bridgeFee;
-                $stats['total_recaudado'] -= $bridgeFee;
             }
         } catch (Exception $e) {
             // Ignorar error bridge
@@ -1191,7 +1226,6 @@ function get_economic_stats($pdo, $evento_id) {
                     $checkoutFee = round($checkoutGross * 0.03, 2);
                     $stats['totalcoin_checkout_gross'] = $checkoutGross;
                     $stats['totalcoin_checkout_fee_3pct'] = $checkoutFee;
-                    $stats['total_recaudado'] -= $checkoutFee;
 
                     if (isset($orderCols['service_fee_amount'])) {
                         $stService = $pdo->prepare("SELECT COALESCE(SUM(service_fee_amount),0) FROM tc_orders WHERE evento_id = :eid AND $confirmedWhere");
@@ -1237,10 +1271,16 @@ function get_economic_stats($pdo, $evento_id) {
                 $stats['manual_income'] = get_total_manual_income($pdo, $evento_id);
             }
 
-            $stats['total_recaudado'] += $stats['manual_income'];
+            // Total recaudado representa dinero ingresado bruto. Los egresos
+            // manuales se muestran y descuentan solamente del resultado neto.
+            $stats['total_recaudado'] += $stats['manual_income_ingresos'];
         } catch (Exception $e) {
             // Ignorar error ingresos manuales
         }
+
+        $stats['resultado_neto_base'] = (float)$stats['total_recaudado']
+            - (float)$stats['payment_processing_cost']
+            + (float)$stats['manual_income_egresos'];
         
     } catch (Exception $e) {
         // Log o ignore
@@ -1258,7 +1298,8 @@ function get_economic_stats($pdo, $evento_id) {
             $normalized[] = $row;
         }
         usort($normalized, function($a, $b) {
-            return ($b['monto'] <=> $a['monto']);
+            if ($b['monto'] == $a['monto']) return 0;
+            return $b['monto'] < $a['monto'] ? -1 : 1;
         });
         $stats['por_tipo'] = $normalized;
     }

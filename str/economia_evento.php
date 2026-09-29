@@ -48,17 +48,24 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </div>
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Recaudación registrada</div>
+      <div class="muted" style="font-size:12px;">Recaudación bruta registrada</div>
       <div style="font-size:28px;font-weight:700;margin-top:4px;color:var(--ok);">
         $<?php echo number_format($ecoStats['total_recaudado'], 2); ?>
       </div>
-      <div class="muted" style="font-size:11px;margin-top:4px;">Incluye movimientos manuales netos. El costo estimado de TotalCoin ya está descontado.</div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Ventas e ingresos manuales, antes de costos y egresos.</div>
     </div>
     <div class="card" style="margin:0;background:var(--panel-2);">
-      <div class="muted" style="font-size:12px;">Procesamiento TotalCoin (ya descontado)</div>
+      <div class="muted" style="font-size:12px;">Procesamiento TotalCoin</div>
       <div style="font-size:24px;font-weight:700;margin-top:4px;color:var(--warn);">
         $<?php echo number_format(isset($ecoStats['payment_processing_cost']) ? (float)$ecoStats['payment_processing_cost'] : 0, 2); ?>
       </div>
+    </div>
+    <div class="card" style="margin:0;background:var(--panel-2);">
+      <div class="muted" style="font-size:12px;">Resultado neto base</div>
+      <div style="font-size:28px;font-weight:700;margin-top:4px;color:<?php echo (isset($ecoStats['resultado_neto_base']) && (float)$ecoStats['resultado_neto_base'] < 0) ? 'var(--warn)' : 'var(--ok)'; ?>;">
+        $<?php echo number_format(isset($ecoStats['resultado_neto_base']) ? (float)$ecoStats['resultado_neto_base'] : 0, 2); ?>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Bruto menos procesamiento y egresos manuales.</div>
     </div>
     <?php if ($ecoStats['manual_income'] != 0): ?>
     <div class="card" style="margin:0;background:var(--panel-2);">

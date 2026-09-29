@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/order_processing.php';
 require_once __DIR__ . '/event_sales_control.php';
+require_once __DIR__ . '/event_capacity.php';
 
 if (!function_exists('tickex_manual_ensure_order_columns')) {
     function tickex_manual_ensure_order_columns($pdo)
@@ -45,16 +46,21 @@ if (!function_exists('tickex_manual_issue_package')) {
     {
         $eventId = isset($data['evento_id']) ? (int)$data['evento_id'] : 0;
         $ticketTypeId = isset($data['tipo_id']) ? (int)$data['tipo_id'] : 0;
+        $isUncategorized = !empty($data['sin_tipo']);
         $packageQuantity = max(1, min(20, isset($data['cantidad']) ? (int)$data['cantidad'] : 1));
         $mode = isset($data['modo']) ? (string)$data['modo'] : 'courtesy';
+        $customTotalRaw = array_key_exists('monto_total', $data) ? trim((string)$data['monto_total']) : '';
+        $hasCustomTotal = $customTotalRaw !== '';
         $email = trim(isset($data['email']) ? (string)$data['email'] : '');
         $name = trim(isset($data['nombre']) ? (string)$data['nombre'] : '');
         $adminId = isset($data['admin_id']) ? (int)$data['admin_id'] : 0;
         $restrictToAdmin = !empty($data['restrict_to_admin']);
         $hidden = !empty($data['oculto']) ? 1 : 0;
 
-        if ($eventId <= 0 || $ticketTypeId <= 0) throw new InvalidArgumentException('Evento o tipo de entrada inválido.');
+        if ($eventId <= 0 || (!$isUncategorized && $ticketTypeId <= 0)) throw new InvalidArgumentException('Evento o tipo de entrada inválido.');
         if (!in_array($mode, array('courtesy', 'manual_transfer'), true)) throw new InvalidArgumentException('Modalidad de emisión inválida.');
+        if ($hasCustomTotal && $mode !== 'manual_transfer') throw new InvalidArgumentException('El monto libre solo puede usarse en una venta manual.');
+        if ($hasCustomTotal && (!is_numeric($customTotalRaw) || (float)$customTotalRaw <= 0 || (float)$customTotalRaw > 999999999.99)) throw new InvalidArgumentException('El monto total cobrado debe ser mayor a cero.');
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('El email del destinatario no es válido.');
         if ($name === '') $name = $email;
 
@@ -67,15 +73,22 @@ if (!function_exists('tickex_manual_issue_package')) {
         $event = $stEvent->fetch(PDO::FETCH_ASSOC);
         if (!$event) throw new RuntimeException('No tenés acceso al evento seleccionado.');
 
-        $stType = $pdo->prepare('SELECT id, evento_id, nombre, tipo, precio, cantidad_disponible, qr_quantity FROM tipos_entrada WHERE id = :id AND evento_id = :evento LIMIT 1');
-        $stType->execute(array(':id' => $ticketTypeId, ':evento' => $eventId));
-        $ticketType = $stType->fetch(PDO::FETCH_ASSOC);
-        if (!$ticketType) throw new RuntimeException('El tipo de entrada no pertenece al evento seleccionado.');
+        if ($isUncategorized) {
+            if ($mode !== 'manual_transfer' || !$hasCustomTotal) throw new InvalidArgumentException('La entrada manual requiere un monto total cobrado.');
+            $ticketTypeId = 0;
+            $ticketType = array('id' => 0, 'evento_id' => $eventId, 'nombre' => 'Entrada manual', 'tipo' => 'manual', 'precio' => 0, 'cantidad_disponible' => null, 'qr_quantity' => 1);
+        } else {
+            $stType = $pdo->prepare('SELECT id, evento_id, nombre, tipo, precio, cantidad_disponible, qr_quantity FROM tipos_entrada WHERE id = :id AND evento_id = :evento LIMIT 1');
+            $stType->execute(array(':id' => $ticketTypeId, ':evento' => $eventId));
+            $ticketType = $stType->fetch(PDO::FETCH_ASSOC);
+            if (!$ticketType) throw new RuntimeException('El tipo de entrada no pertenece al evento seleccionado.');
+        }
 
         $qrQuantity = tickex_ticket_qr_quantity(isset($ticketType['qr_quantity']) ? $ticketType['qr_quantity'] : 1);
         $issuedQuantity = tickex_ticket_issued_quantity($packageQuantity, $qrQuantity);
-        $packagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
-        $total = round($packagePrice * $packageQuantity, 2);
+        $configuredPackagePrice = $mode === 'manual_transfer' ? max(0, (float)$ticketType['precio']) : 0.0;
+        $total = $hasCustomTotal ? round((float)$customTotalRaw, 2) : round($configuredPackagePrice * $packageQuantity, 2);
+        $packagePrice = $packageQuantity > 0 ? $total / $packageQuantity : 0.0;
         $requestId = isset($data['request_id']) ? trim((string)$data['request_id']) : tickex_manual_request_id();
         if (!preg_match('/^(?:manual-[a-f0-9]{24,40}|mobile-manual-[a-f0-9]{32})$/', $requestId)) throw new InvalidArgumentException('Referencia de emisión inválida.');
         if (isset($data['request_id'])) {
@@ -85,7 +98,7 @@ if (!function_exists('tickex_manual_issue_package')) {
             if ($order) {
                 $lines = json_decode((string)$order['selected_tickets_json'], true);
                 $firstLine = is_array($lines) && isset($lines[0]) ? $lines[0] : array();
-                if ((int)$order['evento_id'] !== $eventId || strtolower((string)$order['buyer_email']) !== strtolower($email) || (string)$order['payment_provider'] !== $mode || (int)(isset($firstLine['id']) ? $firstLine['id'] : 0) !== $ticketTypeId || (int)(isset($firstLine['qty']) ? $firstLine['qty'] : 0) !== $packageQuantity) throw new InvalidArgumentException('La referencia de emisión ya se usó para otra solicitud.');
+                if ((int)$order['evento_id'] !== $eventId || strtolower((string)$order['buyer_email']) !== strtolower($email) || (string)$order['payment_provider'] !== $mode || (int)(isset($firstLine['id']) ? $firstLine['id'] : 0) !== $ticketTypeId || (int)(isset($firstLine['qty']) ? $firstLine['qty'] : 0) !== $packageQuantity || ($hasCustomTotal && abs((float)$order['amount'] - $total) > 0.005)) throw new InvalidArgumentException('La referencia de emisión ya se usó para otra solicitud.');
                 $count = $pdo->prepare('SELECT COUNT(*) FROM entradas WHERE tc_order_request_id = :request_id');
                 $count->execute(array(':request_id' => $requestId));
                 $actualIssued = (int)$count->fetchColumn();
@@ -94,10 +107,11 @@ if (!function_exists('tickex_manual_issue_package')) {
             }
         }
         if (tickex_event_sales_paused($pdo, $eventId)) throw new RuntimeException('Las ventas y emisiones del evento están pausadas.');
-        $available = isset($ticketType['cantidad_disponible']) ? (int)$ticketType['cantidad_disponible'] : 0;
-        if ($available < $issuedQuantity) {
+        $available = isset($ticketType['cantidad_disponible']) ? (int)$ticketType['cantidad_disponible'] : null;
+        if (!$isUncategorized && $available < $issuedQuantity) {
             throw new RuntimeException('Stock insuficiente: se necesitan ' . $issuedQuantity . ' lugares y quedan ' . $available . '.');
         }
+        tickex_event_capacity_assert_available($pdo, $eventId, $issuedQuantity);
         $selected = json_encode(array(array(
             'id' => (int)$ticketType['id'],
             'name' => (string)$ticketType['nombre'],

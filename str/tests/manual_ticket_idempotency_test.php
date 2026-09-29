@@ -40,4 +40,13 @@ manual_idempotency_assert($pausedRejected, 'new manual issuance is blocked while
 $data['request_id'] = $requestId;
 $repeatWhilePaused = tickex_manual_issue_package($pdo, $data);
 manual_idempotency_assert((int)$repeatWhilePaused['order_id'] === 3, 'idempotent status lookup still works after pause');
+$pdo->exec("INSERT INTO tc_orders VALUES (6, 'mobile-manual-00112233445566778899aabbccddeeff', 1, 'qa@example.invalid', 'manual_transfer', '[{\"id\":0,\"qty\":1}]', 115, 'issued', 'sent', '')");
+$pdo->exec("INSERT INTO entradas VALUES (7, 'mobile-manual-00112233445566778899aabbccddeeff')");
+$uncategorized = array('evento_id' => 1, 'sin_tipo' => true, 'cantidad' => 1, 'modo' => 'manual_transfer', 'monto_total' => '115', 'email' => 'qa@example.invalid', 'admin_id' => 7, 'restrict_to_admin' => true, 'request_id' => 'mobile-manual-00112233445566778899aabbccddeeff');
+$uncategorizedRepeat = tickex_manual_issue_package($pdo, $uncategorized);
+manual_idempotency_assert((int)$uncategorizedRepeat['order_id'] === 6, 'uncategorized manual sale can be checked without issuing twice');
+$uncategorized['monto_total'] = '116';
+$wrongAmountRejected = false;
+try { tickex_manual_issue_package($pdo, $uncategorized); } catch (InvalidArgumentException $error) { $wrongAmountRejected = true; }
+manual_idempotency_assert($wrongAmountRejected, 'same manual request cannot be replayed with a different amount');
 echo "manual ticket idempotency PASS\n";
