@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/inc/security.php';
+require_once __DIR__ . '/inc/routes.php';
 tickex_send_security_headers();
 tickex_session_start();
 require_once __DIR__ . '/inc/db.php';
@@ -11,7 +12,7 @@ if (!function_exists('e')) {
 }
 
 if (!isset($_SESSION['usuario_id']) || (int)$_SESSION['usuario_id'] <= 0) {
-  header('Location: login.php');
+  header('Location: ' . tickex_route('login', array()) . '?next=' . urlencode(tickex_route('staff_activity', array())));
   exit;
 }
 
@@ -197,11 +198,11 @@ include __DIR__ . '/inc/layout_top.php';
 </div>
 
 <nav class="staff-bottom-nav" aria-label="Navegación staff">
-  <a href="panel_usuario.php"><span class="i">🏠</span><span>Inicio</span></a>
-  <a href="panel_staff.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
-  <a href="staff_scan_qr.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" class="center" aria-label="QR" title="QR"><span class="i">▣</span><span>QR</span></a>
-  <a href="panel_staff_venta_puerta.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
-  <a href="panel_staff_checkin_log.php<?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">🧾</span><span>Log</span></a>
+  <a href="<?php echo e(tickex_route('customer_home', array())); ?>"><span class="i">🏠</span><span>Inicio</span></a>
+  <a href="<?php echo e(tickex_route('staff_home', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">📋</span><span>Gestión</span></a>
+  <a href="<?php echo e(tickex_route('staff_scan', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>" class="center" aria-label="QR" title="QR"><span class="i">▣</span><span>QR</span></a>
+  <a href="<?php echo e(tickex_route('staff_sales', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">💸</span><span>Venta</span></a>
+  <a href="<?php echo e(tickex_route('staff_activity', array())); ?><?php echo $activeEventId > 0 ? ('?evento_id=' . (int)$activeEventId) : ''; ?>"><span class="i">🧾</span><span>Log</span></a>
 </nav>
 
 <?php include __DIR__ . '/inc/layout_bottom.php'; ?>
