@@ -32,7 +32,7 @@ if (function_exists('current_user')) {
   elseif (isset($_SESSION['usuario'])) $u = $_SESSION['usuario'];
   elseif (isset($_SESSION['auth'])) $u = $_SESSION['auth'];
   if (is_array($u)) {
-    $role = (string)($u['rol'] ?? $u['role'] ?? $u['perfil'] ?? '');
+    $role = isset($u['rol']) ? (string)$u['rol'] : (isset($u['role']) ? (string)$u['role'] : (isset($u['perfil']) ? (string)$u['perfil'] : ''));
   }
 }
 
@@ -128,11 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     http_response_code(403);
     exit('Solicitud vencida o inválida.');
   }
-  $nombre = trim((string)($_POST['nombre'] ?? ''));
-  $email  = trim((string)($_POST['email'] ?? ''));
-  $plantilla   = trim((string)($_POST['plantilla'] ?? ''));
-  $monto  = (float)($_POST['monto_pagado'] ?? 0);
-  $cant   = (int)($_POST['cantidad'] ?? 1);
+  $nombre = trim((string)(isset($_POST['nombre']) ? $_POST['nombre'] : ''));
+  $email  = trim((string)(isset($_POST['email']) ? $_POST['email'] : ''));
+  $plantilla = trim((string)(isset($_POST['plantilla']) ? $_POST['plantilla'] : ''));
+  $monto  = (float)(isset($_POST['monto_pagado']) ? $_POST['monto_pagado'] : 0);
+  $cant   = (int)(isset($_POST['cantidad']) ? $_POST['cantidad'] : 1);
 
   if ($nombre === '') $errors[] = "Falta el nombre.";
   if ($email === '') $email = '-';
@@ -153,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($monto < 0) $monto = 0;
   } else {
     /* Otros tipos: usar precio de plantilla, staff no puede cambiar */
-    $monto = $plantillas[$plantilla]['precio'] ?? 0;
+    $monto = isset($plantillas[$plantilla]['precio']) ? $plantillas[$plantilla]['precio'] : 0;
   }
 
   if (empty($errors)) {
@@ -264,12 +264,12 @@ if ($isEmbed) {
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <div style="flex:1 1 260px;min-width:240px;">
         <label class="muted">Nombre *</label>
-        <input class="input" type="text" name="nombre" required value="<?php echo e($_POST['nombre'] ?? ''); ?>"/>
+        <input class="input" type="text" name="nombre" required value="<?php echo e(isset($_POST['nombre']) ? $_POST['nombre'] : ''); ?>"/>
       </div>
 
       <div style="flex:1 1 260px;min-width:240px;">
         <label class="muted">Email (opcional)</label>
-        <input class="input" type="email" name="email" value="<?php echo e($_POST['email'] ?? ''); ?>"/>
+        <input class="input" type="email" name="email" value="<?php echo e(isset($_POST['email']) ? $_POST['email'] : ''); ?>"/>
       </div>
     </div>
 
@@ -279,7 +279,7 @@ if ($isEmbed) {
         <select class="input" name="plantilla" id="plantillaSelect" required>
           <option value="">-- Seleccionar plantilla --</option>
           <?php
-            $cur = (string)($_POST['plantilla'] ?? '');
+            $cur = (string)(isset($_POST['plantilla']) ? $_POST['plantilla'] : '');
             foreach($plantillas as $nombre => $info):
           ?>
             <option value="<?php echo e($nombre); ?>" <?php echo ($cur===$nombre?'selected':''); ?>>
@@ -296,12 +296,12 @@ if ($isEmbed) {
 
       <div style="flex:1 1 140px;min-width:140px;">
         <label class="muted">Cantidad</label>
-        <input class="input" type="number" name="cantidad" min="1" max="<?php echo (int)($isAdmin?200:20); ?>" value="<?php echo e($_POST['cantidad'] ?? '1'); ?>"/>
+        <input class="input" type="number" name="cantidad" min="1" max="<?php echo (int)($isAdmin?200:20); ?>" value="<?php echo e(isset($_POST['cantidad']) ? $_POST['cantidad'] : '1'); ?>"/>
       </div>
 
       <div style="flex:1 1 180px;min-width:180px;" id="montoContainer">
         <label class="muted">Monto pagado</label>
-        <input class="input" type="number" name="monto_pagado" min="0" step="0.01" value="<?php echo e($_POST['monto_pagado'] ?? '0'); ?>" id="montoInput" disabled/>
+        <input class="input" type="number" name="monto_pagado" min="0" step="0.01" value="<?php echo e(isset($_POST['monto_pagado']) ? $_POST['monto_pagado'] : '0'); ?>" id="montoInput" disabled/>
         <div class="muted" style="margin-top:6px;font-size:11px;" id="montoNota"></div>
       </div>
     </div>
