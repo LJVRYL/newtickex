@@ -13,6 +13,7 @@ require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
 require_once __DIR__ . '/inc/checkout_ticket_catalog.php';
 require_once __DIR__ . '/inc/event_sales_control.php';
+require_once __DIR__ . '/inc/event_presentation.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -278,6 +279,8 @@ $event = null; $ticketTypes = array();
 $allowLegacyFallback = $eventId <= 0;
 $flyerUrl = null;
 $eventName = 'Evento'; $eventDate = ''; $eventLoc  = '';
+$eventDoorTime = ''; $eventShowTime = ''; $eventAddress = '';
+$eventArrival = ''; $eventTransport = ''; $eventMaxPurchase = 10;
 if ($eventId > 0) {
   // Tickex local
   try {
@@ -317,6 +320,12 @@ if ($eventId > 0) {
       }
       if (isset($evRow['nombre']) && $evRow['nombre'] !== null) $eventName = $evRow['nombre'];
       if (isset($evRow['fecha_desde']) && $evRow['fecha_desde'] !== null) $eventDate = $evRow['fecha_desde'];
+      $eventDoorTime = isset($evRow['hora_puertas']) ? trim((string)$evRow['hora_puertas']) : '';
+      $eventShowTime = isset($evRow['hora_show']) ? trim((string)$evRow['hora_show']) : '';
+      $eventAddress = isset($evRow['direccion']) ? trim((string)$evRow['direccion']) : '';
+      $eventArrival = isset($evRow['indicaciones_llegada']) ? trim((string)$evRow['indicaciones_llegada']) : '';
+      $eventTransport = isset($evRow['transporte_publico']) ? trim((string)$evRow['transporte_publico']) : '';
+      if (isset($evRow['max_entradas_compra']) && (int)$evRow['max_entradas_compra'] > 0) $eventMaxPurchase = min(20, (int)$evRow['max_entradas_compra']);
       if (isset($evRow['lugar']) && $evRow['lugar'] !== null) {
         $eventLoc = $evRow['lugar'];
       } elseif (isset($evRow['ubicacion']) && $evRow['ubicacion'] !== null) {
@@ -581,10 +590,11 @@ foreach ($entryOptions as $opt) {
 
 if (!function_exists('_tickex_parse_selection')) {
   // Normaliza selección del form a array de líneas: id,name,qty,price
-  function _tickex_parse_selection($optionMap, $ids, $qtys, &$errors)
+  function _tickex_parse_selection($optionMap, $ids, $qtys, &$errors, $eventMaxPurchase)
   {
     $selectedTickets = array();
     $total = 0;
+    $totalEntrances = 0;
     if (!is_array($ids) || !is_array($qtys)) {
       return array($selectedTickets, $total);
     }
@@ -607,13 +617,19 @@ if (!function_exists('_tickex_parse_selection')) {
       }
       $lineTotal = $opt['price'] * $qty;
       $total += $lineTotal;
+      $qrQuantity = tickex_ticket_qr_quantity(isset($opt['qr_quantity']) ? $opt['qr_quantity'] : 1);
+      $totalEntrances += $qty * $qrQuantity;
       $selectedTickets[] = array(
         'id' => $tidStr,
         'name' => $opt['name'],
         'qty' => $qty,
         'price' => $opt['price'],
-        'qr_quantity' => tickex_ticket_qr_quantity(isset($opt['qr_quantity']) ? $opt['qr_quantity'] : 1),
+        'qr_quantity' => $qrQuantity,
       );
+    }
+    if ($totalEntrances > (int)$eventMaxPurchase) {
+      $errors[] = 'Podés comprar hasta ' . (int)$eventMaxPurchase . ' entradas para este evento.';
+      return array(array(), 0);
     }
     return array($selectedTickets, $total);
   }
@@ -705,7 +721,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Selección (paso 1 o paso 2)
   $selIds = isset($_POST['selected_id']) ? $_POST['selected_id'] : (isset($_POST['ticket_id']) ? $_POST['ticket_id'] : array());
   $selQty = isset($_POST['selected_qty']) ? $_POST['selected_qty'] : (isset($_POST['qty']) ? $_POST['qty'] : array());
-  list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors);
+  list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors, $eventMaxPurchase);
 
   $ticketSubtotal = $total;
   $serviceFeeAmount = 0;
@@ -1149,6 +1165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include __DIR__.'/inc/layout_top.php';
 ?>
+<?php
+  $eventMapUrls = tickex_event_map_urls($eventAddress !== '' ? $eventAddress : $eventLoc);
+  $eventCountdownTs = $eventDate !== '' ? strtotime($eventDate) : false;
+?>
 <style>
   .checkout-hero { display:grid; grid-template-columns: minmax(260px, 1fr) 1.4fr; gap:16px; align-items:start; }
   .flyer-box { position:relative; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:var(--panel-2); min-height:260px; }
@@ -1157,6 +1177,8 @@ include __DIR__.'/inc/layout_top.php';
   .meta-grid { display:grid; gap:6px; font-size:14px; color:var(--muted); }
   .meta-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px; color:var(--muted); }
   .card-soft { background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .checkout-arrival { margin:0 0 12px; display:grid; gap:8px; }
+  .checkout-arrival p { margin:0; white-space:pre-line; }
   @media (max-width: 780px) { .checkout-hero { grid-template-columns:1fr; } }
   .tickex-safe-bottom { padding-bottom:calc(24px + constant(safe-area-inset-bottom)); padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
   .tickex-hidden { display:none !important; }
@@ -1178,12 +1200,44 @@ include __DIR__.'/inc/layout_top.php';
         <div class="meta-grid">
           <?php if ($eventDate): ?><div class="meta-chip">📅 <span><?php echo e($eventDate); ?></span></div><?php endif; ?>
           <?php if ($eventLoc):  ?><div class="meta-chip">📍 <span><?php echo e($eventLoc); ?></span></div><?php endif; ?>
+          <?php if ($eventDoorTime !== ''): ?><div class="meta-chip">Puertas: <?php echo e($eventDoorTime); ?></div><?php endif; ?>
+          <?php if ($eventShowTime !== ''): ?><div class="meta-chip">Show: <?php echo e($eventShowTime); ?></div><?php endif; ?>
         </div>
+        <?php if ($eventCountdownTs !== false && $eventCountdownTs > time()): ?>
+          <div class="meta-chip" data-event-countdown="<?php echo e(date('c', $eventCountdownTs)); ?>" aria-live="off">Faltan <strong data-countdown-value>—</strong> para el evento</div>
+        <?php endif; ?>
       </div>
       <div style="font-size:14px;color:var(--muted);">Seleccioná las entradas y la cantidad que quieras comprar. El total se calcula automáticamente antes de ir a pagar.</div>
     </div>
   </div>
 </div>
+
+<?php if ($eventAddress !== '' || $eventArrival !== '' || $eventTransport !== ''): ?>
+  <div class="card card-soft checkout-arrival">
+    <h3 style="margin:0;">Cómo llegar</h3>
+    <?php if ($eventAddress !== ''): ?><p><?php echo e($eventAddress); ?></p><?php endif; ?>
+    <?php if ($eventArrival !== ''): ?><p><?php echo e($eventArrival); ?></p><?php endif; ?>
+    <?php if ($eventTransport !== ''): ?><p><strong>Transporte público:</strong> <?php echo e($eventTransport); ?></p><?php endif; ?>
+    <?php if ($eventMapUrls['link'] !== ''): ?><a href="<?php echo e($eventMapUrls['link']); ?>" target="_blank" rel="noopener">Abrir mapa</a><?php endif; ?>
+  </div>
+<?php endif; ?>
+
+<script>
+(function(){
+  var node=document.querySelector('[data-event-countdown]');
+  if(!node)return;
+  var target=Date.parse(node.getAttribute('data-event-countdown'));
+  var value=node.querySelector('[data-countdown-value]');
+  if(!Number.isFinite(target)||!value)return;
+  function update(){
+    var seconds=Math.max(0,Math.floor((target-Date.now())/1000));
+    if(seconds===0){value.textContent='0 días';return;}
+    var days=Math.floor(seconds/86400),hours=Math.floor((seconds%86400)/3600),minutes=Math.floor((seconds%3600)/60);
+    value.textContent=days+' d · '+hours+' h · '+minutes+' min';
+  }
+  update();setInterval(update,60000);
+})();
+</script>
 
   <?php $prefillMissing = ($defaults['email']==='' || $defaults['dni']==='' || $defaults['first_name']==='' || $defaults['last_name']===''); ?>
   <?php if ($prefillMissing): ?>
