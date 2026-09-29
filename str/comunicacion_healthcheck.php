@@ -7,7 +7,8 @@ require_login();
 $cu = current_user();
 $tipoGlobal = isset($cu['tipo_global']) ? (string)$cu['tipo_global'] : (isset($_SESSION['tipo_global']) ? (string)$_SESSION['tipo_global'] : '');
 $isSuper = in_array($tipoGlobal, array('super_admin', 'superadmin'), true);
-$isAllowed = (is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
+$adminContext = isset($_SESSION['auth_context']) && $_SESSION['auth_context'] === 'admin';
+$isAllowed = ($adminContext && is_admin() && ($isSuper || $tipoGlobal === 'admin_evento'));
 if (!$isAllowed) {
     http_response_code(403);
     include __DIR__ . '/inc/layout_top.php';
@@ -23,10 +24,7 @@ communication_campaigns_ensure_schema($pdo);
 communication_ops_ensure_schema($pdo);
 
 $organizationId = 1;
-$adminId = 0;
-if (isset($_SESSION['admin_id'])) $adminId = (int)$_SESSION['admin_id'];
-elseif (isset($_SESSION['user_id'])) $adminId = (int)$_SESSION['user_id'];
-elseif (isset($_SESSION['usuario_id'])) $adminId = (int)$_SESSION['usuario_id'];
+$adminId = isset($cu['id']) ? (int)$cu['id'] : 0;
 
 $csrf = function_exists('tickex_csrf_token') ? (string)tickex_csrf_token() : '';
 $flashOk = '';
@@ -103,6 +101,9 @@ $deliveryMetrics = communication_delivery_feedback_metrics($pdo, 30, $adminId, $
 
 $title = 'Comunicacion - Health Check';
 include __DIR__ . '/inc/layout_top.php';
+include __DIR__ . '/inc/communication_health_view.php';
+include __DIR__ . '/inc/layout_bottom.php';
+return;
 ?>
 
 <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">

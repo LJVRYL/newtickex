@@ -5,6 +5,7 @@ require_once __DIR__ . '/communication_template_renderer.php';
 require_once __DIR__ . '/communication_transport.php';
 require_once __DIR__ . '/communication_suppressions.php';
 require_once __DIR__ . '/communication_tracking.php';
+require_once __DIR__ . '/communication_delivery_policy.php';
 
 if (!function_exists('communication_execution_now')) {
     function communication_execution_now()
@@ -116,9 +117,22 @@ if (!function_exists('communication_execution_ensure_schema')) {
             permanent_error_count INTEGER NOT NULL DEFAULT 0,
             skipped_duplicate_count INTEGER NOT NULL DEFAULT 0,
             last_error TEXT,
+            removed_at TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )');
+
+        $runColumns = $pdo->query('PRAGMA table_info(communication_campaign_runs)')->fetchAll(PDO::FETCH_ASSOC);
+        $hasRemovedAt = false;
+        foreach ($runColumns as $runColumn) {
+            if (isset($runColumn['name']) && (string)$runColumn['name'] === 'removed_at') {
+                $hasRemovedAt = true;
+                break;
+            }
+        }
+        if (!$hasRemovedAt) {
+            $pdo->exec('ALTER TABLE communication_campaign_runs ADD COLUMN removed_at TEXT');
+        }
 
         $pdo->exec('CREATE TABLE IF NOT EXISTS communication_campaign_run_recipients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,6 +177,7 @@ if (!function_exists('communication_execution_ensure_schema')) {
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_run_rcpt_campaign_fp ON communication_campaign_run_recipients(campaign_id, recipient_fingerprint, status)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comm_attempts_run ON communication_campaign_delivery_attempts(run_id, recipient_fingerprint)');
         communication_suppressions_ensure_schema($pdo);
+        communication_delivery_policy_ensure_schema($pdo);
     }
 }
 
@@ -184,7 +199,7 @@ if (!function_exists('communication_execution_enqueue_campaign')) {
 
         $scopeSql = communication_campaigns_scope_sql($isSuper);
         $scopeParams = communication_campaigns_scope_params($organizationId, $adminId, $isSuper);
-        $st = $pdo->prepare('SELECT * FROM communication_campaigns WHERE id = :id AND ' . $scopeSql . ' LIMIT 1');
+        $st = $pdo->prepare('SELECT * FROM communication_campaigns WHERE id = :id AND removed_at IS NULL AND ' . $scopeSql . ' LIMIT 1');
         $st->execute(array(':id' => $campaignId) + $scopeParams);
         $campaign = $st->fetch(PDO::FETCH_ASSOC);
 
@@ -612,7 +627,11 @@ if (!function_exists('communication_execution_process_run_recipients')) {
         $stRecover = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :queued, locked_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE run_id = :rid AND status = :processing AND locked_until IS NOT NULL AND locked_until <= CURRENT_TIMESTAMP');
         $stRecover->execute(array(':queued' => 'queued', ':processing' => 'processing', ':rid' => $runId));
 
-        $stSel = $pdo->prepare('SELECT * FROM communication_campaign_run_recipients WHERE run_id = :rid AND status = \'queued\' ORDER BY id ASC LIMIT :lim');
+        $allowance = communication_delivery_policy_allowance($pdo, isset($scope['admin_id']) ? (int)$scope['admin_id'] : 0, $batchSize);
+        $batchSize = (int)$allowance['allowed'];
+        if ($batchSize <= 0) return 0;
+
+        $stSel = $pdo->prepare('SELECT * FROM communication_campaign_run_recipients WHERE run_id = :rid AND status = \'queued\' AND (locked_until IS NULL OR locked_until <= CURRENT_TIMESTAMP) ORDER BY id ASC LIMIT :lim');
         $stSel->bindValue(':rid', $runId, PDO::PARAM_INT);
         $stSel->bindValue(':lim', $batchSize, PDO::PARAM_INT);
         $stSel->execute();
@@ -695,7 +714,11 @@ if (!function_exists('communication_execution_process_run_recipients')) {
                 'transient_error' => 'transient_error',
                 'permanent_error' => 'permanent_error',
             );
-            $finalStatus = isset($statusMap[$transport['status']]) ? $statusMap[$transport['status']] : 'transient_error';
+            $transportStatus = isset($statusMap[$transport['status']]) ? $statusMap[$transport['status']] : 'transient_error';
+            $policy = communication_delivery_policy_get($pdo, isset($scope['admin_id']) ? (int)$scope['admin_id'] : 0);
+            $retry = communication_delivery_policy_retry_decision($transportStatus, $attemptNo, $policy);
+            $finalStatus = $retry['status'];
+            $lockedUntil = !empty($retry['retry']) ? gmdate('Y-m-d H:i:s', time() + (int)$retry['delay_seconds']) : null;
 
             $paramsUp = array(
                 ':st' => $finalStatus,
@@ -704,6 +727,8 @@ if (!function_exists('communication_execution_process_run_recipients')) {
                 ':rm' => isset($transport['response_message']) ? $transport['response_message'] : null,
                 ':pn' => isset($transport['provider_name']) ? $transport['provider_name'] : null,
                 ':pmid' => isset($transport['provider_message_id']) ? $transport['provider_message_id'] : null,
+                ':lu' => $lockedUntil,
+                ':processed' => !empty($retry['retry']) ? null : communication_execution_now(),
                 ':id' => $recipientId,
             );
             $updatedRecipient = false;
@@ -711,7 +736,7 @@ if (!function_exists('communication_execution_process_run_recipients')) {
             while ($upAttempts < 4 && !$updatedRecipient) {
                 $upAttempts++;
                 try {
-                    $stUp = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, last_response_code = :rc, last_response_message = :rm, provider_name = :pn, provider_message_id = :pmid, locked_until = NULL, processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+                    $stUp = $pdo->prepare('UPDATE communication_campaign_run_recipients SET status = :st, last_error = :er, last_response_code = :rc, last_response_message = :rm, provider_name = :pn, provider_message_id = :pmid, locked_until = :lu, processed_at = :processed, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
                     $stUp->execute($paramsUp);
                     $updatedRecipient = true;
                 } catch (PDOException $e) {
