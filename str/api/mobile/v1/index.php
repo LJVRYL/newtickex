@@ -119,6 +119,14 @@ try {
             error_log('mobile_api admin_event_updated request_id=' . $requestId . ' event_id=' . $eventId);
             tickex_mobile_response(200, $result);
         }
+        if ($method === 'POST' && preg_match('~^/admin/events/([1-9][0-9]*)/publication/?$~', $route, $publication)) {
+            $eventId = (int)$publication[1];
+            $body = tickex_mobile_body();
+            $result = tickex_mobile_admin_set_publication($pdo, $admin, $eventId, isset($body['published']) ? $body['published'] : null);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
+            error_log('mobile_api admin_publication_updated request_id=' . $requestId . ' event_id=' . $eventId . ' published=' . ($result['published'] ? '1' : '0'));
+            tickex_mobile_response(200, $result);
+        }
         if (preg_match('~^/admin/events/([1-9][0-9]*)/(dashboard|sales|ticket-types|attendees)/?$~', $route, $adminMatch)) {
             $eventId = (int)$adminMatch[1];
             if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));
@@ -132,6 +140,12 @@ try {
                 if ($adminMatch[2] === 'dashboard') tickex_mobile_response(200, tickex_mobile_admin_dashboard($pdo, $eventId));
                 if ($adminMatch[2] === 'sales') tickex_mobile_response(200, tickex_mobile_admin_sales($pdo, $eventId));
                 if ($adminMatch[2] === 'ticket-types') tickex_mobile_response(200, tickex_mobile_admin_ticket_types($pdo, $eventId));
+            }
+            if ($adminMatch[2] === 'ticket-types' && $method === 'POST') {
+                $result = tickex_mobile_admin_create_ticket_type($pdo, $admin, $eventId, tickex_mobile_body());
+                if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
+                error_log('mobile_api admin_type_created request_id=' . $requestId . ' event_id=' . $eventId);
+                tickex_mobile_response(201, $result);
             }
         }
         if ($method === 'PATCH' && preg_match('~^/admin/events/([1-9][0-9]*)/ticket-types/([1-9][0-9]*)/?$~', $route, $typeEdit)) {

@@ -128,6 +128,21 @@ function tickex_mobile_admin_edit_event($pdo, $admin, $eventId, $body)
     $update->execute($fields);
     return tickex_mobile_admin_event_detail($pdo, $admin, $eventId);
 }
+function tickex_mobile_admin_set_publication($pdo, $admin, $eventId, $published)
+{
+    if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) return array('error' => 'forbidden');
+    if (!is_bool($published)) return array('error' => 'invalid_state');
+    if ($published) {
+        $event = tickex_mobile_admin_event_detail($pdo, $admin, $eventId);
+        if (!$event || trim((string)$event['name']) === '' || !$event['startsAt'] || trim((string)$event['venue']) === '') return array('error' => 'event_incomplete');
+        $ready = $pdo->prepare("SELECT 1 FROM tipos_entrada WHERE evento_id = :event AND visible_publico = 1 AND cantidad_disponible > 0 AND precio > 0 AND UPPER(tipo) <> 'PUERTA' LIMIT 1");
+        $ready->execute(array(':event' => $eventId));
+        if (!$ready->fetchColumn()) return array('error' => 'no_public_tickets');
+    }
+    $update = $pdo->prepare("UPDATE eventos SET publicado_site = :published, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (:super = 1 OR creado_por_admin_id = :admin)");
+    $update->execute(array(':published' => $published ? 1 : 0, ':event' => $eventId, ':super' => $admin['tipo_global'] === 'super_admin' ? 1 : 0, ':admin' => (int)$admin['id']));
+    return tickex_mobile_admin_event_detail($pdo, $admin, $eventId);
+}
 function tickex_mobile_admin_update_venue($pdo, $admin, $eventId, $venue)
 {
     if (!is_string($venue)) return null;
@@ -166,6 +181,29 @@ function tickex_mobile_admin_ticket_types($pdo, $eventId)
     $out = array();
     foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) $out[] = array('id' => (string)$row['id'], 'name' => (string)$row['nombre'], 'price' => (float)$row['precio'], 'total' => $row['cantidad_total'] === null ? null : (int)$row['cantidad_total'], 'available' => $row['cantidad_disponible'] === null ? null : (int)$row['cantidad_disponible'], 'visible' => (int)$row['visible_publico'] === 1, 'qrQuantity' => isset($row['qr_quantity']) ? max(1, (int)$row['qr_quantity']) : 1);
     return $out;
+}
+function tickex_mobile_admin_create_ticket_type($pdo, $admin, $eventId, $body)
+{
+    if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) return array('error' => 'forbidden');
+    $name = isset($body['name']) ? trim((string)$body['name']) : '';
+    $channel = isset($body['channel']) ? (string)$body['channel'] : '';
+    $price = isset($body['price']) ? filter_var($body['price'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 0, 'max_range' => 100000000))) : false;
+    $quantity = isset($body['quantity']) ? filter_var($body['quantity'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 1000000))) : false;
+    $qrQuantity = isset($body['qrQuantity']) ? filter_var($body['qrQuantity'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 10))) : false;
+    if ($name === '' || strlen($name) > 120 || preg_match('/[\x00-\x1F\x7F]/', $name) || !in_array($channel, array('public', 'door'), true) || $price === false || ($channel === 'public' && $price <= 0) || $quantity === false || $qrQuantity === false || ($channel === 'door' && $qrQuantity !== 1)) return array('error' => 'invalid_type');
+    $columns = array();
+    foreach ($pdo->query('PRAGMA table_info(tipos_entrada)')->fetchAll(PDO::FETCH_ASSOC) as $column) $columns[(string)$column['name']] = true;
+    foreach (array('visible_publico', 'qr_quantity') as $required) if (!isset($columns[$required])) return array('error' => 'schema_incomplete');
+    $type = $channel === 'door' ? 'PUERTA' : 'PAGA';
+    $values = array('evento_id' => $eventId, 'nombre' => $name, 'tipo' => $type, 'precio' => $price, 'cantidad_total' => $quantity, 'cantidad_disponible' => $quantity, 'visible_publico' => $channel === 'public' ? 1 : 0, 'qr_quantity' => $qrQuantity);
+    if (isset($columns['tipo_venta'])) $values['tipo_venta'] = $type;
+    if (isset($columns['activo'])) $values['activo'] = 1;
+    $names = array_keys($values);
+    $markers = array(); $params = array();
+    foreach ($names as $key) { $markers[] = ':' . $key; $params[':' . $key] = $values[$key]; }
+    $insert = $pdo->prepare('INSERT INTO tipos_entrada (' . implode(',', $names) . ') VALUES (' . implode(',', $markers) . ')');
+    $insert->execute($params);
+    return tickex_mobile_admin_ticket_types($pdo, $eventId);
 }
 function tickex_mobile_admin_update_ticket_type($pdo, $admin, $eventId, $typeId, $body)
 {
