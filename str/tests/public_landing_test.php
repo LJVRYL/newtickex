@@ -15,7 +15,7 @@ landing_assert(stripos($landing, 'directo a tu CBU') === false, 'shared preview 
 foreach (array('Creá y publicá','Vendé y emití','Organizá el equipo','Medí y comunicá') as $stage) {
     landing_assert(strpos($landing, $stage) !== false, 'product journey includes: ' . $stage);
 }
-landing_assert(strpos($landing, 'Mercado Pago') !== false && strpos($landing, 'separa su comisión') !== false, 'payment flow explains organizer collection and Tickex fee');
+landing_assert(strpos($landing, 'Mercado Pago') !== false && strpos($landing, 'comisión de Tickex se separa') !== false, 'payment flow explains organizer collection and Tickex fee');
 landing_assert(strpos($landing, 'hasta 300 QR/mes') !== false, 'landing publishes the initial plan capacity');
 landing_assert(strpos($landing, 'hasta 2.000 QR/mes') !== false, 'landing publishes the growth plan capacity');
 if ($plans !== '') {

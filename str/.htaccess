@@ -1,11 +1,18 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
+  # Internal source directories are never public web routes.
+  RewriteRule ^(?:tests|migrations|tools|patchs)(?:/|$) - [F,END]
+
   # TotalCoin sends a server-to-server POST to the historical SenForms path.
   # Rewrite both spellings internally so Apache never issues a DirectorySlash
   # redirect that could change POST to GET or discard the ApiKey header.
   RewriteRule ^notification/tcwbh/?$ totalcoin_webhook.php [END]
 </IfModule>
+
+<FilesMatch "(?i)\.(?:sqlite|sqlite3|db)(?:-(?:wal|shm|journal))?$">
+  Require all denied
+</FilesMatch>
 
 <FilesMatch "^arca_config\.json$">
   Require all denied
