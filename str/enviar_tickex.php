@@ -18,8 +18,11 @@ if (!in_array($rol, array('admin_evento','super_admin','superadmin'), true)) {
 
 $pdo = db();
 
-// Eventos visibles
-$evSql = ($rol === 'admin_evento') ? "SELECT id, nombre, fecha_desde, fecha_hasta FROM eventos WHERE borrado_en IS NULL AND creado_por_admin_id = :aid ORDER BY id DESC" : "SELECT id, nombre, fecha_desde, fecha_hasta FROM eventos WHERE borrado_en IS NULL ORDER BY id DESC";
+// Sólo eventos del organizador que todavía no terminaron. Los próximos se
+// incluyen aunque aún no estén publicados; los borrados y pasados, nunca.
+$evSql = ($rol === 'admin_evento')
+    ? "SELECT id,nombre,slug,fecha_desde,fecha_hasta FROM eventos WHERE borrado_en IS NULL AND creado_por_admin_id=:aid ORDER BY fecha_desde ASC,id DESC"
+    : "SELECT id,nombre,slug,fecha_desde,fecha_hasta FROM eventos WHERE borrado_en IS NULL ORDER BY fecha_desde ASC,id DESC";
 $stEv = $pdo->prepare($evSql);
 if ($rol === 'admin_evento') {
     $stEv->execute(array(':aid'=>(int)$cu['id']));
@@ -33,9 +36,11 @@ $eventosPermitidos = array();
 foreach ($eventos as $eventoPermitido) $eventosPermitidos[(int)$eventoPermitido['id']] = true;
 
 $tiposPorEvento = array();
+$tiposPermitidosPorEvento = array();
 foreach ($eventos as $ev) {
   $eid = (int)$ev['id'];
   $tiposPorEvento[$eid] = array();
+  $tiposPermitidosPorEvento[$eid] = array();
 
   // Tipos de entrada (todas, incluso ocultas/inactivas)
   try {
@@ -51,6 +56,7 @@ foreach ($eventos as $ev) {
         'qr_quantity' => tickex_ticket_qr_quantity(isset($row['qr_quantity']) ? $row['qr_quantity'] : 1),
         'origen' => 'tipo',
       );
+      $tiposPermitidosPorEvento[$eid][(int)$row['id']] = true;
     }
   } catch (Exception $e) {}
 }
@@ -58,6 +64,7 @@ foreach ($eventos as $ev) {
 $errors = array();
 $success = '';
 
+// La eliminación queda protegida y limitada a eventos del organizador.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_tickex') {
     if (!tickex_csrf_verify(isset($_POST['_csrf']) ? (string)$_POST['_csrf'] : '')) {
         $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
@@ -71,9 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $delete->execute(array(':id'=>$deleteId));
         }
         if ($delete->rowCount() === 1) {
-            flash('ok', 'Tickex eliminado.');
-            header('Location: enviar_tickex.php');
-            exit;
+            flash('ok','Tickex eliminado.');
+            header('Location: enviar_tickex.php'); exit;
         }
         $errors[] = 'No se encontró el Tickex o no tenés permiso para eliminarlo.';
     }
@@ -81,21 +87,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST['action'] !== 'delete_tickex')) {
     $eventoId = isset($_POST['evento_id']) ? (int)$_POST['evento_id'] : 0;
-    $tipoId   = isset($_POST['tipo_id']) ? (int)$_POST['tipo_id'] : 0;
+    $tipoSelection = isset($_POST['tipo_id']) ? trim((string)$_POST['tipo_id']) : '';
+    $isManualFree = $tipoSelection === 'manual_free';
+    $tipoId   = $isManualFree ? 0 : (int)$tipoSelection;
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
     $nombre   = isset($_POST['nombre']) ? trim($_POST['nombre']) : '';
     $tickexId = isset($_POST['tickex_id']) ? trim((string)$_POST['tickex_id']) : '';
     $mode     = isset($_POST['modo']) ? (string)$_POST['modo'] : 'courtesy';
     $quantity = isset($_POST['cantidad']) ? (int)$_POST['cantidad'] : 1;
-    if ($mode === 'courtesy') $quantity = 1;
+    $customTotal = isset($_POST['monto_total']) ? trim((string)$_POST['monto_total']) : '';
     $hidden   = (isset($_POST['oculto']) && in_array($rol, array('super_admin','superadmin'), true)) ? 1 : 0;
+
+    // Las cortesías son una emisión simple, sin campos comerciales.
+    if ($mode === 'courtesy') {
+        $quantity = 1;
+        $customTotal = '';
+    }
 
     if (!tickex_csrf_verify(isset($_POST['_csrf']) ? $_POST['_csrf'] : '')) $errors[] = 'La sesión venció. Actualizá la página e intentá nuevamente.';
     if ($eventoId <= 0) $errors[] = 'Seleccioná un evento.';
     if ($eventoId > 0 && !isset($eventosPermitidos[$eventoId])) $errors[] = 'Ese evento ya terminó o no está disponible para tu cuenta.';
-    if ($tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
+    if (!$isManualFree && $tipoId <= 0) $errors[] = 'Seleccioná un tipo de entrada.';
+    elseif (!$isManualFree && (!isset($tiposPermitidosPorEvento[$eventoId]) || !isset($tiposPermitidosPorEvento[$eventoId][$tipoId]))) $errors[] = 'El tipo de entrada no pertenece al evento seleccionado.';
     if (!in_array($mode, array('courtesy','manual_transfer'), true)) $errors[] = 'Seleccioná una modalidad válida.';
+    if ($mode === 'courtesy') { $quantity = 1; $customTotal = ''; }
     if ($quantity < 1 || $quantity > 20) $errors[] = 'La cantidad de promociones debe estar entre 1 y 20.';
+    if ($customTotal !== '' && $mode !== 'manual_transfer') $errors[] = 'El monto libre solo corresponde a una venta manual.';
+    if ($customTotal !== '' && (!is_numeric($customTotal) || (float)$customTotal <= 0 || (float)$customTotal > 999999999.99)) {
+        $errors[] = 'Ingresá un monto total cobrado válido y mayor a cero.';
+    }
+    if ($isManualFree && ($mode !== 'manual_transfer' || $customTotal === '')) {
+        $errors[] = 'La entrada manual sin categoría requiere el monto total cobrado.';
+    }
 
     // Resolver email por Tickex ID (apodo) si no viene email
     if ($email === '' && $tickexId !== '') {
@@ -139,8 +162,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
             $result = tickex_manual_issue_package($pdo, array(
                 'evento_id' => $eventoId,
                 'tipo_id' => $tipoId,
+                'sin_tipo' => $isManualFree,
                 'cantidad' => $quantity,
                 'modo' => $mode,
+                'monto_total' => $customTotal,
                 'email' => $email,
                 'nombre' => $nombreIns,
                 'admin_id' => (int)$cu['id'],
@@ -162,12 +187,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
 }
 
 $title = 'Enviar Tickex';
+$pageFlashes = function_exists('flash_get_all') ? flash_get_all() : array();
 include __DIR__.'/inc/layout_top.php';
 ?>
-<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+<?php include __DIR__.'/inc/send_ticket_form.php'; ?>
+<?php if (false): // Vista anterior conservada temporalmente como referencia de compatibilidad. ?>
+<div class="card tx-send-hero">
   <a class="btn secondary" href="panel_admin.php">⬅ Volver</a>
-  <h2 style="margin:0;">Enviar Tickex</h2>
-  <span class="muted">Registrá una transferencia o emití cortesías respetando paquetes, QR y stock.</span>
+  <div>
+    <span class="tx-kicker"><i></i>Emisión manual</span>
+    <h2>Enviar Tickex</h2>
+    <span class="muted">Registrá una transferencia o emití cortesías respetando paquetes, QR y stock.</span>
+  </div>
 </div>
 
 <?php if (!empty($errors)): ?>
@@ -184,8 +215,8 @@ include __DIR__.'/inc/layout_top.php';
   <div class="flash ok"><?php echo $success; ?></div>
 <?php endif; ?>
 
-<div class="card" style="max-width:900px;">
-  <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+<div class="card tx-send-form-card">
+  <form class="tx-send-form" method="post">
     <input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>">
     <div>
       <label>Evento</label>
@@ -200,6 +231,7 @@ include __DIR__.'/inc/layout_top.php';
       <label>Tipo de entrada</label>
       <select name="tipo_id" required>
         <option value="">Elegí tipo</option>
+        <option value="manual_free" data-manual-free="1">Entrada manual — monto libre (1 QR por unidad)</option>
         <?php foreach ($tiposPorEvento as $eid => $tipos): ?>
           <?php foreach ($tipos as $t): ?>
             <option value="<?php echo (int)$t['id']; ?>" data-evento="<?php echo (int)$eid; ?>">
@@ -208,7 +240,7 @@ include __DIR__.'/inc/layout_top.php';
           <?php endforeach; ?>
         <?php endforeach; ?>
       </select>
-      <small class="muted">Se filtra al elegir evento.</small>
+      <small class="muted">La entrada manual no usa ni modifica ninguna categoría; solamente consume el cupo global.</small>
     </div>
     <div>
       <label>Modalidad</label>
@@ -216,12 +248,17 @@ include __DIR__.'/inc/layout_top.php';
         <option value="manual_transfer">Venta manual / transferencia</option>
         <option value="courtesy">Cortesía</option>
       </select>
-      <small class="muted">La transferencia registra el precio configurado. La cortesía registra $0.</small>
+      <small class="muted">La venta usa el precio configurado, salvo que indiques un monto total diferente. La cortesía registra $0.</small>
     </div>
     <div>
-      <label>Cantidad de promociones</label>
+      <label>Cantidad de paquetes / entradas</label>
       <input type="number" name="cantidad" min="1" max="20" value="1" required>
-      <small class="muted">Ejemplo: 1 Promo 3x4 emite 4 QR y descuenta 4 lugares.</small>
+      <small class="muted">Una entrada simple emite 1 QR por unidad. Una promoción emite los QR configurados.</small>
+    </div>
+    <div id="monto-total-wrap">
+      <label>Monto total cobrado (opcional)</label>
+      <input type="number" name="monto_total" min="0.01" max="999999999.99" step="0.01" inputmode="decimal" placeholder="Ej: 20000" value="<?php echo isset($_POST['monto_total']) ? e($_POST['monto_total']) : ''; ?>">
+      <small class="muted">Es el total de toda la operación. Si lo dejás vacío, se calcula con el precio configurado.</small>
     </div>
     <div>
       <label>Email destino</label>
@@ -246,7 +283,7 @@ include __DIR__.'/inc/layout_top.php';
       </div>
     </div>
     <?php endif; ?>
-    <div style="grid-column:1 / -1;">
+    <div class="tx-send-submit">
       <button class="btn" type="submit">Emitir y enviar todos los QR</button>
     </div>
   </form>
@@ -256,6 +293,9 @@ include __DIR__.'/inc/layout_top.php';
   (function(){
     const evSelect = document.querySelector('select[name="evento_id"]');
     const tipoSelect = document.querySelector('select[name="tipo_id"]');
+    const modeSelect = document.querySelector('select[name="modo"]');
+    const customTotalWrap = document.getElementById('monto-total-wrap');
+    const customTotalInput = document.querySelector('input[name="monto_total"]');
     function filterTipos(){
       const ev = evSelect.value;
       Array.from(tipoSelect.options).forEach(opt => {
@@ -272,13 +312,41 @@ include __DIR__.'/inc/layout_top.php';
       evSelect.addEventListener('change', filterTipos);
       filterTipos();
     }
+    function syncCustomTotal(){
+      if (!modeSelect || !customTotalWrap || !customTotalInput) return;
+      const isSale = modeSelect.value === 'manual_transfer';
+      customTotalWrap.hidden = !isSale;
+      customTotalInput.disabled = !isSale;
+      if (!isSale) customTotalInput.value = '';
+    }
+    function syncManualFree(){
+      if (!tipoSelect || !modeSelect || !customTotalInput) return;
+      const isManualFree = tipoSelect.value === 'manual_free';
+      if (isManualFree) {
+        modeSelect.value = 'manual_transfer';
+        customTotalInput.required = true;
+        syncCustomTotal();
+        customTotalInput.focus();
+      } else {
+        customTotalInput.required = false;
+      }
+    }
+    if (modeSelect) {
+      modeSelect.addEventListener('change', syncCustomTotal);
+      syncCustomTotal();
+    }
+    if (tipoSelect) {
+      tipoSelect.addEventListener('change', syncManualFree);
+      syncManualFree();
+    }
   })();
 </script>
+<?php endif; ?>
 
 
-<div class="card" style="margin-top:32px;max-width:900px;overflow:auto;">
+<div class="card tx-send-history">
   <h3>Últimos Tickex enviados</h3>
-  <form method="get" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <form class="tx-send-search" method="get">
     <input type="text" name="buscar" placeholder="Buscar por email, nombre, código..." value="<?php echo isset($_GET['buscar']) ? e($_GET['buscar']) : ''; ?>" style="flex:1 1 200px;">
     <button class="btn" type="submit">Buscar</button>
     <?php if (isset($_GET['buscar']) && $_GET['buscar'] !== ''): ?>
@@ -307,7 +375,7 @@ include __DIR__.'/inc/layout_top.php';
   <?php if (empty($ultimos)): ?>
     <div class="muted">No hay tickex enviados recientemente.</div>
   <?php else: ?>
-    <table class="table" style="font-size:14px;min-width:860px;table-layout:fixed;width:100%;">
+    <table class="table tx-send-table">
       <thead>
         <tr>
           <th>ID</th>
@@ -323,14 +391,14 @@ include __DIR__.'/inc/layout_top.php';
       <tbody>
         <?php foreach ($ultimos as $u): ?>
           <tr>
-            <td><?php echo (int)$u['id']; ?></td>
-            <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['nombre']); ?></td>
-            <td style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
-            <td><?php echo e($u['codigo']); ?></td>
-            <td><?php echo e($u['tipo']); ?></td>
-            <td><?php echo e($u['evento_nombre']); ?></td>
-            <td><?php echo e($u['fecha_registro']); ?></td>
-            <td style="white-space:nowrap;">
+            <td data-label="ID"><?php echo (int)$u['id']; ?></td>
+            <td data-label="Nombre" style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['nombre']); ?></td>
+            <td data-label="Email" style="word-break:break-word;overflow-wrap:anywhere;"><?php echo e($u['email']); ?></td>
+            <td data-label="Código"><?php echo e($u['codigo']); ?></td>
+            <td data-label="Tipo"><?php echo e($u['tipo']); ?></td>
+            <td data-label="Evento"><?php echo e($u['evento_nombre']); ?></td>
+            <td data-label="Fecha"><?php echo e($u['fecha_registro']); ?></td>
+            <td data-label="Acciones" style="white-space:nowrap;">
               <a class="btn secondary" style="padding:6px 10px;" href="ticket.php?c=<?php echo urlencode((string)$u['codigo']); ?>" target="_blank" rel="noopener" title="Ver ticket" aria-label="Ver ticket">👁</a>
               <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este Tickex?');"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="delete_tickex"><input type="hidden" name="tickex_id" value="<?php echo (int)$u['id']; ?>"><button class="btn danger" style="padding:6px 10px;" type="submit" title="Eliminar" aria-label="Eliminar">🗑</button></form>
             </td>

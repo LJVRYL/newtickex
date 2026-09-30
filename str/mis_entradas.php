@@ -386,20 +386,84 @@ try {
     $errores[] = 'Error al listar plantillas: ' . $e->getMessage();
 }
 
+$totalPlantillas = count($plantillas);
+$plantillasActivas = 0;
+$plantillasPublicas = 0;
+$categoriasUsadas = array();
+foreach ($plantillas as $plantillaResumen) {
+    if (!empty($plantillaResumen['activo'])) $plantillasActivas++;
+    if ($hasVis && !empty($plantillaResumen['visible_publico'])) $plantillasPublicas++;
+    if (!empty($plantillaResumen['categoria'])) {
+        $categoriasUsadas[(string)$plantillaResumen['categoria']] = true;
+    }
+}
+
 // -------------------------------------------------------------------
 // Layout + HTML (similar estilo a crear_evento.php)
 // -------------------------------------------------------------------
-$title = 'Crear Entrada';
+$title = 'Mis entradas';
 require __DIR__ . '/inc/layout_top.php';
 ?>
-<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-  <a class="btn secondary" href="panel_admin.php">⬅ Volver al panel</a>
-</div>
+<style>
+  .entries-hero{position:relative;overflow:hidden;padding:28px;background:linear-gradient(135deg,rgba(85,52,190,.32),rgba(16,25,48,.92))}
+  .entries-hero:after{content:"";position:absolute;width:260px;height:260px;right:-90px;top:-130px;border:1px solid rgba(135,104,255,.28);border-radius:50%}
+  .entries-eyebrow{color:#9a86ff;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}
+  .entries-hero h1{margin:7px 0 6px;font-size:clamp(28px,4vw,44px)}
+  .entries-hero p{max-width:680px;margin:0;color:var(--muted)}
+  .entries-toolbar{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}
+  .entries-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .entries-stats{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:10px;margin-top:24px;position:relative;z-index:1}
+  .entries-stat{padding:13px 15px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(6,10,22,.38)}
+  .entries-stat span{display:block;color:var(--muted);font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}
+  .entries-stat strong{display:block;margin-top:3px;font-size:22px}
+  .entries-editor{padding:0}
+  .entries-editor>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px}
+  .entries-editor>summary::-webkit-details-marker{display:none}
+  .entries-editor>summary:after{content:"+";display:grid;place-items:center;width:32px;height:32px;flex:0 0 auto;border:1px solid var(--line);border-radius:10px;color:#a994ff;font-size:22px}
+  .entries-editor[open]>summary:after{content:"−"}
+  .entries-editor-title{font-size:18px;font-weight:800}
+  .entries-editor-subtitle{margin-top:3px;color:var(--muted);font-size:13px}
+  .entries-editor-form{border-top:1px solid var(--line);padding:22px}
+  .entries-list-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .entries-list-head h2{margin:0}.entries-list-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .entry-badge{display:inline-flex;align-items:center;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2);font-size:11px;font-weight:750;white-space:nowrap}
+  .entry-name{min-width:170px;font-weight:750}.entry-price{font-weight:800;white-space:nowrap}
+  .entries-table th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .entries-table td{vertical-align:middle}.entries-table-actions{display:flex;justify-content:flex-end;gap:6px;white-space:nowrap}
+  @media(max-width:720px){
+    .entries-hero{padding:22px}.entries-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.entries-toolbar{align-items:stretch}.entries-actions,.entries-actions .btn{width:100%}.entries-actions .btn{text-align:center}
+    .entries-table-wrap{overflow:visible!important}
+    .entries-table,.entries-table tbody,.entries-table tr,.entries-table td{display:block;width:100%;min-width:0}
+    .entries-table thead{display:none}
+    .entries-table tbody{display:grid;gap:12px}
+    .entries-table tr{padding:10px 14px;border:1px solid var(--line);border-radius:15px;background:rgba(8,12,25,.58)}
+    .entries-table td{min-height:38px;padding:9px 0;display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.06)}
+    .entries-table td:last-child{border-bottom:0}
+    .entries-table td::before{content:attr(data-label);color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+    .entries-table td form{min-width:0}
+    .entries-table td input[type="number"]{width:72px!important}
+    .entries-table-actions{display:grid;grid-template-columns:1fr 1fr;white-space:normal}
+    .entries-table-actions .btn{width:100%;text-align:center}
+  }
+</style>
 
-<div class="card">
-  <h2>Crear Entrada</h2>
-  <div style="color:var(--muted);font-size:14px;">
-    Definí tipos de entrada que despues vas a poder reutilizar en tus eventos.
+<div class="card entries-hero">
+  <div class="entries-toolbar">
+    <div>
+      <div class="entries-eyebrow">Catálogo reutilizable</div>
+      <h1>Mis entradas</h1>
+      <p>Creá y organizá los tipos de entrada que después vas a asignar a tus eventos.</p>
+    </div>
+    <div class="entries-actions">
+      <a class="btn secondary" href="panel_admin.php">Volver al panel</a>
+      <a class="btn" href="#editor-entrada">Nueva plantilla</a>
+    </div>
+  </div>
+  <div class="entries-stats">
+    <div class="entries-stat"><span>Total</span><strong><?php echo (int)$totalPlantillas; ?></strong></div>
+    <div class="entries-stat"><span>Activas</span><strong><?php echo (int)$plantillasActivas; ?></strong></div>
+    <div class="entries-stat"><span>Públicas</span><strong><?php echo $hasVis ? (int)$plantillasPublicas : '—'; ?></strong></div>
+    <div class="entries-stat"><span>Categorías</span><strong><?php echo (int)count($categoriasUsadas); ?></strong></div>
   </div>
 </div>
 
@@ -423,10 +487,16 @@ require __DIR__ . '/inc/layout_top.php';
   </div>
 <?php endif; ?>
 
-<form method="post">
-  <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
-  <div class="card">
-    <h3><?php echo $editRow ? 'Editar plantilla' : 'Nueva plantilla'; ?></h3>
+<details class="card entries-editor" id="editor-entrada"<?php echo ($editRow || !empty($errores)) ? ' open' : ''; ?>>
+  <summary>
+    <div>
+      <div class="entries-editor-title"><?php echo $editRow ? 'Editar plantilla' : 'Crear una nueva plantilla'; ?></div>
+      <div class="entries-editor-subtitle"><?php echo $editRow ? 'Modificá los datos y guardá los cambios.' : 'Abrí este bloque solamente cuando necesites sumar un tipo de entrada.'; ?></div>
+    </div>
+  </summary>
+  <form method="post" class="entries-editor-form">
+    <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
+  <div style="max-width:760px;">
 
     <input type="hidden" name="action" value="<?php echo $editRow ? 'update' : 'create'; ?>">
     <?php if ($editRow): ?>
@@ -524,20 +594,30 @@ require __DIR__ . '/inc/layout_top.php';
       Plantilla activa
     </label>
 
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;">
     <button type="submit" class="btn">
       <?php echo $editRow ? 'Guardar cambios' : 'Crear plantilla'; ?>
     </button>
+    <?php if ($editRow): ?><a class="btn secondary" href="mis_entradas.php">Cancelar edición</a><?php endif; ?>
+    </div>
   </div>
 </form>
+</details>
 
-<div class="card">
-  <h3>Plantillas existentes</h3>
+<div class="card" id="plantillas">
+  <div class="entries-list-head">
+    <div>
+      <h2>Plantillas existentes</h2>
+      <p>Administrá stock, visibilidad y estado desde una sola lista.</p>
+    </div>
+    <span class="entry-badge"><?php echo (int)$totalPlantillas; ?> plantillas</span>
+  </div>
 
   <?php if (empty($plantillas)): ?>
     <p>No tenes plantillas cargadas todavia.</p>
   <?php else: ?>
-    <div style="overflow:auto;margin-top:8px;">
-      <table class="table">
+    <div class="entries-table-wrap" style="overflow:auto;margin-top:8px;">
+      <table class="table entries-table">
         <thead>
           <tr>
             <th>Categoria</th>
@@ -555,11 +635,11 @@ require __DIR__ . '/inc/layout_top.php';
         <tbody>
           <?php foreach ($plantillas as $p): ?>
             <tr>
-              <td><?php echo e($p['categoria']); ?></td>
-              <td><?php echo e($p['nombre']); ?></td>
-              <td><?php echo e($p['tipo']); ?></td>
-              <td><?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
-              <td>
+              <td data-label="Categoría"><span class="entry-badge"><?php echo e($p['categoria']); ?></span></td>
+              <td data-label="Nombre" class="entry-name"><?php echo e($p['nombre']); ?></td>
+              <td data-label="Tipo"><span class="entry-badge"><?php echo e($p['tipo']); ?></span></td>
+              <td data-label="Precio" class="entry-price">$<?php echo number_format((float)$p['precio_default'], 0, ',', '.'); ?></td>
+              <td data-label="Stock QR">
                 <form method="post" style="margin:0;display:inline;">
                   <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="update">
@@ -576,13 +656,13 @@ require __DIR__ . '/inc/layout_top.php';
                   <?php if ($hasVentaHasta): ?><input type="hidden" name="venta_hasta" value="<?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?>"><?php endif; ?>
                   <?php if (!empty($p['activo'])): ?><input type="hidden" name="activo" value="1"><?php endif; ?>
                   <?php if ($hasVis): ?><input type="hidden" name="visible_publico" value="<?php echo !empty($p['visible_publico']) ? '1' : '0'; ?>"><?php endif; ?>
-                  <button class="btn" type="submit" style="padding:2px 8px;font-size:13px;">Guardar</button>
+                  <button class="btn secondary" type="submit" style="padding:5px 8px;font-size:12px;">Actualizar</button>
                 </form>
               </td>
-              <td><?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?></td>
-              <?php if ($hasVentaHasta): ?><td><?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?></td><?php endif; ?>
+              <td data-label="QR/unidad"><?php echo isset($p['qr_quantity']) ? (int)$p['qr_quantity'] : 1; ?></td>
+              <?php if ($hasVentaHasta): ?><td data-label="Hasta"><?php echo e(isset($p['venta_hasta']) ? $p['venta_hasta'] : ''); ?></td><?php endif; ?>
               <?php if ($hasVis): ?>
-                <td>
+                <td data-label="Visible">
                   <form method="post" class="vis-toggle" style="margin:0;display:inline;">
                     <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                     <input type="hidden" name="action" value="update">
@@ -608,25 +688,27 @@ require __DIR__ . '/inc/layout_top.php';
                   </form>
                 </td>
               <?php endif; ?>
-              <td>
+              <td data-label="Estado">
                 <?php if ((int)$p['activo'] === 1): ?>
-                  <span style="color:var(--ok);font-weight:700;">Activo</span>
+                  <span class="entry-badge" style="color:var(--ok);">Activo</span>
                 <?php else: ?>
-                  <span style="color:var(--warn);font-weight:700;">Inactivo</span>
+                  <span class="entry-badge" style="color:var(--warn);">Inactivo</span>
                 <?php endif; ?>
               </td>
-              <td style="text-align:right;white-space:nowrap;">
-                <a class="btn secondary" style="padding:6px 10px;font-size:14px;" href="mis_entradas.php?action=edit&amp;id=<?php echo (int)$p['id']; ?>" title="Editar">
-                  ✏️
+              <td data-label="Acciones">
+                <div class="entries-table-actions">
+                <a class="btn secondary" style="padding:6px 10px;font-size:12px;" href="mis_entradas.php?action=edit&amp;id=<?php echo (int)$p['id']; ?>" title="Editar">
+                  Editar
                 </a>
                 <form method="post" action="mis_entradas.php" style="display:inline;" onsubmit="return confirm('Seguro que queres eliminar esta plantilla?');">
                   <input type="hidden" name="_csrf" value="<?php echo e($csrf); ?>">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="id" value="<?php echo (int)$p['id']; ?>">
-                  <button type="submit" class="btn danger" title="Borrar" style="padding:6px 10px;font-size:14px;">
-                    🗑️
+                  <button type="submit" class="btn danger" title="Borrar" style="padding:6px 10px;font-size:12px;">
+                    Eliminar
                   </button>
                 </form>
+                </div>
               </td>
             </tr>
           <?php endforeach; ?>
