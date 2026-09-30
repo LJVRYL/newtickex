@@ -47,21 +47,28 @@ function tickex_mobile_door_order($pdo, $ref)
     return $st->fetch(PDO::FETCH_ASSOC);
 }
 
-function tickex_mobile_door_projection(array $order)
+function tickex_mobile_door_projection($pdo, array $order)
 {
     $created = strtotime((string)$order['created_at'] . ' UTC');
     $expiresAt = $created === false ? null : date('c', $created + 15 * 60);
+    $ticketId = null;
+    if (!empty($order['processed_at'])) {
+        $stTicket = $pdo->prepare('SELECT id FROM entradas WHERE tc_order_request_id=:request ORDER BY id ASC LIMIT 1');
+        $stTicket->execute(array(':request' => (string)$order['request_id']));
+        $id = $stTicket->fetchColumn();
+        if ($id !== false) $ticketId = (string)$id;
+    }
     return array('ref' => (string)$order['ref'], 'eventId' => (string)$order['evento_id'], 'finalPrice' => (float)$order['amount'], 'expiresAt' => $expiresAt,
-        'paymentUrl' => (string)$order['payment_url'], 'payment' => (string)$order['payment_status'] === 'confirmed' ? 'confirmed' : ((string)$order['state'] === 'failed' ? 'failed' : 'pending'),
-        'issuance' => !empty($order['processed_at']) ? 'issued' : 'pending');
+        'paymentUrl' => (string)$order['payment_url'], 'payment' => (string)$order['payment_status'] === 'confirmed' ? 'confirmed' : ((string)$order['state'] === 'failed' ? 'failed' : ($created !== false && time() >= $created + 15 * 60 ? 'expired' : 'pending')),
+        'issuance' => !empty($order['processed_at']) ? 'issued' : 'pending', 'ticketId' => $ticketId);
 }
 
 function tickex_mobile_door_recent($pdo, $eventId)
 {
-    $st = $pdo->prepare("SELECT request_id, ref, evento_id, amount, payment_url, payment_status, processed_at, state, created_at FROM tc_orders WHERE evento_id=:event AND ref LIKE 'door-%' AND payment_provider='mercadopago' ORDER BY id DESC LIMIT 10");
+    $st = $pdo->prepare("SELECT request_id, ref, evento_id, amount, payment_url, payment_status, processed_at, state, created_at FROM tc_orders WHERE evento_id=:event AND ref LIKE 'door-%' AND payment_provider='mercadopago' AND (created_at >= datetime('now','-15 minutes') OR payment_status='confirmed') ORDER BY id DESC LIMIT 10");
     $st->execute(array(':event' => (int)$eventId));
     $rows = array();
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $order) $rows[] = tickex_mobile_door_projection($order);
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $order) $rows[] = tickex_mobile_door_projection($pdo, $order);
     return $rows;
 }
 
@@ -71,11 +78,7 @@ function tickex_mobile_door_create($pdo, $clientId, $eventId, array $body, $key,
     if (!preg_match('/^[a-zA-Z0-9._-]{16,100}$/', $key)) return array('error' => 'idempotency_key_required');
     $eventId = (int)$eventId;
     $typeId = isset($body['ticketTypeId']) ? (int)$body['ticketTypeId'] : 0;
-    $first = trim((string)(isset($body['firstName']) ? $body['firstName'] : ''));
-    $last = trim((string)(isset($body['lastName']) ? $body['lastName'] : ''));
-    $email = strtolower(trim((string)(isset($body['email']) ? $body['email'] : '')));
-    $dni = preg_replace('/[^0-9]/', '', (string)(isset($body['dni']) ? $body['dni'] : ''));
-    if ($typeId <= 0 || $first === '' || $last === '' || strlen($first) > 80 || strlen($last) > 80 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 180 || strlen($dni) < 7 || strlen($dni) > 9) return array('error' => 'invalid_buyer');
+    if ($typeId <= 0) return array('error' => 'invalid_type');
     if (!isset($body['finalPrice']) || !is_numeric($body['finalPrice'])) return array('error' => 'invalid_amount');
     $gross = (float)$body['finalPrice'];
     if ($gross < 1 || $gross > 10000000 || abs($gross - round($gross, 2)) > 0.00001) return array('error' => 'invalid_amount');
@@ -97,32 +100,32 @@ function tickex_mobile_door_create($pdo, $clientId, $eventId, array $body, $key,
     if ($seller <= 0) return array('error' => 'mercadopago_unavailable');
     $breakdown = tickex_mobile_door_breakdown($gross, $config);
     $ticketsJson = json_encode(array(array('id' => $typeId, 'name' => $type['name'], 'qty' => 1, 'price' => $breakdown['ticket_subtotal'], 'qr_quantity' => 1)), JSON_UNESCAPED_UNICODE);
-    $fingerprint = hash('sha256', implode('|', array($eventId, $typeId, number_format($gross, 2, '.', ''), $first, $last, $email, $dni)));
+    $fingerprint = hash('sha256', implode('|', array($eventId, $typeId, number_format($gross, 2, '.', ''))));
     $existing = tickex_mobile_door_order($pdo, $ref);
     if ($existing) {
         $stClaim = $pdo->prepare('SELECT fingerprint FROM totalcoin_checkout_claims WHERE ref=:ref LIMIT 1');
         $stClaim->execute(array(':ref' => $ref));
         $saved = $stClaim->fetchColumn();
-        return $saved !== false && hash_equals((string)$saved, $fingerprint) ? tickex_mobile_door_projection($existing) : array('error' => 'idempotency_conflict');
+        return $saved !== false && hash_equals((string)$saved, $fingerprint) ? tickex_mobile_door_projection($pdo, $existing) : array('error' => 'idempotency_conflict');
     }
     $claim = tickex_totalcoin_checkout_claim($pdo, $ref, $fingerprint, 120);
     if ($claim['result'] === 'conflict') return array('error' => 'idempotency_conflict');
     if ($claim['result'] === 'ready') {
         $existing = tickex_mobile_door_order($pdo, $ref);
-        return $existing ? tickex_mobile_door_projection($existing) : array('error' => 'order_pending');
+        return $existing ? tickex_mobile_door_projection($pdo, $existing) : array('error' => 'order_pending');
     }
     if ($claim['result'] !== 'acquired') return array('error' => 'order_pending');
     try {
-        $preference = tickex_mp_create_preference($pdo, $seller, array('amount' => $gross, 'concept' => 'Entrada puerta · ' . $event['nombre'], 'dni' => $dni, 'reference' => $ref,
-            'last_name' => $last, 'first_name' => $first, 'email' => $email, 'event_id' => $eventId, 'marketplace_fee' => $breakdown['marketplace_fee'],
+        $preference = tickex_mp_create_preference($pdo, $seller, array('amount' => $gross, 'concept' => 'Entrada puerta · ' . $event['nombre'], 'reference' => $ref,
+            'event_id' => $eventId, 'marketplace_fee' => $breakdown['marketplace_fee'], 'binary_mode' => true,
             'expires_at' => date('c', time() + 15 * 60)), $preferenceHttp);
         $st = $pdo->prepare("INSERT INTO tc_orders (request_id,state,evento_id,ref,concept,amount,buyer_dni,buyer_last,buyer_first,buyer_email,selected_tickets_json,payment_url,payment_provider,provider_preference_id,marketplace_fee,seller_admin_id,ticket_subtotal,service_fee_amount,service_fee_percent,mp_cost_estimate_percent,updated_at) VALUES (:rid,'created',:event,:ref,:concept,:amount,:dni,:last,:first,:email,:tickets,:url,'mercadopago',:pref,:fee,:seller,:subtotal,:service,:rate,:mpcost,CURRENT_TIMESTAMP)");
         $st->execute(array(':rid' => $preference['request_id'], ':event' => $eventId, ':ref' => $ref, ':concept' => 'Entrada puerta · ' . $event['nombre'], ':amount' => $gross,
-            ':dni' => $dni, ':last' => $last, ':first' => $first, ':email' => $email, ':tickets' => $ticketsJson, ':url' => $preference['payment_url'], ':pref' => $preference['preference_id'],
+            ':dni' => '', ':last' => '', ':first' => 'Puerta', ':email' => '', ':tickets' => $ticketsJson, ':url' => $preference['payment_url'], ':pref' => $preference['preference_id'],
             ':fee' => $breakdown['marketplace_fee'], ':seller' => $seller, ':subtotal' => $breakdown['ticket_subtotal'], ':service' => $breakdown['service_fee'],
             ':rate' => $config['service_charge_percent'], ':mpcost' => $config['mp_cost_estimate_percent']));
         tickex_totalcoin_checkout_claim_ready($pdo, $ref, $fingerprint, $preference['request_id'], $preference['payment_url']);
-        return tickex_mobile_door_projection(tickex_mobile_door_order($pdo, $ref));
+        return tickex_mobile_door_projection($pdo, tickex_mobile_door_order($pdo, $ref));
     } catch (Exception $e) {
         tickex_totalcoin_checkout_claim_failed($pdo, $ref, $fingerprint, $e->getMessage());
         throw $e;

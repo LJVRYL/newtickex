@@ -558,12 +558,6 @@ if (!function_exists('tickex_mp_create_preference')) {
                 'quantity' => 1,
                 'unit_price' => $amount,
             )),
-            'payer' => array(
-                'name' => (string)$params['first_name'],
-                'surname' => (string)$params['last_name'],
-                'email' => (string)$params['email'],
-                'identification' => array('type' => 'DNI', 'number' => (string)$params['dni']),
-            ),
             'external_reference' => $ref,
             'marketplace_fee' => $fee,
             'back_urls' => array(
@@ -575,6 +569,15 @@ if (!function_exists('tickex_mp_create_preference')) {
             'notification_url' => $site . '/mercadopago_webhook.php',
             'statement_descriptor' => 'TICKEX',
         );
+        if (!empty($params['email'])) {
+            $payload['payer'] = array(
+                'name' => isset($params['first_name']) ? (string)$params['first_name'] : '',
+                'surname' => isset($params['last_name']) ? (string)$params['last_name'] : '',
+                'email' => (string)$params['email'],
+                'identification' => array('type' => 'DNI', 'number' => isset($params['dni']) ? (string)$params['dni'] : ''),
+            );
+        }
+        if (!empty($params['binary_mode'])) $payload['binary_mode'] = true;
         if (!empty($params['expires_at'])) {
             $payload['expires'] = true;
             $payload['expiration_date_from'] = date('c');
@@ -658,6 +661,16 @@ if (!function_exists('tickex_mp_confirm_payment')) {
             $st = $pdo->prepare('UPDATE tc_orders SET state=:state, provider_payment_id=:payment, updated_at=CURRENT_TIMESTAMP WHERE id=:id');
             $st->execute(array(':state' => $mappedState, ':payment' => $paymentId, ':id' => (int)$order['id']));
             return array('confirmed' => false, 'result' => $status === '' ? 'unknown' : $status);
+        }
+        if (strpos((string)$order['ref'], 'door-') === 0) {
+            $payer = isset($payment['payer']) && is_array($payment['payer']) ? $payment['payer'] : array();
+            $payerEmail = isset($payer['email']) ? strtolower(trim((string)$payer['email'])) : '';
+            if (!filter_var($payerEmail, FILTER_VALIDATE_EMAIL)) $payerEmail = '';
+            $payerFirst = isset($payer['first_name']) ? trim((string)$payer['first_name']) : '';
+            $payerLast = isset($payer['last_name']) ? trim((string)$payer['last_name']) : '';
+            $payerDni = isset($payer['identification']['number']) ? preg_replace('/[^0-9]/', '', (string)$payer['identification']['number']) : '';
+            $stBuyer = $pdo->prepare('UPDATE tc_orders SET buyer_email=:email,buyer_first=:first,buyer_last=:last,buyer_dni=:dni WHERE id=:id AND (payment_status IS NULL OR payment_status <> \'confirmed\')');
+            $stBuyer->execute(array(':email' => $payerEmail, ':first' => $payerFirst !== '' ? $payerFirst : 'Puerta', ':last' => $payerLast, ':dni' => $payerDni, ':id' => (int)$order['id']));
         }
         $st = $pdo->prepare("UPDATE tc_orders SET payment_status='confirmed', payment_confirmed_at=COALESCE(payment_confirmed_at,CURRENT_TIMESTAMP), state='success', provider_payment_id=:payment, updated_at=CURRENT_TIMESTAMP WHERE id=:id AND (payment_status IS NULL OR payment_status IN ('pending','created','confirmed'))");
         $st->execute(array(':payment' => $paymentId, ':id' => (int)$order['id']));

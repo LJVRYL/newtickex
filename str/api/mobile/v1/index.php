@@ -238,7 +238,7 @@ try {
         if (!tickex_mobile_gate_permission($pdo, $client['id'], (int)$doorMatch[1], 'sales_view')) tickex_mobile_response(403, array('error' => 'forbidden'));
         $order = tickex_mobile_door_order($pdo, $doorMatch[2]);
         if (!$order || (int)$order['evento_id'] !== (int)$doorMatch[1]) tickex_mobile_response(404, array('error' => 'not_found'));
-        tickex_mobile_response(200, tickex_mobile_door_projection($order));
+        tickex_mobile_response(200, tickex_mobile_door_projection($pdo, $order));
     }
     if (in_array($method, array('GET', 'POST'), true) && preg_match('~^/staff/events/([1-9][0-9]*)/(stats|search|activity)/?$~', $route, $staffMatch)) {
         $eventId = (int)$staffMatch[1];

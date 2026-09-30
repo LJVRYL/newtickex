@@ -67,6 +67,11 @@ if (!function_exists('tickex_order_send_emails')) {
         $lastError = '';
         $buyerName = trim((isset($order['buyer_first']) ? $order['buyer_first'] : '') . ' ' . (isset($order['buyer_last']) ? $order['buyer_last'] : ''));
         $buyerEmail = isset($order['buyer_email']) ? (string)$order['buyer_email'] : '';
+        if ($buyerEmail === '' && isset($order['ref']) && strpos((string)$order['ref'], 'door-') === 0) {
+            $stMissing = $pdo->prepare("UPDATE tc_orders SET email_status='unavailable',email_last_error='payer_email_unavailable' WHERE id=:id");
+            $stMissing->execute(array(':id' => $orderId));
+            return array('sent' => 0, 'pending' => 0, 'status' => 'unavailable', 'error' => 'payer_email_unavailable');
+        }
         $ticketLines = array();
         $firstDate = '';
         foreach ($entries as $entry) {

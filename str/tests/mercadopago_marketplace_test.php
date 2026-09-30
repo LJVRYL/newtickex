@@ -128,6 +128,7 @@ mp_test_assert(abs($capturedPayload['marketplace_fee'] - 581.15) < 0.001, 'Check
 mp_test_assert(abs($capturedPayload['items'][0]['unit_price'] - 11500) < 0.001, 'Checkout Pro charges the buyer the ticket subtotal plus service cost');
 mp_test_assert($capturedPayload['external_reference'] === 'tickex-mp-test-ref', 'preference carries the internal Tickex reference');
 mp_test_assert(strpos($capturedPayload['notification_url'], 'mercadopago_webhook.php') !== false, 'preference registers the HTTPS webhook');
+mp_test_assert($capturedPayload['payer']['email'] === 'persona@example.invalid', 'normal web checkout still pre-fills buyer details');
 
 $stateUrl = tickex_mp_begin_oauth($pdo, 7);
 parse_str(parse_url($stateUrl, PHP_URL_QUERY), $stateQuery);
