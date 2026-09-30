@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../../inc/mobile_staff.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_gate.php';
 require_once __DIR__ . '/../../../inc/mobile_admin.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
+require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -51,7 +52,7 @@ $publicEvents = $method === 'GET' && ($route === '/events' || preg_match('~^/eve
 $login = $method === 'POST' && $route === '/auth/login';
 $adminLogin = $method === 'POST' && $route === '/auth/admin-login';
 $adminRoute = strpos($route, '/admin/') === 0;
-$privateRoute = in_array($route, array('/auth/logout', '/me', '/me/tickets', '/me/orders', '/staff/events', '/checkout-intents'), true) || preg_match('~^/me/tickets/[1-9][0-9]*/?$~', $route) || preg_match('~^/orders/[1-9][0-9]*/?$~', $route) || preg_match('~^/checkout-intents/mobile-[a-f0-9]{32}/?$~', $route) || preg_match('~^/staff/events/[1-9][0-9]*/(stats|search|activity)/?$~', $route) || in_array($route, array('/staff/check-in', '/staff/check-in/undo'), true);
+$privateRoute = in_array($route, array('/auth/logout', '/me', '/me/tickets', '/me/orders', '/staff/events', '/checkout-intents'), true) || preg_match('~^/me/tickets/[1-9][0-9]*/?$~', $route) || preg_match('~^/orders/[1-9][0-9]*/?$~', $route) || preg_match('~^/checkout-intents/mobile-[a-f0-9]{32}/?$~', $route) || preg_match('~^/staff/events/[1-9][0-9]*/(stats|search|activity|door-types|door-checkouts)/?$~', $route) || preg_match('~^/staff/events/[1-9][0-9]*/door-checkouts/door-[a-f0-9]{32}/?$~', $route) || in_array($route, array('/staff/check-in', '/staff/check-in/undo'), true);
 if (!$publicEvents && !$login && !$adminLogin && !$adminRoute && !$privateRoute) tickex_mobile_response(404, array('error' => 'not_found'));
 
 $dbFile = getenv('TICKEX_DB_FILE');
@@ -217,6 +218,28 @@ try {
     }
     if ($route === '/me/orders' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_orders_for_client($pdo, $client['email']));
     if ($route === '/staff/events' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_staff_events($pdo, $client['id']));
+    if (preg_match('~^/staff/events/([1-9][0-9]*)/door-types/?$~', $route, $doorMatch)) {
+        if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+        if (!tickex_mobile_gate_permission($pdo, $client['id'], (int)$doorMatch[1], 'sales_view')) tickex_mobile_response(403, array('error' => 'forbidden'));
+        tickex_mobile_response(200, tickex_mobile_door_types($pdo, (int)$doorMatch[1]));
+    }
+    if (preg_match('~^/staff/events/([1-9][0-9]*)/door-checkouts/?$~', $route, $doorMatch)) {
+        if (!tickex_mobile_gate_permission($pdo, $client['id'], (int)$doorMatch[1], 'sales_view')) tickex_mobile_response(403, array('error' => 'forbidden'));
+        if ($method === 'GET') tickex_mobile_response(200, tickex_mobile_door_recent($pdo, (int)$doorMatch[1]));
+        if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+        $body = tickex_mobile_body();
+        $key = isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? (string)$_SERVER['HTTP_IDEMPOTENCY_KEY'] : '';
+        $result = tickex_mobile_door_create($pdo, $client['id'], (int)$doorMatch[1], $body, $key);
+        if (isset($result['error'])) tickex_mobile_response(in_array($result['error'], array('sales_paused', 'type_unavailable', 'event_full', 'idempotency_conflict', 'order_pending'), true) ? 409 : 422, $result);
+        tickex_mobile_response(201, $result);
+    }
+    if (preg_match('~^/staff/events/([1-9][0-9]*)/door-checkouts/(door-[a-f0-9]{32})/?$~', $route, $doorMatch)) {
+        if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+        if (!tickex_mobile_gate_permission($pdo, $client['id'], (int)$doorMatch[1], 'sales_view')) tickex_mobile_response(403, array('error' => 'forbidden'));
+        $order = tickex_mobile_door_order($pdo, $doorMatch[2]);
+        if (!$order || (int)$order['evento_id'] !== (int)$doorMatch[1]) tickex_mobile_response(404, array('error' => 'not_found'));
+        tickex_mobile_response(200, tickex_mobile_door_projection($order));
+    }
     if (in_array($method, array('GET', 'POST'), true) && preg_match('~^/staff/events/([1-9][0-9]*)/(stats|search|activity)/?$~', $route, $staffMatch)) {
         $eventId = (int)$staffMatch[1];
         $permission = $staffMatch[2] === 'stats' ? 'dashboard_view' : ($staffMatch[2] === 'activity' ? 'reports_view' : 'tickets_validate');

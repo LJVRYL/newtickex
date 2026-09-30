@@ -575,6 +575,11 @@ if (!function_exists('tickex_mp_create_preference')) {
             'notification_url' => $site . '/mercadopago_webhook.php',
             'statement_descriptor' => 'TICKEX',
         );
+        if (!empty($params['expires_at'])) {
+            $payload['expires'] = true;
+            $payload['expiration_date_from'] = date('c');
+            $payload['expiration_date_to'] = (string)$params['expires_at'];
+        }
         if (is_callable($http)) {
             $response = call_user_func($http, $payload, $account);
         } else {

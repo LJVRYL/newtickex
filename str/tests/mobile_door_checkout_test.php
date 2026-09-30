@@ -1,0 +1,49 @@
+<?php
+require_once __DIR__ . '/../inc/mobile_door_checkout.php';
+
+function door_assert($ok, $label) { if (!$ok) { fwrite(STDERR, 'FAIL: ' . $label . PHP_EOL); exit(1); } echo 'PASS: ' . $label . PHP_EOL; }
+putenv('TICKEX_MP_CLIENT_ID=test-client');
+putenv('TICKEX_MP_CLIENT_SECRET=test-secret');
+putenv('TICKEX_MP_ENCRYPTION_KEY=test-encryption-key-with-enough-entropy');
+putenv('TICKEX_SITE_URL=https://local.test');
+putenv('TICKEX_MP_SANDBOX=true');
+
+$pdo = new PDO('sqlite::memory:');
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE eventos (id INTEGER PRIMARY KEY, nombre TEXT, creado_por_admin_id INTEGER, borrado_en TEXT, capacidad_total INTEGER)');
+$pdo->exec('CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY, evento_id INTEGER, nombre TEXT, precio REAL, cantidad_total INTEGER, cantidad_disponible INTEGER, qr_quantity INTEGER, tipo_venta TEXT)');
+$pdo->exec('CREATE TABLE entradas (id INTEGER PRIMARY KEY, evento_id INTEGER)');
+$pdo->exec("CREATE TABLE tc_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT UNIQUE, state TEXT, evento_id INTEGER, ref TEXT, concept TEXT, amount REAL, buyer_dni TEXT, buyer_last TEXT, buyer_first TEXT, buyer_email TEXT, selected_tickets_json TEXT, payment_url TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT, processed_at TEXT, payment_status TEXT DEFAULT 'pending')");
+$pdo->exec("INSERT INTO eventos VALUES (1,'Fiesta QA',7,NULL,10)");
+$pdo->exec("INSERT INTO tipos_entrada VALUES (3,1,'PUERTA',100,10,10,1,'PUERTA')");
+tickex_mp_ensure_schema($pdo);
+tickex_mp_save_account_tokens($pdo, 7, array('access_token' => 'APP_USR-test', 'refresh_token' => 'TG-test', 'user_id' => '70001', 'expires_in' => 15552000));
+$pdo->exec('UPDATE mercadopago_platform_settings SET enforcement_enabled=1, total_cost_target_percent=15, mp_cost_estimate_percent=7.99 WHERE id=1');
+$buyer = array('ticketTypeId' => '3', 'finalPrice' => 115, 'firstName' => 'Ana', 'lastName' => 'Prueba', 'email' => 'ana@example.invalid', 'dni' => '12345678');
+$calls = 0;
+$payload = null;
+$http = function ($body, $seller) use (&$calls, &$payload) { $calls++; $payload = $body; return array('id' => 'PREF-DOOR-QA', 'sandbox_init_point' => 'https://sandbox.mercadopago.test/checkout/qa'); };
+$result = tickex_mobile_door_create($pdo, 51, 1, $buyer, 'door-request-123456789', $http);
+door_assert(!isset($result['error']) && $result['finalPrice'] === 115.0, 'door QR uses the exact price shown to the buyer');
+door_assert($calls === 1 && $payload['marketplace_fee'] > 0 && $payload['items'][0]['unit_price'] === 115.0, 'seller preference carries split and exact amount');
+door_assert(count(tickex_mobile_door_recent($pdo, 1)) === 1, 'pending checkout can be recovered after reopening the app');
+door_assert(!empty($payload['expires']) && !empty($payload['expiration_date_to']), 'payment preference expires');
+door_assert($pdo->query('SELECT COUNT(*) FROM entradas')->fetchColumn() == 0, 'generating the QR never issues a ticket');
+$order = $pdo->query('SELECT * FROM tc_orders LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+$tickets = json_decode($order['selected_tickets_json'], true);
+door_assert((int)$tickets[0]['id'] === 3 && (int)$tickets[0]['qty'] === 1 && (float)$tickets[0]['price'] === 100.0, 'order is compatible with verified webhook issuance');
+$again = tickex_mobile_door_create($pdo, 51, 1, $buyer, 'door-request-123456789', $http);
+door_assert($again['ref'] === $result['ref'] && $calls === 1, 'idempotent retry never creates another preference');
+$changed = $buyer; $changed['finalPrice'] = 116;
+door_assert(tickex_mobile_door_create($pdo, 51, 1, $changed, 'door-request-123456789', $http)['error'] === 'idempotency_conflict', 'same key cannot change the price');
+$pdo->exec('CREATE TABLE event_sales_control (event_id INTEGER PRIMARY KEY, paused INTEGER)');
+$pdo->exec('INSERT INTO event_sales_control VALUES (1,1)');
+door_assert(tickex_mobile_door_create($pdo, 51, 1, $buyer, 'another-request-123456789', $http)['error'] === 'sales_paused', 'paused sales cannot create a payment QR');
+door_assert($calls === 1, 'blocked sale never calls Mercado Pago');
+$pdo->exec('UPDATE event_sales_control SET paused=0 WHERE event_id=1');
+$pdo->exec('UPDATE tipos_entrada SET cantidad_disponible=0 WHERE id=3');
+door_assert(tickex_mobile_door_create($pdo, 51, 1, $buyer, 'stock-request-123456789', $http)['error'] === 'type_unavailable', 'sold-out door type cannot create a payment QR');
+$pdo->exec('UPDATE tipos_entrada SET cantidad_disponible=10 WHERE id=3');
+$pdo->exec('UPDATE mercadopago_platform_settings SET enforcement_enabled=0 WHERE id=1');
+door_assert(tickex_mobile_door_create($pdo, 51, 1, $buyer, 'policy-request-123456789', $http)['error'] === 'mercadopago_unavailable', 'disabled marketplace policy cannot create a payment QR');
+echo "ALL MOBILE DOOR CHECKOUT TESTS PASSED\n";
