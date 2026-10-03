@@ -14,6 +14,7 @@ require_once __DIR__ . '/../../../inc/mobile_staff_operations.php';
 require_once __DIR__ . '/../../../inc/mobile_event_presentation.php';
 require_once __DIR__ . '/../../../inc/mobile_inventory.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_catalog.php';
+require_once __DIR__ . '/../../../inc/mobile_communication_drafts.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -105,6 +106,23 @@ try {
             $catalog = tickex_mobile_communication_catalog($pdo, $admin, $communicationMatch[1]);
             if (isset($catalog['error'])) tickex_mobile_response(403, $catalog);
             tickex_mobile_response(200, $catalog);
+        }
+        if ($route === '/admin/communication/campaigns/draft' && $method === 'POST') {
+            $draft = tickex_mobile_communication_draft($pdo, $admin, tickex_mobile_body(), 0);
+            if (isset($draft['error'])) tickex_mobile_response($draft['error'] === 'forbidden' ? 403 : 422, $draft);
+            tickex_mobile_response(201, $draft);
+        }
+        if (preg_match('~^/admin/communication/campaigns/([1-9][0-9]*)/draft/?$~', $route, $campaignEdit)) {
+            if ($method !== 'PATCH') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $draft = tickex_mobile_communication_draft($pdo, $admin, tickex_mobile_body(), (int)$campaignEdit[1]);
+            if (isset($draft['error'])) tickex_mobile_response($draft['error'] === 'forbidden' ? 403 : ($draft['error'] === 'not_found' ? 404 : ($draft['error'] === 'campaign_locked' ? 409 : 422)), $draft);
+            tickex_mobile_response(200, $draft);
+        }
+        if (preg_match('~^/admin/communication/campaigns/([1-9][0-9]*)/preview/?$~', $route, $campaignPreview)) {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $preview = tickex_mobile_communication_preview($pdo, $admin, (int)$campaignPreview[1]);
+            if (isset($preview['error'])) tickex_mobile_response($preview['error'] === 'forbidden' ? 403 : 404, $preview);
+            tickex_mobile_response(200, $preview);
         }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');
