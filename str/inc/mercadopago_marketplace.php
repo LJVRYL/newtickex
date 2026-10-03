@@ -568,6 +568,9 @@ if (!function_exists('tickex_mp_create_preference')) {
             'auto_return' => 'approved',
             'notification_url' => $site . '/mercadopago_webhook.php',
             'statement_descriptor' => 'TICKEX',
+            // Tickex only offers payment methods that can approve immediately.
+            'payment_methods' => array('excluded_payment_types' => array(array('id' => 'ticket'))),
+            'binary_mode' => true,
         );
         if (!empty($params['email'])) {
             $payload['payer'] = array(
@@ -577,7 +580,6 @@ if (!function_exists('tickex_mp_create_preference')) {
                 'identification' => array('type' => 'DNI', 'number' => isset($params['dni']) ? (string)$params['dni'] : ''),
             );
         }
-        if (!empty($params['binary_mode'])) $payload['binary_mode'] = true;
         if (!empty($params['expires_at'])) {
             $payload['expires'] = true;
             $payload['expiration_date_from'] = date('c');

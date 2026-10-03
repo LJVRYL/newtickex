@@ -117,6 +117,7 @@ $checkout = tickex_mp_create_preference($pdo, 7, array(
     'event_id' => 15,
     'fee_percent' => $breakdown['marketplace_fee_percent'],
     'marketplace_fee' => $breakdown['marketplace_fee'],
+    'expires_at' => date('c', time() + 15 * 60),
 ), function ($payload, $seller) use (&$capturedPayload) {
     $capturedPayload = $payload;
     return array('id' => 'TEST-PREFERENCE-1', 'sandbox_init_point' => 'https://sandbox.mercadopago.test/checkout?pref_id=TEST-PREFERENCE-1');
@@ -129,6 +130,9 @@ mp_test_assert(abs($capturedPayload['items'][0]['unit_price'] - 11500) < 0.001, 
 mp_test_assert($capturedPayload['external_reference'] === 'tickex-mp-test-ref', 'preference carries the internal Tickex reference');
 mp_test_assert(strpos($capturedPayload['notification_url'], 'mercadopago_webhook.php') !== false, 'preference registers the HTTPS webhook');
 mp_test_assert($capturedPayload['payer']['email'] === 'persona@example.invalid', 'normal web checkout still pre-fills buyer details');
+mp_test_assert(!empty($capturedPayload['binary_mode']), 'web checkout requires immediate approval or rejection');
+mp_test_assert($capturedPayload['payment_methods']['excluded_payment_types'][0]['id'] === 'ticket', 'offline cash voucher is excluded');
+mp_test_assert(!empty($capturedPayload['expires']) && strtotime($capturedPayload['expiration_date_to']) > time(), 'web checkout preference expires after a short window');
 
 $stateUrl = tickex_mp_begin_oauth($pdo, 7);
 parse_str(parse_url($stateUrl, PHP_URL_QUERY), $stateQuery);

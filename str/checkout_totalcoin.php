@@ -1002,6 +1002,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'event_id' => $eventId,
                 'fee_percent' => isset($eventPaymentConfig['marketplace_fee_percent']) ? (float)$eventPaymentConfig['marketplace_fee_percent'] : 0,
                 'marketplace_fee' => $checkoutBreakdown ? (float)$checkoutBreakdown['marketplace_fee'] : 0,
+                'expires_at' => date('c', time() + 15 * 60),
               ));
               $paymentUrl = (string)$mpCheckout['payment_url'];
               $gatewayRequestId = (string)$mpCheckout['request_id'];
