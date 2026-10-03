@@ -5,11 +5,16 @@ if (isset($_SERVER['REQUEST_METHOD']) || isset($_SERVER['REMOTE_ADDR'])) {
     http_response_code(404);
     exit;
 }
-require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/checkout_capacity_reconciliation.php';
 
 try {
-    $result = tickex_capacity_holds_reconcile_due(db(), 50);
+    $configured = getenv('TICKEX_DB_FILE');
+    $dbFile = is_string($configured) && trim($configured) !== '' ? trim($configured) : __DIR__ . '/save_the_rave.sqlite';
+    if (!is_file($dbFile)) throw new RuntimeException('database_unavailable');
+    $pdo = new PDO('sqlite:' . $dbFile);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec('PRAGMA busy_timeout=15000');
+    $result = tickex_capacity_holds_reconcile_due($pdo, 50);
     echo json_encode($result, JSON_UNESCAPED_SLASHES) . PHP_EOL;
 } catch (Exception $error) {
     error_log('[Tickex capacity reconciliation] ' . $error->getMessage());
