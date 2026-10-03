@@ -154,8 +154,22 @@ if (!function_exists('tickex_customer_portal_change_password')) {
         if (hash_equals((string)$current, (string)$next)) return array(false, 'Elegí una contraseña diferente a la actual.');
         $hash = password_hash((string)$next, PASSWORD_DEFAULT);
         if (!$hash) return array(false, 'No pudimos proteger la contraseña nueva.');
-        $st = $pdo->prepare('UPDATE registro_pendientes SET password_hash=:hash WHERE id=:id');
-        $st->execute(array(':hash' => $hash, ':id' => (int)$usuarioId));
+        $ownedTransaction = !$pdo->inTransaction();
+        if ($ownedTransaction) $pdo->beginTransaction();
+        try {
+            $st = $pdo->prepare('UPDATE registro_pendientes SET password_hash=:hash WHERE id=:id AND password_hash=:old_hash');
+            $st->execute(array(':hash' => $hash, ':id' => (int)$usuarioId, ':old_hash' => (string)$user['password_hash']));
+            if ($st->rowCount() !== 1) throw new RuntimeException('La contraseña cambió durante la solicitud.');
+            $hasTokens = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mobile_auth_tokens' LIMIT 1")->fetchColumn();
+            if ($hasTokens) {
+                $revoke = $pdo->prepare('UPDATE mobile_auth_tokens SET revoked_at=CURRENT_TIMESTAMP WHERE cliente_id=:id AND revoked_at IS NULL');
+                $revoke->execute(array(':id' => (int)$usuarioId));
+            }
+            if ($ownedTransaction) $pdo->commit();
+        } catch (Exception $error) {
+            if ($ownedTransaction && $pdo->inTransaction()) $pdo->rollBack();
+            return array(false, 'No pudimos actualizar la contraseña. Intentá nuevamente.');
+        }
         return array(true, 'Contraseña actualizada correctamente.');
     }
 }

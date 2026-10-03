@@ -79,6 +79,22 @@ if (!function_exists('tickex_password_reset_update_accounts')) {
                 // Algunas instalaciones históricas no contienen todas las tablas.
             }
         }
+        if ($updated > 0) {
+            $tokenTables = array(
+                array('table' => 'mobile_admin_tokens', 'owner' => 'admin_id', 'accounts' => 'usuarios_admin'),
+                array('table' => 'mobile_auth_tokens', 'owner' => 'cliente_id', 'accounts' => 'registro_pendientes'),
+            );
+            foreach ($tokenTables as $tokenTable) {
+                $exists = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name LIMIT 1");
+                $exists->execute(array(':name' => $tokenTable['table']));
+                if (!$exists->fetchColumn()) continue;
+                $exists->execute(array(':name' => $tokenTable['accounts']));
+                if (!$exists->fetchColumn()) continue;
+                $revoke = $pdo->prepare('UPDATE ' . $tokenTable['table'] . ' SET revoked_at = CURRENT_TIMESTAMP WHERE '
+                    . $tokenTable['owner'] . ' IN (SELECT id FROM ' . $tokenTable['accounts'] . ' WHERE email = :email COLLATE NOCASE) AND revoked_at IS NULL');
+                $revoke->execute(array(':email' => $normalized));
+            }
+        }
         return $updated;
     }
 }

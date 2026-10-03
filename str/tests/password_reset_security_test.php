@@ -6,8 +6,13 @@ $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE usuarios (id INTEGER PRIMARY KEY, email TEXT NOT NULL)');
 $pdo->exec('CREATE TABLE usuarios_admin (id INTEGER PRIMARY KEY, email TEXT NOT NULL, password TEXT)');
 $pdo->exec('CREATE TABLE registro_pendientes (id INTEGER PRIMARY KEY, email TEXT NOT NULL, password_hash TEXT)');
+$pdo->exec('CREATE TABLE mobile_admin_tokens (token_hash TEXT PRIMARY KEY, admin_id INTEGER, revoked_at TEXT)');
+$pdo->exec('CREATE TABLE mobile_auth_tokens (token_hash TEXT PRIMARY KEY, cliente_id INTEGER, revoked_at TEXT)');
 $pdo->exec("INSERT INTO usuarios (id,email) VALUES (1,'persona@example.com')");
 $pdo->exec("INSERT INTO usuarios_admin (id,email,password) VALUES (2,'admin@example.com','legacy')");
+$pdo->exec("INSERT INTO registro_pendientes (id,email,password_hash) VALUES (3,'buyer@example.com','legacy'),(4,'other@example.com','legacy')");
+$pdo->exec("INSERT INTO mobile_admin_tokens VALUES ('admin-token',2,NULL)");
+$pdo->exec("INSERT INTO mobile_auth_tokens VALUES ('buyer-token',3,NULL),('other-token',4,NULL)");
 
 function password_reset_assert($condition, $message)
 {
@@ -26,6 +31,10 @@ password_reset_assert(!tickex_password_reset_account_exists($pdo, 'inventado@exa
 $newHash = password_hash('nueva-clave-segura', PASSWORD_DEFAULT);
 password_reset_assert(tickex_password_reset_update_accounts($pdo, 'ADMIN@example.com', $newHash) === 1, 'password reset updates the administrator account');
 password_reset_assert(password_verify('nueva-clave-segura', $pdo->query("SELECT password FROM usuarios_admin WHERE id=2")->fetchColumn()), 'administrator password is stored as a one-way hash');
+password_reset_assert($pdo->query("SELECT revoked_at FROM mobile_admin_tokens WHERE token_hash='admin-token'")->fetchColumn() !== null, 'administrator reset revokes the mobile session');
+password_reset_assert(tickex_password_reset_update_accounts($pdo, 'BUYER@example.com', $newHash) === 1, 'buyer password reset updates the account');
+password_reset_assert($pdo->query("SELECT revoked_at FROM mobile_auth_tokens WHERE token_hash='buyer-token'")->fetchColumn() !== null, 'buyer reset revokes the mobile session');
+password_reset_assert($pdo->query("SELECT revoked_at FROM mobile_auth_tokens WHERE token_hash='other-token'")->fetchColumn() === null, 'another buyer session remains active');
 
 $first = tickex_password_reset_create_token($pdo, 'persona@example.com');
 $second = tickex_password_reset_create_token($pdo, 'PERSONA@example.com');

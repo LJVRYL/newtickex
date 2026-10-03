@@ -10,12 +10,14 @@ function customer_assert($condition, $message)
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec("CREATE TABLE registro_pendientes(id INTEGER PRIMARY KEY,email TEXT,nombre TEXT,apellido TEXT,apodo TEXT,dni TEXT,genero TEXT,creado_en TEXT,completado_en TEXT,password_hash TEXT)");
+$pdo->exec("CREATE TABLE mobile_auth_tokens(token_hash TEXT PRIMARY KEY,cliente_id INTEGER,revoked_at TEXT)");
 $pdo->exec("CREATE TABLE eventos(id INTEGER PRIMARY KEY,nombre TEXT,slug TEXT,fecha_desde TEXT,fecha_hasta TEXT,flyer_filename TEXT)");
 $pdo->exec("CREATE TABLE entradas(id INTEGER PRIMARY KEY,nombre TEXT,email TEXT,codigo TEXT,tipo TEXT,monto_pagado REAL,evento_id INTEGER,fecha_registro TEXT,checked_in INTEGER,checked_in_at TEXT,oculto INTEGER DEFAULT 0)");
 $hash = password_hash('clave-anterior', PASSWORD_DEFAULT);
 $insertUser = $pdo->prepare("INSERT INTO registro_pendientes VALUES(1,'buyer@example.com','Ada','Compradora','ada','12345678','X','2026-01-01','2026-01-01',:hash)");
 $insertUser->execute(array(':hash' => $hash));
 $pdo->exec("INSERT INTO registro_pendientes VALUES(2,'other@example.com','Otra','Persona','','','','2026-01-01','2026-01-01','x')");
+$pdo->exec("INSERT INTO mobile_auth_tokens VALUES('buyer-token',1,NULL),('other-token',2,NULL)");
 $pdo->exec("INSERT INTO eventos VALUES(10,'Evento futuro','futuro','2099-10-10','2099-10-10',''),(20,'Evento pasado','pasado','2000-01-01','2000-01-01','')");
 $pdo->exec("INSERT INTO entradas VALUES
  (101,'Ada','buyer@example.com','AAA','General',20000,10,'2026-01-01',0,NULL,0),
@@ -48,6 +50,8 @@ list($changedPassword) = tickex_customer_portal_change_password($pdo, 1, 'clave-
 customer_assert($changedPassword, 'buyer can change the password securely');
 $updated = tickex_customer_portal_user($pdo, 1);
 customer_assert(password_verify('clave-nueva-segura', $updated['password_hash']), 'new password is stored as a one-way hash');
+customer_assert($pdo->query("SELECT revoked_at FROM mobile_auth_tokens WHERE token_hash='buyer-token'")->fetchColumn() !== null, 'password change revokes buyer mobile session');
+customer_assert($pdo->query("SELECT revoked_at FROM mobile_auth_tokens WHERE token_hash='other-token'")->fetchColumn() === null, 'other buyer mobile session remains valid');
 
 $sent = 0;
 $sender = function ($ticket, $url) use (&$sent) { $sent++; return $ticket['id'] == 101 && strpos($url, '/entrada/') !== false; };
