@@ -53,3 +53,19 @@ function tickex_mobile_communication_audience_save($pdo, $admin, $body, $audienc
     }
     return array('id' => (string)$audienceId, 'name' => $name, 'slug' => $slug, 'status' => $status, 'filters' => $normalized);
 }
+
+function tickex_mobile_communication_audience_estimate($pdo, $admin, $audienceId, $counter = null)
+{
+    if (!tickex_mobile_communication_allowed($admin)) return array('error' => 'forbidden');
+    $isSuper = tickex_mobile_communication_super($admin);
+    $adminId = (int)$admin['id'];
+    $read = $pdo->prepare('SELECT id, filters_json FROM communication_audiences WHERE id=:id AND organization_id=1 AND status<>"deleted" AND (:super=1 OR created_by_admin_id=:admin) LIMIT 1');
+    $read->execute(array(':id' => (int)$audienceId, ':super' => $isSuper ? 1 : 0, ':admin' => $adminId));
+    $audience = $read->fetch(PDO::FETCH_ASSOC);
+    if (!$audience) return array('error' => 'not_found');
+    $filters = communication_contacts_filters_from_json($audience['filters_json']);
+    if (isset($filters['event_id']) && !tickex_mobile_admin_can_event($pdo, $admin, (int)$filters['event_id'])) return array('error' => 'event_forbidden');
+    $scope = array('is_super' => $isSuper, 'admin_id' => $adminId);
+    $count = $counter ? call_user_func($counter, $pdo, $filters, $scope) : communication_contacts_count($pdo, $filters, $scope);
+    return array('audienceId' => (string)$audienceId, 'estimatedRecipients' => (int)$count);
+}

@@ -17,5 +17,13 @@ audience_assert(tickex_mobile_communication_audience_save($pdo, $owner, array('n
 audience_assert(tickex_mobile_communication_audience_save($pdo, $owner, array('name' => 'Invalida', 'filters' => array('source' => 'unknown')), 0)['error'] === 'invalid_filters', 'invalid filters rejected');
 $changed = tickex_mobile_communication_audience_save($pdo, $owner, array('name' => 'Compradores VIP', 'status' => 'archived', 'filters' => array('event_id' => 11)), $id);
 audience_assert($changed['status'] === 'archived', 'owned audience can be archived');
+$estimate = tickex_mobile_communication_audience_estimate($pdo, $owner, $id, function ($db, $filters, $scope) {
+    audience_assert($filters['event_id'] === 11 && $scope['admin_id'] === 2 && !$scope['is_super'], 'estimate uses scoped contact resolver');
+    return 7;
+});
+audience_assert($estimate['estimatedRecipients'] === 7, 'estimate returns count only');
+audience_assert(tickex_mobile_communication_audience_estimate($pdo, $other, $id, function () { return 9; })['error'] === 'not_found', 'foreign audience estimate denied');
+$pdo->exec('UPDATE communication_audiences SET filters_json = \'{"event_id":12}\' WHERE id = ' . $id);
+audience_assert(tickex_mobile_communication_audience_estimate($pdo, $owner, $id, function () { return 9; })['error'] === 'event_forbidden', 'legacy foreign event filter denied');
 audience_assert((int)$pdo->query('SELECT COUNT(*) FROM communication_audiences')->fetchColumn() === 1, 'invalid or cross-owner edits create no data');
 echo 'mobile communication audiences PASS' . PHP_EOL;

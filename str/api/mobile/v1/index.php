@@ -131,6 +131,12 @@ try {
             if (isset($audience['error'])) tickex_mobile_response($audience['error'] === 'not_found' ? 404 : ($audience['error'] === 'forbidden' || $audience['error'] === 'event_forbidden' ? 403 : 422), $audience);
             tickex_mobile_response(200, $audience);
         }
+        if (preg_match('~^/admin/communication/audiences/([1-9][0-9]*)/estimate/?$~', $route, $audienceEstimate)) {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $estimate = tickex_mobile_communication_audience_estimate($pdo, $admin, (int)$audienceEstimate[1]);
+            if (isset($estimate['error'])) tickex_mobile_response($estimate['error'] === 'not_found' ? 404 : 403, $estimate);
+            tickex_mobile_response(200, $estimate);
+        }
         if ($route === '/admin/communication/campaigns/draft' && $method === 'POST') {
             $draft = tickex_mobile_communication_draft($pdo, $admin, tickex_mobile_body(), 0);
             if (isset($draft['error'])) tickex_mobile_response($draft['error'] === 'forbidden' ? 403 : 422, $draft);
