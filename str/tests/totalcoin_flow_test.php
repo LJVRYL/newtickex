@@ -35,6 +35,7 @@ $pdo->exec("INSERT OR REPLACE INTO tipos_entrada (id, evento_id, nombre, tipo, p
 $pdo->exec("INSERT OR REPLACE INTO tipos_entrada (id, evento_id, nombre, tipo, precio, cantidad_total, cantidad_disponible, qr_quantity) VALUES (9, 1, 'Paquete de cuatro', 'paga', 300, 8, 8, 4)");
 
 require_once __DIR__ . '/../inc/order_processing.php';
+require_once __DIR__ . '/../inc/event_sales_control.php';
 
 // La prueba corre sobre una copia que puede contener entradas históricas del
 // evento #1. Reservar cupo dentro de esa copia evita que esos datos ajenos al
@@ -120,10 +121,13 @@ tickex_capacity_holds_reserve($pdo, 1, 'held-ref', $heldTickets, date('c', time(
 $stockAfterHold = (int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=7')->fetchColumn();
 $pdo->prepare("INSERT INTO tc_orders (request_id,state,evento_id,ref,amount,buyer_first,buyer_last,buyer_email,selected_tickets_json,payment_status) VALUES ('held-rid','created',1,'held-ref',100,'Held','Buyer','held@example.invalid',:tickets,'confirmed')")->execute(array(':tickets' => json_encode($heldTickets)));
 $heldOrder = $pdo->query("SELECT * FROM tc_orders WHERE request_id='held-rid'")->fetch(PDO::FETCH_ASSOC);
+tickex_event_sales_set_paused($pdo, 1, 1, true, 'Local in-flight order test');
+test_ok(tickex_event_sales_paused($pdo, 1), 'event sale is paused before a prior paid order is issued');
 $heldResult = process_tc_order_row($pdo, $heldOrder);
-test_ok(!empty($heldResult['processed']), 'confirmed order with a hold is issued');
+test_ok(!empty($heldResult['processed']), 'confirmed order with a hold is issued despite a later sales pause');
 test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=7')->fetchColumn() === $stockAfterHold, 'reserved stock is not subtracted twice at issuance');
 test_ok((string)$pdo->query("SELECT status FROM checkout_capacity_holds WHERE ref='held-ref'")->fetchColumn() === 'consumed', 'hold and ticket issuance commit together');
+tickex_event_sales_set_paused($pdo, 1, 1, false, 'Local test resumed');
 
 $pdo->prepare("INSERT INTO tc_orders (request_id,state,evento_id,ref,amount,buyer_first,buyer_last,buyer_email,selected_tickets_json,payment_status) VALUES ('door-mail-rid','created',1,'door-no-payer-email',100,'Puerta','','',:tickets,'confirmed')")->execute(array(':tickets' => json_encode($heldTickets)));
 $doorMailOrder = $pdo->query("SELECT * FROM tc_orders WHERE request_id='door-mail-rid'")->fetch(PDO::FETCH_ASSOC);
