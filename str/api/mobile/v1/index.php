@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../../inc/mobile_inventory.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_catalog.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_drafts.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_audiences.php';
+require_once __DIR__ . '/../../../inc/mobile_communication_templates.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -108,10 +109,21 @@ try {
                 if (isset($audience['error'])) tickex_mobile_response($audience['error'] === 'forbidden' || $audience['error'] === 'event_forbidden' ? 403 : 422, $audience);
                 tickex_mobile_response(201, $audience);
             }
+            if ($communicationMatch[1] === 'templates' && $method === 'POST') {
+                $template = tickex_mobile_communication_template_save($pdo, $admin, tickex_mobile_body(), 0);
+                if (isset($template['error'])) tickex_mobile_response($template['error'] === 'forbidden' ? 403 : 422, $template);
+                tickex_mobile_response(201, $template);
+            }
             if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
             $catalog = tickex_mobile_communication_catalog($pdo, $admin, $communicationMatch[1]);
             if (isset($catalog['error'])) tickex_mobile_response(403, $catalog);
             tickex_mobile_response(200, $catalog);
+        }
+        if (preg_match('~^/admin/communication/templates/([1-9][0-9]*)/?$~', $route, $templateEdit)) {
+            if ($method !== 'PATCH') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $template = tickex_mobile_communication_template_save($pdo, $admin, tickex_mobile_body(), (int)$templateEdit[1]);
+            if (isset($template['error'])) tickex_mobile_response($template['error'] === 'not_found' ? 404 : ($template['error'] === 'forbidden' ? 403 : ($template['error'] === 'system_locked' ? 409 : 422)), $template);
+            tickex_mobile_response(200, $template);
         }
         if (preg_match('~^/admin/communication/audiences/([1-9][0-9]*)/?$~', $route, $audienceEdit)) {
             if ($method !== 'PATCH') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
