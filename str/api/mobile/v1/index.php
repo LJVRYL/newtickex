@@ -171,6 +171,23 @@ try {
                 tickex_mobile_response(200, $result);
             }
         }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/staff/roles/?$~', $route, $adminRoles)) {
+            $eventId = (int)$adminRoles[1];
+            if ($method === 'GET') $result = tickex_mobile_admin_roles($pdo, $admin, $eventId);
+            elseif ($method === 'POST') $result = tickex_mobile_admin_create_role($pdo, $admin, $eventId, tickex_mobile_body());
+            else tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'role_exists' ? 409 : 422), $result);
+            tickex_mobile_response(200, $result);
+        }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/staff/roles/([1-9][0-9]*)/?$~', $route, $adminRole)) {
+            $eventId = (int)$adminRole[1];
+            $roleId = (int)$adminRole[2];
+            if ($method === 'PATCH') $result = tickex_mobile_admin_update_role($pdo, $admin, $eventId, $roleId, tickex_mobile_body());
+            elseif ($method === 'DELETE') $result = tickex_mobile_admin_delete_role($pdo, $admin, $eventId, $roleId);
+            else tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'not_found' ? 404 : ($result['error'] === 'role_in_use' ? 409 : 422)), $result);
+            tickex_mobile_response(200, $result);
+        }
         if (preg_match('~^/admin/events/([1-9][0-9]*)/sales-control/?$~', $route, $salesControl)) {
             $eventId = (int)$salesControl[1];
             if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) tickex_mobile_response(403, array('error' => 'forbidden'));

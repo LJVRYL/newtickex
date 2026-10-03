@@ -304,6 +304,75 @@ function tickex_mobile_admin_assign_staff($pdo, $admin, $eventId, $clientId, $ro
     else tickex_staff_remove_event($pdo, $ownerId, (int)$admin['id'], $clientId, $eventId);
     return tickex_mobile_admin_staff($pdo, $admin, $eventId);
 }
+function tickex_mobile_admin_roles($pdo, $admin, $eventId)
+{
+    $ownerId = tickex_mobile_admin_event_owner($pdo, $admin, $eventId);
+    if ($ownerId <= 0) return array('error' => 'forbidden');
+    $rows = tickex_staff_roles_get_all($pdo, $ownerId);
+    $roles = array();
+    foreach ($rows as $row) $roles[] = array('id' => (string)$row['id'], 'code' => (string)$row['code'], 'name' => (string)$row['name'], 'permissions' => array_values($row['permissions']), 'isSystem' => (int)$row['is_system'] === 1);
+    return array('eventId' => (string)$eventId, 'catalog' => tickex_staff_roles_permissions_catalog(), 'roles' => $roles);
+}
+function tickex_mobile_admin_role_fields($body)
+{
+    $name = isset($body['name']) ? trim((string)$body['name']) : '';
+    $permissions = isset($body['permissions']) ? $body['permissions'] : null;
+    if ($name === '' || strlen($name) > 80 || !is_array($permissions)) return null;
+    $catalog = tickex_staff_roles_permissions_catalog();
+    $valid = array();
+    foreach ($permissions as $permission) {
+        if (!is_string($permission) || !isset($catalog[$permission])) return null;
+        $valid[$permission] = true;
+    }
+    return array('name' => $name, 'permissions' => array_keys($valid));
+}
+function tickex_mobile_admin_create_role($pdo, $admin, $eventId, $body)
+{
+    $ownerId = tickex_mobile_admin_event_owner($pdo, $admin, $eventId);
+    if ($ownerId <= 0) return array('error' => 'forbidden');
+    $fields = tickex_mobile_admin_role_fields($body);
+    $code = isset($body['code']) ? trim((string)$body['code']) : '';
+    if (!$fields || !preg_match('/^[a-z][a-z0-9_-]{1,39}$/', $code)) return array('error' => 'invalid_role');
+    $existing = $pdo->prepare('SELECT 1 FROM staff_roles WHERE owner_admin_id = :owner AND code = :code LIMIT 1');
+    $existing->execute(array(':owner' => $ownerId, ':code' => $code));
+    if ($existing->fetchColumn()) return array('error' => 'role_exists');
+    $insert = $pdo->prepare("INSERT INTO staff_roles (owner_admin_id, code, name, permissions_json, is_system, activo, created_at) VALUES (:owner, :code, :name, :permissions, 0, 1, datetime('now'))");
+    $insert->execute(array(':owner' => $ownerId, ':code' => $code, ':name' => $fields['name'], ':permissions' => json_encode($fields['permissions'])));
+    tickex_staff_audit($pdo, $ownerId, (int)$admin['id'], 'role_created', null, null, array('code' => $code, 'permissions' => $fields['permissions']));
+    return tickex_mobile_admin_roles($pdo, $admin, $eventId);
+}
+function tickex_mobile_admin_update_role($pdo, $admin, $eventId, $roleId, $body)
+{
+    $ownerId = tickex_mobile_admin_event_owner($pdo, $admin, $eventId);
+    if ($ownerId <= 0) return array('error' => 'forbidden');
+    $fields = tickex_mobile_admin_role_fields($body);
+    if (!$fields) return array('error' => 'invalid_role');
+    $update = $pdo->prepare("UPDATE staff_roles SET name = :name, permissions_json = :permissions, updated_at = datetime('now') WHERE id = :id AND owner_admin_id = :owner AND activo = 1");
+    $update->execute(array(':name' => $fields['name'], ':permissions' => json_encode($fields['permissions']), ':id' => $roleId, ':owner' => $ownerId));
+    if (!$update->rowCount()) return array('error' => 'not_found');
+    tickex_staff_audit($pdo, $ownerId, (int)$admin['id'], 'role_updated', null, null, array('role_id' => $roleId, 'permissions' => $fields['permissions']));
+    return tickex_mobile_admin_roles($pdo, $admin, $eventId);
+}
+function tickex_mobile_admin_delete_role($pdo, $admin, $eventId, $roleId)
+{
+    $ownerId = tickex_mobile_admin_event_owner($pdo, $admin, $eventId);
+    if ($ownerId <= 0) return array('error' => 'forbidden');
+    $role = $pdo->prepare('SELECT code, is_system FROM staff_roles WHERE id = :id AND owner_admin_id = :owner AND activo = 1 LIMIT 1');
+    $role->execute(array(':id' => $roleId, ':owner' => $ownerId));
+    $found = $role->fetch(PDO::FETCH_ASSOC);
+    if (!$found) return array('error' => 'not_found');
+    if ((int)$found['is_system'] === 1) return array('error' => 'system_role');
+    $used = $pdo->prepare("SELECT 1 FROM staff_admins WHERE owner_admin_id = :owner AND activo = 1 AND rol_staff = :code LIMIT 1");
+    $used->execute(array(':owner' => $ownerId, ':code' => $found['code']));
+    if ($used->fetchColumn()) return array('error' => 'role_in_use');
+    $used = $pdo->prepare('SELECT 1 FROM staff_eventos se JOIN eventos e ON e.id = se.evento_id WHERE e.creado_por_admin_id = :owner AND se.rol_staff = :code LIMIT 1');
+    $used->execute(array(':owner' => $ownerId, ':code' => $found['code']));
+    if ($used->fetchColumn()) return array('error' => 'role_in_use');
+    $delete = $pdo->prepare('DELETE FROM staff_roles WHERE id = :id AND owner_admin_id = :owner AND is_system = 0');
+    $delete->execute(array(':id' => $roleId, ':owner' => $ownerId));
+    tickex_staff_audit($pdo, $ownerId, (int)$admin['id'], 'role_deleted', null, null, array('code' => $found['code']));
+    return tickex_mobile_admin_roles($pdo, $admin, $eventId);
+}
 function tickex_mobile_admin_send_ticket($pdo, $admin, $eventId, $body, $idempotencyKey)
 {
     if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) return array('error' => 'forbidden');
