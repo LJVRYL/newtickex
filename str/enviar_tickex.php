@@ -356,7 +356,7 @@ include __DIR__.'/inc/layout_top.php';
 
   <?php
     // Buscar últimos Tickex emitidos manualmente mediante una orden auditable.
-    $where = "WHERE en.tc_order_request_id LIKE 'manual-%'";
+    $where = "WHERE (en.tc_order_request_id LIKE 'manual-%' OR en.tc_order_request_id LIKE 'mobile-manual-%')";
     $params = array();
     if ($rol === 'admin_evento') {
       $where .= ' AND ev.creado_por_admin_id=:history_admin';
@@ -400,7 +400,9 @@ include __DIR__.'/inc/layout_top.php';
             <td data-label="Fecha"><?php echo e($u['fecha_registro']); ?></td>
             <td data-label="Acciones" style="white-space:nowrap;">
               <a class="btn secondary" style="padding:6px 10px;" href="ticket.php?c=<?php echo urlencode((string)$u['codigo']); ?>" target="_blank" rel="noopener" title="Ver ticket" aria-label="Ver ticket">👁</a>
-              <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este Tickex?');"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="delete_tickex"><input type="hidden" name="tickex_id" value="<?php echo (int)$u['id']; ?>"><button class="btn danger" style="padding:6px 10px;" type="submit" title="Eliminar" aria-label="Eliminar">🗑</button></form>
+              <?php if (strpos((string)$u['tc_order_request_id'], 'manual-') === 0): ?>
+                <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar este Tickex?');"><input type="hidden" name="_csrf" value="<?php echo e(tickex_csrf_token()); ?>"><input type="hidden" name="action" value="delete_tickex"><input type="hidden" name="tickex_id" value="<?php echo (int)$u['id']; ?>"><button class="btn danger" style="padding:6px 10px;" type="submit" title="Eliminar" aria-label="Eliminar">🗑</button></form>
+              <?php else: ?><span class="muted">Desde app</span><?php endif; ?>
             </td>
           </tr>
         <?php endforeach; ?>
