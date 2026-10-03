@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../../inc/mobile_orders.php';
 require_once __DIR__ . '/../../../inc/mobile_staff.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_gate.php';
 require_once __DIR__ . '/../../../inc/mobile_admin.php';
+require_once __DIR__ . '/../../../inc/mobile_staff_operations.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -186,6 +187,13 @@ try {
             elseif ($method === 'DELETE') $result = tickex_mobile_admin_delete_role($pdo, $admin, $eventId, $roleId);
             else tickex_mobile_response(405, array('error' => 'method_not_allowed'));
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'not_found' ? 404 : ($result['error'] === 'role_in_use' ? 409 : 422)), $result);
+            tickex_mobile_response(200, $result);
+        }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/staff/operations/?$~', $route, $adminOperations)) {
+            if ($method === 'GET') $result = tickex_mobile_admin_staff_operations($pdo, $admin, (int)$adminOperations[1]);
+            elseif ($method === 'POST') $result = tickex_mobile_admin_staff_action($pdo, $admin, (int)$adminOperations[1], tickex_mobile_body());
+            else tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'staff_not_assigned' || $result['error'] === 'task_not_found' ? 404 : 422), $result);
             tickex_mobile_response(200, $result);
         }
         if (preg_match('~^/admin/events/([1-9][0-9]*)/sales-control/?$~', $route, $salesControl)) {

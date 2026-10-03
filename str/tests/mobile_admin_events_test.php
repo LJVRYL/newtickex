@@ -6,6 +6,7 @@ function tickex_mobile_datetime($value)
     return $timestamp === false ? null : date('c', $timestamp);
 }
 require_once __DIR__ . '/../inc/mobile_admin.php';
+require_once __DIR__ . '/../inc/mobile_staff_operations.php';
 function admin_event_assert($condition, $message)
 {
     if (!$condition) { fwrite(STDERR, "FAIL: " . $message . "\n"); exit(1); }
@@ -68,6 +69,26 @@ admin_event_assert(tickex_mobile_admin_delete_role($pdo, $owner, $eventId, $cust
 tickex_mobile_admin_assign_staff($pdo, $owner, (int)$secondEvent['id'], 101, '', false);
 admin_event_assert(!isset(tickex_mobile_admin_delete_role($pdo, $owner, $eventId, $customRoleId)['error']), 'deletes unused custom role');
 admin_event_assert(tickex_mobile_admin_delete_role($pdo, $owner, $eventId, 1)['error'] === 'system_role', 'cannot delete system role');
+tickex_mobile_admin_assign_staff($pdo, $owner, $eventId, 101, 'puerta', true);
+$pdo->exec("UPDATE staff_eventos SET attendance_status = 'present', settlement_status = 'paid', settled_amount = 55 WHERE staff_id = 101 AND evento_id = $eventId");
+$pdo->exec("INSERT INTO staff_shifts (owner_admin_id, staff_id, evento_id, starts_at, area) VALUES (7, 101, $eventId, '2026-10-05 20:00:00', 'Puerta')");
+$pdo->exec("INSERT INTO staff_tasks (owner_admin_id, evento_id, assigned_staff_id, title) VALUES (7, $eventId, 101, 'Preparar ingreso')");
+$operations = tickex_mobile_admin_staff_operations($pdo, $owner, $eventId);
+admin_event_assert($operations['summary']['assigned'] === 1 && $operations['summary']['present'] === 1 && $operations['summary']['tasks'] === 1, 'staff operations summary matches assigned team');
+admin_event_assert(count($operations['members']) === 1 && count($operations['shifts']) === 1 && count($operations['tasks']) === 1, 'staff operations stay within event');
+admin_event_assert(tickex_mobile_admin_staff_operations($pdo, $other, $eventId)['error'] === 'forbidden', 'other producer cannot read staff operations');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $other, $eventId, array('action' => 'attendance', 'clientId' => 101, 'status' => 'absent'))['error'] === 'forbidden', 'other producer cannot change attendance');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'attendance', 'clientId' => 102, 'status' => 'present'))['error'] === 'staff_not_assigned', 'cannot change another team member');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'attendance', 'clientId' => 101, 'status' => 'absent'))['members'][0]['attendance'] === 'absent', 'updates assigned staff attendance');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'settlement', 'clientId' => 101, 'amount' => 30, 'paid' => true))['members'][0]['settledAmount'] === 30.0, 'records staff settlement');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'settlement', 'clientId' => 101, 'amount' => -1, 'paid' => true))['error'] === 'invalid_settlement', 'rejects negative settlement');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_shift', 'clientId' => 101, 'startsAt' => 'yesterday'))['error'] === 'invalid_shift', 'rejects relative shift date');
+admin_event_assert(count(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_shift', 'clientId' => 101, 'startsAt' => '2026-10-05T22:00:00-03:00'))['shifts']) === 2, 'creates shift for assigned staff');
+$tasks = tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_task', 'clientId' => 101, 'title' => 'Revisar fila'));
+admin_event_assert(count($tasks['tasks']) === 2, 'creates staff task');
+$taskId = (int)$pdo->query("SELECT MAX(id) FROM staff_tasks WHERE evento_id = $eventId")->fetchColumn();
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'task_status', 'taskId' => $taskId, 'status' => 'done'))['summary']['tasksDone'] === 1, 'completes own event task');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, (int)$secondEvent['id'], array('action' => 'task_status', 'taskId' => $taskId, 'status' => 'done'))['error'] === 'task_not_found', 'cannot change task through another event');
 $pdo->exec('CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY, evento_id INTEGER, nombre TEXT, tipo TEXT NOT NULL, tipo_venta TEXT, precio REAL, cantidad_total INTEGER, cantidad_disponible INTEGER, visible_publico INTEGER, qr_quantity INTEGER, activo INTEGER)');
 $pdo->exec("INSERT INTO tipos_entrada (id, evento_id, nombre, tipo, tipo_venta, precio, cantidad_total, cantidad_disponible, visible_publico, qr_quantity, activo) VALUES (10, $eventId, 'General', 'PAGA', 'PAGA', 100, 20, 20, 1, 1, 1)");
 $stock = tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 20, 'available' => 5, 'visible' => false));
