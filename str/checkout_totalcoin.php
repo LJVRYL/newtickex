@@ -746,6 +746,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $mobileIntentState = tickex_mobile_checkout_intent_guard(db(), $ref, $eventId, $action === 'pay' ? (isset($_POST['email']) ? $_POST['email'] : $defaults['email']) : null);
       if ($mobileIntentState === 'invalid_intent') $errors[] = 'Esta compra iniciada en la app venció o no corresponde al evento. Volvé a iniciarla desde Tickex.';
       if ($mobileIntentState === 'email_mismatch') $errors[] = 'Usá el mismo email de tu cuenta Tickex en la app para que la entrada aparezca en Mis Tickex. No se inició ningún pago.';
+      if ($mobileIntentState === 'already_started') $errors[] = 'Esta compra ya tiene un intento de pago. Volvé a la app para consultar su estado; si fue rechazado, iniciá una compra nueva.';
     } catch (Exception $e) {
       $errors[] = 'No pudimos verificar la compra iniciada en la app. Intentá nuevamente; no se inició ningún pago.';
     }

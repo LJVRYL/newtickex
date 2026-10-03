@@ -14,6 +14,11 @@ function tickex_mobile_checkout_intent_guard($pdo, $ref, $eventId, $buyerEmail)
     $intent = $read->fetch(PDO::FETCH_ASSOC);
     if (!$intent || (int)$intent['evento_id'] !== (int)$eventId || strtotime((string)$intent['expires_at']) <= time()) return 'invalid_intent';
     if ($buyerEmail !== null && strcasecmp(trim((string)$intent['email']), trim((string)$buyerEmail)) !== 0) return 'email_mismatch';
+    if ($buyerEmail !== null) {
+        $existing = $pdo->prepare('SELECT 1 FROM tc_orders WHERE ref = :ref AND evento_id = :event LIMIT 1');
+        $existing->execute(array(':ref' => $ref, ':event' => (int)$eventId));
+        if ($existing->fetchColumn()) return 'already_started';
+    }
     return 'ok';
 }
 
