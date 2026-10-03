@@ -1,5 +1,6 @@
 <?php
 // Consumer mobile sessions, linked to the same registro_pendientes account as panel_usuario.php.
+require_once __DIR__ . '/login_security.php';
 
 function tickex_mobile_client($pdo, $email)
 {
@@ -10,11 +11,8 @@ function tickex_mobile_client($pdo, $email)
 
 function tickex_mobile_password_ok($password, $stored)
 {
-    $stored = (string)$stored;
-    if ($stored === '') return false;
-    if (function_exists('password_verify') && strpos($stored, '$2') === 0) return password_verify($password, $stored);
-    if (strlen($stored) === 32 && ctype_xdigit($stored)) return function_exists('hash_equals') ? hash_equals(strtolower($stored), md5($password)) : strtolower($stored) === md5($password);
-    return function_exists('hash_equals') ? hash_equals($stored, $password) : $stored === $password;
+    $check = tickex_password_verify_compat($password, $stored);
+    return !empty($check['valid']);
 }
 
 function tickex_mobile_profile($row)
@@ -48,7 +46,23 @@ function tickex_mobile_login($pdo, $email, $password, $remoteAddress)
     $blocked->execute(array(':email' => $email));
     if ($blocked->fetchColumn()) return null;
     $client = tickex_mobile_client($pdo, $email);
-    if (!$client || empty($client['completado_en']) || !tickex_mobile_password_ok($password, $client['password_hash'])) return null;
+    if (!$client || empty($client['completado_en'])) return null;
+    $passwordCheck = tickex_password_verify_compat($password, $client['password_hash']);
+    if (empty($passwordCheck['valid'])) return null;
+    if (!empty($passwordCheck['needs_upgrade'])) {
+        $newHash = password_hash($password, PASSWORD_DEFAULT);
+        if (is_string($newHash) && $newHash !== '') {
+            // A password changed in another session must never be overwritten by a stale login.
+            $upgrade = $pdo->prepare('UPDATE registro_pendientes SET password_hash = :new_hash WHERE id = :id AND password_hash = :old_hash');
+            $upgrade->execute(array(':new_hash' => $newHash, ':id' => (int)$client['id'], ':old_hash' => (string)$client['password_hash']));
+            if ($upgrade->rowCount() !== 1) {
+                $current = $pdo->prepare('SELECT password_hash FROM registro_pendientes WHERE id = :id LIMIT 1');
+                $current->execute(array(':id' => (int)$client['id']));
+                $checkCurrent = tickex_password_verify_compat($password, $current->fetchColumn());
+                if (empty($checkCurrent['valid'])) return null;
+            }
+        }
+    }
     $token = tickex_mobile_random_token();
     $created = date('Y-m-d H:i:s');
     $expires = date('Y-m-d H:i:s', time() + 30 * 86400);

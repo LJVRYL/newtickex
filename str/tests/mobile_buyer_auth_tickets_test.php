@@ -18,8 +18,10 @@ $pdo->exec('CREATE TABLE user_blocks (email TEXT, active INTEGER)');
 $pdo->exec('CREATE TABLE eventos (id INTEGER PRIMARY KEY, nombre TEXT, fecha_desde TEXT, lugar TEXT)');
 $pdo->exec('CREATE TABLE entradas (id INTEGER PRIMARY KEY, evento_id INTEGER, email TEXT, nombre TEXT, tipo TEXT, codigo TEXT, checked_in INTEGER, fecha_registro TEXT)');
 $pdo->exec('CREATE TABLE entradas_ocultas_usuario (id INTEGER PRIMARY KEY, entrada_id INTEGER, email TEXT)');
-$insert = $pdo->prepare('INSERT INTO registro_pendientes VALUES (1, :email, :first, :last, :hash, :completed)');
-$insert->execute(array(':email' => 'buyer@example.invalid', ':first' => 'QA', ':last' => 'Buyer', ':hash' => password_hash('correct-password', PASSWORD_BCRYPT), ':completed' => '2026-09-01'));
+$insert = $pdo->prepare('INSERT INTO registro_pendientes VALUES (:id, :email, :first, :last, :hash, :completed)');
+$insert->execute(array(':id' => 1, ':email' => 'buyer@example.invalid', ':first' => 'QA', ':last' => 'Buyer', ':hash' => password_hash('correct-password', PASSWORD_BCRYPT), ':completed' => '2026-09-01'));
+$insert->execute(array(':id' => 2, ':email' => 'legacy-md5@example.invalid', ':first' => 'Legacy', ':last' => 'MD5', ':hash' => md5('legacy-password'), ':completed' => '2026-09-01'));
+$insert->execute(array(':id' => 3, ':email' => 'legacy-plain@example.invalid', ':first' => 'Legacy', ':last' => 'Plain', ':hash' => 'plain-password', ':completed' => '2026-09-01'));
 $pdo->exec("INSERT INTO eventos VALUES (7, 'Evento', '2027-10-01 20:00:00', 'Teatro')");
 $pdo->exec("INSERT INTO entradas VALUES (9, 7, 'buyer@example.invalid', 'QA Buyer', 'General', 'ABC123', 0, '2026-09-01')");
 $pdo->exec("INSERT INTO entradas VALUES (10, 7, 'other@example.invalid', 'Other Buyer', 'VIP', 'XYZ999', 0, '2026-09-01')");
@@ -27,6 +29,12 @@ $pdo->exec("INSERT INTO entradas VALUES (10, 7, 'other@example.invalid', 'Other 
 buyer_assert(tickex_mobile_login($pdo, 'buyer@example.invalid', 'wrong-password', '127.0.0.1') === null, 'wrong password rejected');
 $session = tickex_mobile_login($pdo, 'buyer@example.invalid', 'correct-password', '127.0.0.1');
 buyer_assert($session && strlen($session['accessToken']) === 64, 'login returns token');
+foreach (array('legacy-md5@example.invalid' => 'legacy-password', 'legacy-plain@example.invalid' => 'plain-password') as $legacyEmail => $legacyPassword) {
+    buyer_assert(tickex_mobile_login($pdo, $legacyEmail, $legacyPassword, '127.0.0.1') !== null, 'legacy buyer can log in');
+    $readLegacy = $pdo->prepare('SELECT password_hash FROM registro_pendientes WHERE email = :email');
+    $readLegacy->execute(array(':email' => $legacyEmail));
+    buyer_assert(password_verify($legacyPassword, (string)$readLegacy->fetchColumn()), 'legacy password is upgraded to a modern hash');
+}
 $token = $session['accessToken'];
 buyer_assert((int)tickex_mobile_authenticated_client($pdo, $token)['id'] === 1, 'token belongs to buyer');
 $tickets = tickex_mobile_tickets($pdo, 'buyer@example.invalid', null);
