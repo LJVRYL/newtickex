@@ -34,3 +34,41 @@ function tickex_mobile_communication_history($pdo, $admin, $campaignId, $fetcher
     }
     return array('campaignId' => (string)$campaignId, 'campaignName' => $campaign['name'], 'campaignStatus' => $campaign['status'], 'runs' => $runs);
 }
+
+function tickex_mobile_communication_run_detail($pdo, $admin, $runId, $limit, $offset, $fetcher = null)
+{
+    if (!tickex_mobile_communication_allowed($admin)) return array('error' => 'forbidden');
+    if (!tickex_mobile_communication_table_exists($pdo, 'communication_campaign_runs')) return array('error' => 'not_found');
+    $limit = max(1, min(100, (int)$limit));
+    $offset = max(0, (int)$offset);
+    $isSuper = tickex_mobile_communication_super($admin);
+    if ($fetcher === null) {
+        require_once __DIR__ . '/communication_ops.php';
+        $detail = communication_ops_fetch_run_detail($pdo, 1, (int)$admin['id'], $isSuper, (int)$runId, $limit, $offset);
+    } else {
+        $detail = call_user_func($fetcher, $pdo, 1, (int)$admin['id'], $isSuper, (int)$runId, $limit, $offset);
+    }
+    if (empty($detail['run'])) return array('error' => 'not_found');
+    $run = $detail['run'];
+    $recipients = array();
+    foreach ($detail['recipients'] as $row) {
+        $recipients[] = array(
+            'id' => (string)$row['id'],
+            'email' => (string)$row['recipient_email'],
+            'name' => isset($row['recipient_name']) ? $row['recipient_name'] : null,
+            'status' => (string)$row['status'],
+            'provider' => isset($row['provider_name']) ? $row['provider_name'] : null,
+            'attempts' => (int)$row['attempt_count'],
+            'lastAttemptAt' => isset($row['last_attempt_at']) ? $row['last_attempt_at'] : null,
+            'processedAt' => isset($row['processed_at']) ? $row['processed_at'] : null,
+        );
+    }
+    return array(
+        'run' => array('id' => (string)$run['id'], 'campaignId' => (string)$run['campaign_id'], 'campaignName' => (string)$run['campaign_name'], 'status' => (string)$run['status'], 'startedAt' => isset($run['started_at']) ? $run['started_at'] : null, 'finishedAt' => isset($run['finished_at']) ? $run['finished_at'] : null),
+        'recipients' => $recipients,
+        'total' => (int)$detail['total'],
+        'limit' => $limit,
+        'offset' => $offset,
+        'metrics' => $detail['metrics'],
+    );
+}

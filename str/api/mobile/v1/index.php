@@ -218,6 +218,14 @@ try {
             if (isset($history['error'])) tickex_mobile_response($history['error'] === 'not_found' ? 404 : 403, $history);
             tickex_mobile_response(200, $history);
         }
+        if (preg_match('~^/admin/communication/runs/([1-9][0-9]*)/?$~', $route, $communicationRun)) {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $limit = isset($_GET['limit']) && ctype_digit((string)$_GET['limit']) ? (int)$_GET['limit'] : 50;
+            $offset = isset($_GET['offset']) && ctype_digit((string)$_GET['offset']) ? (int)$_GET['offset'] : 0;
+            $detail = tickex_mobile_communication_run_detail($pdo, $admin, (int)$communicationRun[1], $limit, $offset);
+            if (isset($detail['error'])) tickex_mobile_response($detail['error'] === 'not_found' ? 404 : 403, $detail);
+            tickex_mobile_response(200, $detail);
+        }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');
             elseif ($method === 'POST') $inventory = tickex_mobile_inventory_create($pdo, $admin, tickex_mobile_body());

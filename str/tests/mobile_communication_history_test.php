@@ -18,4 +18,14 @@ history_assert(!isset($result['runs'][0]['recipient_email']), 'recipient email o
 $super = array('id' => 99, 'tipo_global' => 'super_admin');
 history_assert(tickex_mobile_communication_history($pdo, $super, 9, function ($db, $org, $adminId, $isSuper, $campaignId) { return array('runs' => array()); })['campaignId'] === '9', 'superadmin can view producer campaign history');
 history_assert(tickex_mobile_communication_history($pdo, $other, 9, $mock)['error'] === 'not_found', 'foreign history hidden');
+$runMock = function ($db, $org, $adminId, $isSuper, $runId, $limit, $offset) {
+    history_assert($org === 1 && $adminId === 2 && !$isSuper && $runId === 14, 'run detail stays scoped');
+    history_assert($limit === 100 && $offset === 0, 'pagination bounded');
+    return array('run' => array('id' => 14, 'campaign_id' => 9, 'campaign_name' => 'Avisos', 'status' => 'completed'), 'recipients' => array(array('id' => 3, 'recipient_email' => 'qa@example.invalid', 'recipient_name' => 'QA', 'status' => 'sent', 'provider_name' => 'test', 'attempt_count' => 1, 'last_response_message' => 'secret')), 'total' => 1, 'metrics' => array('unique_opens' => 0));
+};
+$detail = tickex_mobile_communication_run_detail($pdo, $owner, 14, 500, -1, $runMock);
+history_assert($detail['run']['campaignId'] === '9' && $detail['recipients'][0]['email'] === 'qa@example.invalid', 'run and recipient returned');
+history_assert(!isset($detail['recipients'][0]['last_response_message']), 'provider response omitted');
+history_assert(tickex_mobile_communication_run_detail($pdo, array('id' => 4, 'tipo_global' => 'staff'), 14, 10, 0, $runMock)['error'] === 'forbidden', 'staff denied');
+history_assert(tickex_mobile_communication_run_detail($pdo, $owner, 14, 10, 0, function () { return array('run' => null); })['error'] === 'not_found', 'foreign run hidden');
 echo 'mobile communication history PASS' . PHP_EOL;
