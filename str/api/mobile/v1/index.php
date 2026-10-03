@@ -19,6 +19,7 @@ require_once __DIR__ . '/../../../inc/mobile_communication_drafts.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_audiences.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_templates.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_history.php';
+require_once __DIR__ . '/../../../inc/mobile_communication_actions.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_sales_detail.php';
 require_once __DIR__ . '/../../../inc/billing_financials.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_billing.php';
@@ -244,6 +245,20 @@ try {
             $state = tickex_mobile_communication_engine_state($pdo, $admin);
             if (isset($state['error'])) tickex_mobile_response(403, $state);
             tickex_mobile_response(200, $state);
+        }
+        if (preg_match('~^/admin/communication/campaigns/([1-9][0-9]*)/queue/?$~', $route, $communicationQueue)) {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $body = tickex_mobile_body();
+            $queued = tickex_mobile_communication_queue($pdo, $admin, (int)$communicationQueue[1], isset($body['confirmed']) ? $body['confirmed'] : false, isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? $_SERVER['HTTP_IDEMPOTENCY_KEY'] : '');
+            if (isset($queued['error'])) tickex_mobile_response($queued['error'] === 'forbidden' ? 403 : ($queued['error'] === 'not_found' ? 404 : (in_array($queued['error'], array('campaign_locked', 'queue_unavailable'), true) ? 409 : 422)), $queued);
+            tickex_mobile_response(202, $queued);
+        }
+        if (preg_match('~^/admin/communication/runs/([1-9][0-9]*)/cancel/?$~', $route, $communicationCancel)) {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $body = tickex_mobile_body();
+            $cancelled = tickex_mobile_communication_cancel_run($pdo, $admin, (int)$communicationCancel[1], isset($body['confirmed']) ? $body['confirmed'] : false);
+            if (isset($cancelled['error'])) tickex_mobile_response($cancelled['error'] === 'forbidden' ? 403 : ($cancelled['error'] === 'not_found' ? 404 : (in_array($cancelled['error'], array('run_finalized', 'cancel_unavailable'), true) ? 409 : 422)), $cancelled);
+            tickex_mobile_response(200, $cancelled);
         }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');

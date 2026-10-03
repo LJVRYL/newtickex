@@ -1,0 +1,38 @@
+<?php
+require_once __DIR__ . '/../inc/mobile_communication_actions.php';
+function actions_assert($ok, $message) { if (!$ok) { fwrite(STDERR, 'FAIL ' . $message . PHP_EOL); exit(1); } }
+$pdo = new PDO('sqlite::memory:');
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE communication_campaigns(id INTEGER PRIMARY KEY,organization_id INTEGER,created_by_admin_id INTEGER,name TEXT,status TEXT,removed_at TEXT,audience_id INTEGER,template_id INTEGER,cancelled_at TEXT,updated_at TEXT)');
+$pdo->exec('CREATE TABLE communication_campaign_runs(id INTEGER PRIMARY KEY,campaign_id INTEGER,status TEXT,removed_at TEXT,command_id INTEGER,finished_at TEXT,last_error TEXT,updated_at TEXT)');
+$pdo->exec('CREATE TABLE communication_campaign_run_recipients(id INTEGER PRIMARY KEY,run_id INTEGER,status TEXT,last_error TEXT,processed_at TEXT,updated_at TEXT)');
+$pdo->exec('CREATE TABLE communication_execution_commands(id INTEGER PRIMARY KEY,status TEXT,error_text TEXT,updated_at TEXT)');
+$pdo->exec("INSERT INTO communication_campaigns VALUES(9,1,2,'Avisos','draft',NULL,4,5,NULL,NULL),(10,1,3,'Ajena','draft',NULL,4,5,NULL,NULL),(11,1,2,'Incompleta','draft',NULL,NULL,5,NULL,NULL)");
+$pdo->exec("INSERT INTO communication_campaign_runs VALUES(14,9,'running',NULL,21,NULL,NULL,NULL),(15,10,'running',NULL,22,NULL,NULL,NULL)");
+$pdo->exec("INSERT INTO communication_campaign_run_recipients VALUES(1,14,'queued',NULL,NULL,NULL),(2,15,'queued',NULL,NULL,NULL)");
+$pdo->exec("INSERT INTO communication_execution_commands VALUES(21,'queued',NULL,NULL),(22,'queued',NULL,NULL)");
+$owner = array('id' => 2, 'tipo_global' => 'admin_evento');
+$other = array('id' => 3, 'tipo_global' => 'admin_evento');
+$calls = 0;
+$enqueue = function ($db, $org, $campaignId, $adminId, $isSuper, $options) use (&$calls) {
+    $calls++;
+    actions_assert($org === 1 && $campaignId === 9 && $adminId === 2 && !$isSuper && strlen($options['request_key']) === 64, 'queue scoped and key hashed');
+    return array('ok' => true, 'command_id' => 41, 'status' => 'queued', 'reused' => false);
+};
+actions_assert(tickex_mobile_communication_queue($pdo, $owner, 9, false, str_repeat('a', 20), $enqueue)['error'] === 'confirmation_required', 'queue requires confirmation');
+actions_assert(tickex_mobile_communication_queue($pdo, $owner, 9, true, 'short', $enqueue)['error'] === 'idempotency_required', 'queue requires retry key');
+actions_assert(tickex_mobile_communication_queue($pdo, $owner, 10, true, str_repeat('a', 20), $enqueue)['error'] === 'not_found', 'foreign campaign hidden');
+actions_assert(tickex_mobile_communication_queue($pdo, $owner, 11, true, str_repeat('a', 20), $enqueue)['error'] === 'campaign_incomplete', 'incomplete campaign cannot queue');
+$queued = tickex_mobile_communication_queue($pdo, $owner, 9, true, str_repeat('a', 20), $enqueue);
+actions_assert($queued['commandId'] === '41' && $calls === 1, 'only valid confirmed queue reaches engine');
+actions_assert(tickex_mobile_communication_cancel_run($pdo, $owner, 14, false)['error'] === 'confirmation_required', 'cancel requires confirmation');
+actions_assert(tickex_mobile_communication_cancel_run($pdo, $owner, 15, true)['error'] === 'not_found', 'foreign run hidden');
+$cancelled = tickex_mobile_communication_cancel_run($pdo, $owner, 14, true);
+actions_assert($cancelled['cancelled'] === true, 'owned run cancelled');
+actions_assert($pdo->query('SELECT status FROM communication_campaign_runs WHERE id=14')->fetchColumn() === 'cancelled', 'run state updated');
+actions_assert($pdo->query('SELECT status FROM communication_campaign_run_recipients WHERE id=1')->fetchColumn() === 'cancelled', 'queued recipient stopped');
+actions_assert($pdo->query('SELECT status FROM communication_execution_commands WHERE id=21')->fetchColumn() === 'cancelled', 'queued command stopped');
+actions_assert($pdo->query('SELECT status FROM communication_campaign_run_recipients WHERE id=2')->fetchColumn() === 'queued', 'foreign recipient untouched');
+actions_assert(tickex_mobile_communication_cancel_run($pdo, $owner, 14, true)['error'] === 'run_finalized', 'completed cancellation not repeated');
+actions_assert(tickex_mobile_communication_queue($pdo, array('id' => 4, 'tipo_global' => 'staff'), 9, true, str_repeat('a', 20), $enqueue)['error'] === 'forbidden', 'staff cannot queue');
+echo 'mobile communication actions PASS' . PHP_EOL;
