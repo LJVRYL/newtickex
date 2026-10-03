@@ -204,11 +204,11 @@ function tickex_mobile_admin_create_ticket_type($pdo, $admin, $eventId, $body)
     $price = isset($body['price']) ? filter_var($body['price'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 0, 'max_range' => 100000000))) : false;
     $quantity = isset($body['quantity']) ? filter_var($body['quantity'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 1000000))) : false;
     $qrQuantity = isset($body['qrQuantity']) ? filter_var($body['qrQuantity'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 10))) : false;
-    if ($name === '' || strlen($name) > 120 || preg_match('/[\x00-\x1F\x7F]/', $name) || !in_array($channel, array('public', 'door'), true) || $price === false || ($channel === 'public' && $price <= 0) || $quantity === false || $qrQuantity === false || ($channel === 'door' && $qrQuantity !== 1)) return array('error' => 'invalid_type');
+    if ($name === '' || strlen($name) > 120 || preg_match('/[\x00-\x1F\x7F]/', $name) || !in_array($channel, array('public', 'door', 'free'), true) || $price === false || ($channel === 'public' && $price <= 0) || ($channel === 'free' && $price !== 0) || $quantity === false || $qrQuantity === false || (in_array($channel, array('door', 'free'), true) && $qrQuantity !== 1)) return array('error' => 'invalid_type');
     $columns = array();
     foreach ($pdo->query('PRAGMA table_info(tipos_entrada)')->fetchAll(PDO::FETCH_ASSOC) as $column) $columns[(string)$column['name']] = true;
     foreach (array('visible_publico', 'qr_quantity') as $required) if (!isset($columns[$required])) return array('error' => 'schema_incomplete');
-    $type = $channel === 'door' ? 'PUERTA' : 'PAGA';
+    $type = $channel === 'door' ? 'PUERTA' : ($channel === 'free' ? 'FREE' : 'PAGA');
     $values = array('evento_id' => $eventId, 'nombre' => $name, 'tipo' => $type, 'precio' => $price, 'cantidad_total' => $quantity, 'cantidad_disponible' => $quantity, 'visible_publico' => $channel === 'public' ? 1 : 0, 'qr_quantity' => $qrQuantity);
     if (isset($columns['tipo_venta'])) $values['tipo_venta'] = $type;
     if (isset($columns['activo'])) $values['activo'] = 1;
@@ -234,7 +234,8 @@ function tickex_mobile_admin_update_ticket_type($pdo, $admin, $eventId, $typeId,
         if (!$current) { $pdo->rollBack(); return array('error' => 'not_found'); }
         if ((int)$current['cantidad_disponible'] !== $expected) { $pdo->rollBack(); return array('error' => 'stock_changed'); }
         $qrQuantity = array_key_exists('qrQuantity', $body) ? filter_var($body['qrQuantity'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 10))) : (int)$current['qr_quantity'];
-        if ($qrQuantity === false || (strtoupper((string)$current['tipo']) === 'PUERTA' && $qrQuantity !== 1)) { $pdo->rollBack(); return array('error' => 'invalid_type'); }
+        $specialType = in_array(strtoupper((string)$current['tipo']), array('PUERTA', 'FREE'), true);
+        if ($qrQuantity === false || ($specialType && ($qrQuantity !== 1 || $body['visible']))) { $pdo->rollBack(); return array('error' => 'invalid_type'); }
         $change = $available - $expected;
         $write = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = :available, cantidad_total = CASE WHEN cantidad_total IS NULL THEN NULL ELSE MAX(0, cantidad_total + :change) END, visible_publico = :visible, qr_quantity = :qr_quantity WHERE id = :type AND evento_id = :event AND cantidad_disponible = :expected');
         $write->execute(array(':available' => $available, ':change' => $change, ':visible' => $body['visible'] ? 1 : 0, ':qr_quantity' => $qrQuantity, ':type' => $typeId, ':event' => $eventId, ':expected' => $expected));

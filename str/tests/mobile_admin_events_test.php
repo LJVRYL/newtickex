@@ -6,6 +6,7 @@ function tickex_mobile_datetime($value)
     return $timestamp === false ? null : date('c', $timestamp);
 }
 require_once __DIR__ . '/../inc/mobile_admin.php';
+require_once __DIR__ . '/../inc/mobile_admin_free_checkout.php';
 require_once __DIR__ . '/../inc/mobile_staff_operations.php';
 require_once __DIR__ . '/../inc/mobile_event_presentation.php';
 function admin_event_assert($condition, $message)
@@ -112,6 +113,19 @@ admin_event_assert(tickex_mobile_admin_create_ticket_type($pdo, $other, $eventId
 $newTypes = tickex_mobile_admin_create_ticket_type($pdo, $owner, $eventId, array('name' => 'Puerta', 'channel' => 'door', 'price' => 200, 'quantity' => 10, 'qrQuantity' => 1));
 admin_event_assert(count($newTypes) === 2 && $newTypes[1]['visible'] === false, 'door type is created hidden from public checkout');
 admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, (int)$newTypes[1]['id'], array('expectedAvailable' => 10, 'available' => 10, 'visible' => false, 'qrQuantity' => 2))['error'] === 'invalid_type', 'door tickets keep one QR');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, (int)$newTypes[1]['id'], array('expectedAvailable' => 10, 'available' => 10, 'visible' => true))['error'] === 'invalid_type', 'door tickets cannot enter paid public catalog');
+$pdo->exec('CREATE TABLE event_free_checkout_configs (id INTEGER PRIMARY KEY, evento_id INTEGER UNIQUE NOT NULL, enabled INTEGER NOT NULL, ticket_type_id INTEGER NOT NULL, max_uses INTEGER, captcha_required INTEGER NOT NULL, unique_email INTEGER NOT NULL, created_by_admin_id INTEGER, updated_by_admin_id INTEGER, created_at TEXT, updated_at TEXT)');
+admin_event_assert(tickex_mobile_admin_create_ticket_type($pdo, $owner, $eventId, array('name' => 'Free inválida', 'channel' => 'free', 'price' => 1, 'quantity' => 3, 'qrQuantity' => 1))['error'] === 'invalid_type', 'FREE cannot have a price');
+$freeTypes = tickex_mobile_admin_create_ticket_type($pdo, $owner, $eventId, array('name' => 'Free', 'channel' => 'free', 'price' => 0, 'quantity' => 3, 'qrQuantity' => 1));
+$freeId = (int)$freeTypes[2]['id'];
+admin_event_assert($freeTypes[2]['price'] === 0.0 && !$freeTypes[2]['visible'], 'FREE type is created without paid checkout visibility');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, $freeId, array('expectedAvailable' => 3, 'available' => 3, 'visible' => true))['error'] === 'invalid_type', 'FREE tickets cannot enter paid public catalog');
+$freeDraft = array('enabled' => true, 'ticketTypeId' => $freeId, 'maxUses' => 2, 'captchaRequired' => true, 'uniqueEmail' => true);
+admin_event_assert(tickex_mobile_admin_save_free_checkout($pdo, $other, $eventId, $freeDraft)['error'] === 'forbidden', 'other producer cannot configure FREE checkout');
+admin_event_assert(tickex_mobile_admin_save_free_checkout($pdo, $owner, $eventId, array_merge($freeDraft, array('ticketTypeId' => 10)))['error'] === 'invalid_type', 'paid ticket cannot be used for FREE checkout');
+admin_event_assert(tickex_mobile_admin_save_free_checkout($pdo, $owner, $eventId, $freeDraft)['enabled'] === true, 'owner enables existing FREE checkout');
+admin_event_assert(tickex_mobile_admin_save_free_checkout($pdo, $owner, $eventId, array_merge($freeDraft, array('enabled' => false)))['enabled'] === false, 'owner can pause FREE checkout');
+admin_event_assert((int)$pdo->query("SELECT COUNT(*) FROM event_free_checkout_configs WHERE evento_id = $eventId")->fetchColumn() === 1, 'FREE config update preserves its row');
 $newEvent = tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Nuevo', 'slug' => 'nuevo-evento', 'startsAt' => '2026-11-05T21:00:00-03:00', 'endsAt' => '2026-11-06T02:00:00-03:00', 'venue' => 'Sala'));
 $newId = (int)$newEvent['id'];
 tickex_mobile_admin_update_presentation($pdo, $owner, $newId, array('capacityTotal' => 20, 'doorsAt' => '20:00'));

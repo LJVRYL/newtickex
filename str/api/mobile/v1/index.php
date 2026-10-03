@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../../inc/mobile_staff_gate.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_invitations.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_invite_admin.php';
 require_once __DIR__ . '/../../../inc/mobile_admin.php';
+require_once __DIR__ . '/../../../inc/mobile_admin_free_checkout.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_operations.php';
 require_once __DIR__ . '/../../../inc/mobile_event_presentation.php';
 require_once __DIR__ . '/../../../inc/mobile_inventory.php';
@@ -303,6 +304,14 @@ try {
             $result = tickex_mobile_admin_update_ticket_type($pdo, $admin, $eventId, (int)$typeEdit[2], tickex_mobile_body());
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'stock_changed' ? 409 : ($result['error'] === 'not_found' ? 404 : 422)), $result);
             error_log('mobile_api admin_stock_updated request_id=' . $requestId . ' event_id=' . $eventId . ' type_id=' . (int)$typeEdit[2]);
+            tickex_mobile_response(200, $result);
+        }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/free-checkout/?$~', $route, $freeCheckout)) {
+            $eventId = (int)$freeCheckout[1];
+            if ($method === 'GET') $result = tickex_mobile_admin_free_checkout($pdo, $admin, $eventId);
+            elseif ($method === 'PATCH') $result = tickex_mobile_admin_save_free_checkout($pdo, $admin, $eventId, tickex_mobile_body());
+            else tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
             tickex_mobile_response(200, $result);
         }
         if (preg_match('~^/admin/events/([1-9][0-9]*)/staff/?$~', $route, $adminStaff)) {
