@@ -55,7 +55,7 @@ function tickex_mobile_gate_activity($pdo, $eventId)
 {
     $hasAudit = $pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='checkin_audit_log' LIMIT 1")->fetchColumn();
     if (!$hasAudit) return array();
-    $statement = $pdo->prepare('SELECT id, created_at, source, ticket_ref, attendee_name, action, result, detail FROM checkin_audit_log WHERE evento_id = :event ORDER BY id DESC LIMIT 100');
+    $statement = $pdo->prepare('SELECT id, created_at, source, attendee_name, action, result, detail FROM checkin_audit_log WHERE evento_id = :event ORDER BY id DESC LIMIT 100');
     $statement->execute(array(':event' => (int)$eventId));
     $rows = array();
     foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -63,7 +63,7 @@ function tickex_mobile_gate_activity($pdo, $eventId)
             'id' => (string)$row['id'],
             'createdAt' => tickex_mobile_datetime($row['created_at']),
             'source' => (string)$row['source'],
-            'ticketRef' => (string)$row['ticket_ref'],
+            'ticketRef' => '',
             'attendeeName' => (string)$row['attendee_name'],
             'action' => (string)$row['action'],
             'result' => (string)$row['result'],
