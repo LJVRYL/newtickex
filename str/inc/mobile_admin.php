@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/staff_roles.php';
+require_once __DIR__ . '/staff_operations.php';
 // Producer mobile credentials are verified against the web admin account, never a consumer email alone.
 require_once __DIR__ . '/event_sales_control.php';
 function tickex_mobile_admin_login($pdo, $email, $password, $remoteAddress)
@@ -259,7 +261,9 @@ function tickex_mobile_admin_staff($pdo, $admin, $eventId)
         $permissions = json_decode((string)$role['permissions_json'], true);
         $roleList[] = array('code' => (string)$role['code'], 'name' => (string)$role['name'], 'permissions' => is_array($permissions) ? array_values($permissions) : array());
     }
-    $members = $pdo->prepare("SELECT sa.cliente_id, sa.rol_staff, rp.nombre, rp.apellido, rp.apodo, rp.email, CASE WHEN se.staff_id IS NULL THEN 0 ELSE 1 END AS assigned FROM staff_admins sa JOIN registro_pendientes rp ON rp.id = sa.cliente_id LEFT JOIN staff_eventos se ON se.staff_id = sa.cliente_id AND se.evento_id = :event WHERE sa.owner_admin_id = :owner AND sa.activo = 1 ORDER BY assigned DESC, sa.id DESC LIMIT 100");
+    $eventColumns = tickex_staff_operations_columns($pdo, 'staff_eventos');
+    $eventRole = isset($eventColumns['rol_staff']) ? "COALESCE(NULLIF(se.rol_staff, ''), sa.rol_staff)" : 'sa.rol_staff';
+    $members = $pdo->prepare("SELECT sa.cliente_id, " . $eventRole . " AS rol_staff, rp.nombre, rp.apellido, rp.apodo, rp.email, CASE WHEN se.staff_id IS NULL THEN 0 ELSE 1 END AS assigned FROM staff_admins sa JOIN registro_pendientes rp ON rp.id = sa.cliente_id LEFT JOIN staff_eventos se ON se.staff_id = sa.cliente_id AND se.evento_id = :event WHERE sa.owner_admin_id = :owner AND sa.activo = 1 ORDER BY assigned DESC, sa.id DESC LIMIT 100");
     $members->execute(array(':event' => $eventId, ':owner' => $ownerId));
     $memberList = array();
     foreach ($members->fetchAll(PDO::FETCH_ASSOC) as $member) {
@@ -286,22 +290,18 @@ function tickex_mobile_admin_assign_staff($pdo, $admin, $eventId, $clientId, $ro
         $role->execute(array(':owner' => $ownerId, ':code' => $roleCode));
         if (!$role->fetchColumn()) return array('error' => 'invalid_role');
     }
-    $pdo->beginTransaction();
-    try {
-        if ($assigned) {
-            $insert = $pdo->prepare('INSERT OR IGNORE INTO staff_eventos (staff_id, evento_id) VALUES (:client, :event)');
-            $insert->execute(array(':client' => $clientId, ':event' => $eventId));
-            $update = $pdo->prepare('UPDATE staff_admins SET rol_staff = :role WHERE owner_admin_id = :owner AND cliente_id = :client AND activo = 1');
-            $update->execute(array(':role' => $roleCode, ':owner' => $ownerId, ':client' => $clientId));
-        } else {
-            $delete = $pdo->prepare('DELETE FROM staff_eventos WHERE staff_id = :client AND evento_id = :event');
-            $delete->execute(array(':client' => $clientId, ':event' => $eventId));
+    if ($assigned) {
+        $cost = 0;
+        $eventColumns = tickex_staff_operations_columns($pdo, 'staff_eventos');
+        if (isset($eventColumns['costo_servicio'])) {
+            $current = $pdo->prepare('SELECT costo_servicio FROM staff_eventos WHERE staff_id = :client AND evento_id = :event LIMIT 1');
+            $current->execute(array(':client' => $clientId, ':event' => $eventId));
+            $stored = $current->fetchColumn();
+            if ($stored !== false) $cost = max(0, (float)$stored);
         }
-        $pdo->commit();
-    } catch (Exception $error) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $error;
+        tickex_staff_assign_event($pdo, $ownerId, (int)$admin['id'], $clientId, $eventId, $roleCode, $cost);
     }
+    else tickex_staff_remove_event($pdo, $ownerId, (int)$admin['id'], $clientId, $eventId);
     return tickex_mobile_admin_staff($pdo, $admin, $eventId);
 }
 function tickex_mobile_admin_send_ticket($pdo, $admin, $eventId, $body, $idempotencyKey)
