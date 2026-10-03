@@ -125,4 +125,10 @@ test_ok(!empty($heldResult['processed']), 'confirmed order with a hold is issued
 test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=7')->fetchColumn() === $stockAfterHold, 'reserved stock is not subtracted twice at issuance');
 test_ok((string)$pdo->query("SELECT status FROM checkout_capacity_holds WHERE ref='held-ref'")->fetchColumn() === 'consumed', 'hold and ticket issuance commit together');
 
+$pdo->prepare("INSERT INTO tc_orders (request_id,state,evento_id,ref,amount,buyer_first,buyer_last,buyer_email,selected_tickets_json,payment_status) VALUES ('door-mail-rid','created',1,'door-no-payer-email',100,'Puerta','','',:tickets,'confirmed')")->execute(array(':tickets' => json_encode($heldTickets)));
+$doorMailOrder = $pdo->query("SELECT * FROM tc_orders WHERE request_id='door-mail-rid'")->fetch(PDO::FETCH_ASSOC);
+$doorMailResult = process_tc_order_row($pdo, $doorMailOrder);
+test_ok(!empty($doorMailResult['processed']), 'door payment can issue even if provider omits payer email');
+test_ok((string)$pdo->query("SELECT email_status FROM tc_orders WHERE request_id='door-mail-rid'")->fetchColumn() === 'unavailable', 'missing payer email is flagged without sending to an empty address');
+
 echo "ALL LOCAL FLOW TESTS PASSED\n";
