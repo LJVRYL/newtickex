@@ -1,6 +1,8 @@
 <?php
 putenv('TICKEX_MAIL_TRANSPORT=fake');
 require_once __DIR__ . '/../inc/free_checkout.php';
+require_once __DIR__ . '/../inc/mobile_events.php';
+require_once __DIR__ . '/../inc/mobile_tickets.php';
 function free_issue_assert($ok, $message) { if (!$ok) { fwrite(STDERR, "FAIL: $message\n"); exit(1); } }
 $pdo = new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -17,6 +19,9 @@ if (empty($first['ok'])) fwrite(STDERR, 'FIRST_ERROR=' . (isset($first['error'])
 free_issue_assert(!empty($first['ok']), 'first FREE ticket is issued');
 free_issue_assert($pdo->query("SELECT payment_method FROM entradas WHERE id = 1")->fetchColumn() === 'free', 'FREE issuance is identifiable');
 free_issue_assert((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id = 3')->fetchColumn() === 2, 'one unit of stock is consumed');
+$owned = tickex_mobile_tickets($pdo, 'qa-one@example.invalid', null);
+free_issue_assert(count($owned) === 1 && $owned[0]['status'] === 'valid' && strpos($owned[0]['qrPayload'], 'https://str.tickex.com.ar/checkin.php?c=') === 0, 'FREE ticket appears in Mis Tickex with a valid QR');
+free_issue_assert(count(tickex_mobile_tickets($pdo, 'other@example.invalid', null)) === 0, 'another account cannot read the FREE ticket');
 $stale = $config;
 $stale['max_uses'] = null;
 $stale['unique_email'] = 0;
