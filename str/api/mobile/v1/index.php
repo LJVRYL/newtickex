@@ -323,6 +323,12 @@ try {
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'request_conflict' ? 409 : ($result['error'] === 'storage_error' ? 500 : 422)), $result);
             tickex_mobile_response(201, $result);
         }
+        if ($route === '/admin/economy/summary') {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $result = tickex_mobile_economy_summary($pdo, $admin, isset($_GET['eventId']) ? $_GET['eventId'] : 0);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
+            tickex_mobile_response(200, $result);
+        }
         if (preg_match('~^/admin/economy/movements/([1-9][0-9]*)/include/?$~', $route, $economyInclude)) {
             if ($method !== 'PATCH') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
             $body = tickex_mobile_body();

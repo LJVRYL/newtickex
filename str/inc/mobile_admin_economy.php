@@ -1,7 +1,52 @@
 <?php
+require_once __DIR__ . '/manual_income.php';
 function tickex_mobile_economy_scope($admin)
 {
     return isset($admin['tipo_global']) && $admin['tipo_global'] === 'super_admin';
+}
+
+function tickex_mobile_economy_summary($pdo, $admin, $eventFilter, $calculator = null)
+{
+    if (!preg_match('/^(0|[1-9][0-9]*)$/', (string)$eventFilter)) return array('error' => 'invalid_filter');
+    $eventId = (int)$eventFilter;
+    if ($eventId > 0 && !tickex_mobile_admin_can_event($pdo, $admin, $eventId)) return array('error' => 'forbidden');
+    $eventsSql = "SELECT id, nombre FROM eventos WHERE (borrado_en IS NULL OR borrado_en = '')";
+    if (!tickex_mobile_economy_scope($admin)) $eventsSql .= ' AND creado_por_admin_id = :admin';
+    if ($eventId > 0) $eventsSql .= ' AND id = :event';
+    $events = $pdo->prepare($eventsSql . ' ORDER BY id');
+    if (!tickex_mobile_economy_scope($admin)) $events->bindValue(':admin', (int)$admin['id'], PDO::PARAM_INT);
+    if ($eventId > 0) $events->bindValue(':event', $eventId, PDO::PARAM_INT);
+    $events->execute();
+    $eventRows = $events->fetchAll(PDO::FETCH_ASSOC);
+
+    $movementSql = "SELECT tipo, COALESCE(SUM(monto), 0) AS total FROM econ_movimientos WHERE incluye_en_totales = 1";
+    if (!tickex_mobile_economy_scope($admin)) $movementSql .= ' AND creado_por = :admin';
+    if ($eventId > 0) $movementSql .= ' AND evento_id = :event';
+    $movementSql .= ' GROUP BY tipo';
+    $movementStatement = $pdo->prepare($movementSql);
+    if (!tickex_mobile_economy_scope($admin)) $movementStatement->bindValue(':admin', (int)$admin['id'], PDO::PARAM_INT);
+    if ($eventId > 0) $movementStatement->bindValue(':event', $eventId, PDO::PARAM_INT);
+    $movementStatement->execute();
+    $movementTotals = array('gasto' => 0.0, 'inversion' => 0.0, 'presupuesto' => 0.0);
+    foreach ($movementStatement->fetchAll(PDO::FETCH_ASSOC) as $movement) if (isset($movementTotals[$movement['tipo']])) $movementTotals[$movement['tipo']] = (float)$movement['total'];
+
+    $gross = 0.0; $manualIncome = 0.0; $manualOutflow = 0.0; $processing = 0.0; $sold = 0; $checkout = 0.0; $door = 0.0; $byEvent = array();
+    foreach ($eventRows as $event) {
+        $stats = $calculator === null ? get_economic_stats($pdo, (int)$event['id']) : call_user_func($calculator, $pdo, (int)$event['id']);
+        $eventGross = isset($stats['total_recaudado']) ? (float)$stats['total_recaudado'] : 0.0;
+        $eventSold = isset($stats['entradas_vendidas']) ? (int)$stats['entradas_vendidas'] : 0;
+        $gross += $eventGross; $sold += $eventSold;
+        $manualIncome += isset($stats['manual_income']) ? (float)$stats['manual_income'] : 0.0;
+        $manualOutflow += abs(isset($stats['manual_income_egresos']) ? (float)$stats['manual_income_egresos'] : 0.0);
+        $processing += isset($stats['payment_processing_cost']) ? (float)$stats['payment_processing_cost'] : 0.0;
+        if (isset($stats['por_tipo']) && is_array($stats['por_tipo'])) foreach ($stats['por_tipo'] as $type) {
+            if (!is_array($type)) continue;
+            if (isset($type['origen']) && $type['origen'] === 'TICKEX') $checkout += isset($type['monto']) ? (float)$type['monto'] : 0.0;
+            if (isset($type['origen']) && $type['origen'] === 'STR') $door += isset($type['monto']) ? (float)$type['monto'] : 0.0;
+        }
+        $byEvent[] = array('eventId' => (string)$event['id'], 'eventName' => (string)$event['nombre'], 'grossRevenue' => $eventGross, 'ticketsSold' => $eventSold);
+    }
+    return array('estimateOnly' => true, 'eventId' => $eventId > 0 ? (string)$eventId : null, 'grossRevenue' => $gross, 'manualIncome' => $manualIncome, 'manualOutflow' => $manualOutflow, 'processingCost' => $processing, 'ticketsSold' => $sold, 'checkoutRevenue' => $checkout, 'doorRevenue' => $door, 'expenses' => $movementTotals['gasto'], 'investment' => $movementTotals['inversion'], 'budget' => $movementTotals['presupuesto'], 'estimatedBalance' => $gross + $movementTotals['presupuesto'] - $processing - $manualOutflow - $movementTotals['gasto'] - $movementTotals['inversion'], 'byEvent' => $byEvent);
 }
 
 function tickex_mobile_economy_list($pdo, $admin, $filters)
