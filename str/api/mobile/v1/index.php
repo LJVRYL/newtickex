@@ -28,6 +28,7 @@ require_once __DIR__ . '/../../../inc/mobile_admin_economy.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_site.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_support.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_account.php';
+require_once __DIR__ . '/../../../inc/mobile_admin_payments.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -125,6 +126,12 @@ try {
         if ($route === '/admin/plan') {
             if ($method !== 'GET') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
             $result = tickex_mobile_admin_plan($pdo, $admin);
+            if (isset($result['error'])) tickex_mobile_response(403, $result);
+            tickex_mobile_response(200, $result);
+        }
+        if ($route === '/admin/payment-settings') {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            $result = tickex_mobile_admin_payment_settings($pdo, $admin);
             if (isset($result['error'])) tickex_mobile_response(403, $result);
             tickex_mobile_response(200, $result);
         }
