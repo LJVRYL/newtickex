@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../../inc/mobile_event_presentation.php';
 require_once __DIR__ . '/../../../inc/mobile_inventory.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_catalog.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_drafts.php';
+require_once __DIR__ . '/../../../inc/mobile_communication_audiences.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -102,10 +103,21 @@ try {
         if ($route === '/admin/me' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_profile($admin));
         if ($route === '/admin/logout' && $method === 'POST') { tickex_mobile_admin_logout($pdo, $adminToken); tickex_mobile_response(200, array('ok' => true)); }
         if (preg_match('~^/admin/communication/(audiences|templates|campaigns)/?$~', $route, $communicationMatch)) {
+            if ($communicationMatch[1] === 'audiences' && $method === 'POST') {
+                $audience = tickex_mobile_communication_audience_save($pdo, $admin, tickex_mobile_body(), 0);
+                if (isset($audience['error'])) tickex_mobile_response($audience['error'] === 'forbidden' || $audience['error'] === 'event_forbidden' ? 403 : 422, $audience);
+                tickex_mobile_response(201, $audience);
+            }
             if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
             $catalog = tickex_mobile_communication_catalog($pdo, $admin, $communicationMatch[1]);
             if (isset($catalog['error'])) tickex_mobile_response(403, $catalog);
             tickex_mobile_response(200, $catalog);
+        }
+        if (preg_match('~^/admin/communication/audiences/([1-9][0-9]*)/?$~', $route, $audienceEdit)) {
+            if ($method !== 'PATCH') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $audience = tickex_mobile_communication_audience_save($pdo, $admin, tickex_mobile_body(), (int)$audienceEdit[1]);
+            if (isset($audience['error'])) tickex_mobile_response($audience['error'] === 'not_found' ? 404 : ($audience['error'] === 'forbidden' || $audience['error'] === 'event_forbidden' ? 403 : 422), $audience);
+            tickex_mobile_response(200, $audience);
         }
         if ($route === '/admin/communication/campaigns/draft' && $method === 'POST') {
             $draft = tickex_mobile_communication_draft($pdo, $admin, tickex_mobile_body(), 0);
