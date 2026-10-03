@@ -2,6 +2,21 @@
 // Correlates mobile users with the existing server-authoritative web checkout.
 // This does not create an order or assert payment. The checkout and webhook own both.
 
+// A mobile checkout belongs to the account that created its reference. The web
+// checkout must reject a different buyer email before creating a payment.
+function tickex_mobile_checkout_intent_guard($pdo, $ref, $eventId, $buyerEmail)
+{
+    $ref = trim((string)$ref);
+    if (stripos($ref, 'mobile-') !== 0) return 'not_mobile';
+    if (!preg_match('/^mobile-[a-f0-9]{32}$/', $ref)) return 'invalid_intent';
+    $read = $pdo->prepare('SELECT i.evento_id, i.expires_at, c.email FROM mobile_checkout_intents i JOIN registro_pendientes c ON c.id = i.cliente_id WHERE i.ref = :ref LIMIT 1');
+    $read->execute(array(':ref' => $ref));
+    $intent = $read->fetch(PDO::FETCH_ASSOC);
+    if (!$intent || (int)$intent['evento_id'] !== (int)$eventId || strtotime((string)$intent['expires_at']) <= time()) return 'invalid_intent';
+    if ($buyerEmail !== null && strcasecmp(trim((string)$intent['email']), trim((string)$buyerEmail)) !== 0) return 'email_mismatch';
+    return 'ok';
+}
+
 function tickex_mobile_create_checkout_intent($pdo, $client, $eventId, $idempotencyKey)
 {
     if (!preg_match('/^[1-9][0-9]*$/', (string)$eventId)) return array('error' => 'invalid_checkout_request');

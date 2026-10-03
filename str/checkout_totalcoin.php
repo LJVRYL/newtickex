@@ -16,6 +16,7 @@ require_once __DIR__ . '/inc/event_sales_control.php';
 require_once __DIR__ . '/inc/event_capacity.php';
 require_once __DIR__ . '/inc/legal_center.php';
 require_once __DIR__ . '/inc/event_presentation.php';
+require_once __DIR__ . '/inc/mobile_checkout_intents.php';
 
 require_once __DIR__.'/inc/turnstile.php';
 
@@ -740,6 +741,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $concept = $eventName;
   $ref = trim(isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId)));
   if ($ref === '') $errors[] = 'Referencia requerida';
+  if (stripos($ref, 'mobile-') === 0) {
+    try {
+      $mobileIntentState = tickex_mobile_checkout_intent_guard(db(), $ref, $eventId, $action === 'pay' ? (isset($_POST['email']) ? $_POST['email'] : $defaults['email']) : null);
+      if ($mobileIntentState === 'invalid_intent') $errors[] = 'Esta compra iniciada en la app venció o no corresponde al evento. Volvé a iniciarla desde Tickex.';
+      if ($mobileIntentState === 'email_mismatch') $errors[] = 'Usá el mismo email de tu cuenta Tickex en la app para que la entrada aparezca en Mis Tickex. No se inició ningún pago.';
+    } catch (Exception $e) {
+      $errors[] = 'No pudimos verificar la compra iniciada en la app. Intentá nuevamente; no se inició ningún pago.';
+    }
+  }
 
   $affPost = isset($_POST['aff']) ? (int)$_POST['aff'] : 0;
   if ($revendedorId <= 0 && $affPost > 0) {
