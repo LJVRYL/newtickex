@@ -27,6 +27,7 @@ require_once __DIR__ . '/../../../inc/mobile_admin_clients.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_economy.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_site.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_support.php';
+require_once __DIR__ . '/../../../inc/mobile_admin_account.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -114,6 +115,19 @@ try {
         if (!$admin) tickex_mobile_response(401, array('error' => 'unauthorized'));
         if ($route === '/admin/me' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_profile($admin));
         if ($route === '/admin/logout' && $method === 'POST') { tickex_mobile_admin_logout($pdo, $adminToken); tickex_mobile_response(200, array('ok' => true)); }
+        if ($route === '/admin/account') {
+            if ($method === 'GET') $result = tickex_mobile_admin_account($pdo, $admin);
+            elseif ($method === 'PATCH') $result = tickex_mobile_admin_account_save($pdo, $admin, tickex_mobile_body());
+            else tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'not_found' ? 404 : (in_array($result['error'], array('conflict','email_taken','tickex_id_taken'), true) ? 409 : 422)), $result);
+            tickex_mobile_response(200, $result);
+        }
+        if ($route === '/admin/plan') {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            $result = tickex_mobile_admin_plan($pdo, $admin);
+            if (isset($result['error'])) tickex_mobile_response(403, $result);
+            tickex_mobile_response(200, $result);
+        }
         if ($route === '/admin/site') {
             if ($method === 'GET') $result = tickex_mobile_admin_site($pdo, $admin);
             elseif ($method === 'PATCH') $result = tickex_mobile_admin_site_save($pdo, $admin, tickex_mobile_body());
