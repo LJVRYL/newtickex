@@ -22,6 +22,8 @@ $estimate = tickex_mobile_communication_audience_estimate($pdo, $owner, $id, fun
     return 7;
 });
 audience_assert($estimate['estimatedRecipients'] === 7, 'estimate returns count only');
+$super = array('id' => 99, 'tipo_global' => 'super_admin');
+audience_assert(tickex_mobile_communication_audience_estimate($pdo, $super, $id, function ($db, $filters, $scope) { return $scope['is_super'] ? 8 : 0; })['estimatedRecipients'] === 8, 'superadmin can estimate a producer audience');
 audience_assert(tickex_mobile_communication_audience_estimate($pdo, $other, $id, function () { return 9; })['error'] === 'not_found', 'foreign audience estimate denied');
 $pdo->exec('UPDATE communication_audiences SET filters_json = \'{"event_id":12}\' WHERE id = ' . $id);
 audience_assert(tickex_mobile_communication_audience_estimate($pdo, $owner, $id, function () { return 9; })['error'] === 'event_forbidden', 'legacy foreign event filter denied');

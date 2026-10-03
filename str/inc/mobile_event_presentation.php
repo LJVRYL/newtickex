@@ -35,7 +35,7 @@ function tickex_mobile_admin_update_presentation($pdo, $admin, $eventId, $body)
     $params[':super'] = $admin['tipo_global'] === 'super_admin' ? 1 : 0;
     $set = array();
     foreach (tickex_event_presentation_columns() as $column => $type) $set[] = $column . ' = :' . $column;
-    $write = $pdo->prepare("UPDATE eventos SET " . implode(', ', $set) . ", capacidad_total = :capacity_total, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (:super = 1 OR creado_por_admin_id = :admin)");
+    $write = $pdo->prepare("UPDATE eventos SET " . implode(', ', $set) . ", capacidad_total = :capacity_total, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (CAST(:super AS INTEGER) = 1 OR creado_por_admin_id = :admin)");
     $write->execute($params);
     return tickex_mobile_admin_event_presentation($pdo, $admin, $eventId);
 }

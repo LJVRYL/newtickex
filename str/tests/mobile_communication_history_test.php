@@ -15,5 +15,7 @@ $mock = function ($db, $org, $adminId, $isSuper, $campaignId) {
 $result = tickex_mobile_communication_history($pdo, $owner, 9, $mock);
 history_assert(count($result['runs']) === 1 && $result['runs'][0]['sent'] === 2, 'scoped run summary returned');
 history_assert(!isset($result['runs'][0]['recipient_email']), 'recipient email omitted from summary');
+$super = array('id' => 99, 'tipo_global' => 'super_admin');
+history_assert(tickex_mobile_communication_history($pdo, $super, 9, function ($db, $org, $adminId, $isSuper, $campaignId) { return array('runs' => array()); })['campaignId'] === '9', 'superadmin can view producer campaign history');
 history_assert(tickex_mobile_communication_history($pdo, $other, 9, $mock)['error'] === 'not_found', 'foreign history hidden');
 echo 'mobile communication history PASS' . PHP_EOL;

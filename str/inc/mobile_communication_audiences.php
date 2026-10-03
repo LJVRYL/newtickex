@@ -35,7 +35,7 @@ function tickex_mobile_communication_audience_save($pdo, $admin, $body, $audienc
     $isSuper = tickex_mobile_communication_super($admin);
     $audienceId = (int)$audienceId;
     if ($audienceId > 0) {
-        $read = $pdo->prepare('SELECT id FROM communication_audiences WHERE id=:id AND organization_id=1 AND status<>"deleted" AND (:super=1 OR created_by_admin_id=:admin) LIMIT 1');
+        $read = $pdo->prepare('SELECT id FROM communication_audiences WHERE id=:id AND organization_id=1 AND status<>"deleted" AND (CAST(:super AS INTEGER)=1 OR created_by_admin_id=:admin) LIMIT 1');
         $read->execute(array(':id' => $audienceId, ':super' => $isSuper ? 1 : 0, ':admin' => $adminId));
         if (!$read->fetchColumn()) return array('error' => 'not_found');
     }
@@ -59,7 +59,7 @@ function tickex_mobile_communication_audience_estimate($pdo, $admin, $audienceId
     if (!tickex_mobile_communication_allowed($admin)) return array('error' => 'forbidden');
     $isSuper = tickex_mobile_communication_super($admin);
     $adminId = (int)$admin['id'];
-    $read = $pdo->prepare('SELECT id, filters_json FROM communication_audiences WHERE id=:id AND organization_id=1 AND status<>"deleted" AND (:super=1 OR created_by_admin_id=:admin) LIMIT 1');
+    $read = $pdo->prepare('SELECT id, filters_json FROM communication_audiences WHERE id=:id AND organization_id=1 AND status<>"deleted" AND (CAST(:super AS INTEGER)=1 OR created_by_admin_id=:admin) LIMIT 1');
     $read->execute(array(':id' => (int)$audienceId, ':super' => $isSuper ? 1 : 0, ':admin' => $adminId));
     $audience = $read->fetch(PDO::FETCH_ASSOC);
     if (!$audience) return array('error' => 'not_found');

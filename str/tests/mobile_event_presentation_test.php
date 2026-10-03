@@ -19,4 +19,6 @@ $pdo->exec('CREATE TABLE entradas (id INTEGER PRIMARY KEY, evento_id INTEGER)');
 $pdo->exec('INSERT INTO entradas (id, evento_id) VALUES (1, 9), (2, 9)');
 presentation_assert(tickex_mobile_admin_update_presentation($pdo, $owner, 9, array('capacityTotal' => 1))['error'] === 'capacity_below_issued', 'cannot set capacity below issued tickets');
 presentation_assert(tickex_mobile_admin_update_presentation($pdo, $owner, 9, array('capacityTotal' => 120))['capacityTotal'] === 120, 'can raise capacity without erasing details');
+$super = array('id' => 99, 'tipo_global' => 'super_admin');
+presentation_assert(tickex_mobile_admin_update_presentation($pdo, $super, 9, array('capacityTotal' => 130))['capacityTotal'] === 130, 'superadmin can update another producer presentation');
 echo "mobile event presentation PASS\n";

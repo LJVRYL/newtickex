@@ -30,6 +30,8 @@ admin_event_assert(tickex_mobile_admin_event_detail($pdo, $other, $eventId) === 
 admin_event_assert(tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Duplicado', 'slug' => 'evento-prueba'))['error'] === 'slug_in_use', 'duplicate slug rejected');
 $updated = tickex_mobile_admin_edit_event($pdo, $owner, $eventId, array('name' => 'Nombre nuevo', 'description' => 'Actualizado', 'startsAt' => '2026-10-05T20:00:00-03:00', 'endsAt' => '2026-10-06T03:00:00-03:00', 'venue' => 'Sala 2'));
 admin_event_assert($updated['name'] === 'Nombre nuevo' && $updated['venue'] === 'Sala 2', 'owner edits event');
+$super = array('id' => 99, 'tipo_global' => 'super_admin');
+admin_event_assert(tickex_mobile_admin_update_venue($pdo, $super, $eventId, 'Sala Super')['venue'] === 'Sala Super', 'superadmin can edit a producer event');
 admin_event_assert(tickex_mobile_admin_edit_event($pdo, $other, $eventId, array('name' => 'Intrusión'))['error'] === 'not_found', 'other producer cannot edit');
 admin_event_assert(tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Mala fecha', 'slug' => 'mala-fecha', 'startsAt' => 'yesterday'))['error'] === 'invalid_event', 'relative dates rejected');
 $pdo->exec("CREATE TABLE staff_roles (id INTEGER PRIMARY KEY, owner_admin_id INTEGER, code TEXT, name TEXT, permissions_json TEXT, activo INTEGER, is_system INTEGER, created_at TEXT, updated_at TEXT)");

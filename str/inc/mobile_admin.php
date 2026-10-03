@@ -129,7 +129,7 @@ function tickex_mobile_admin_edit_event($pdo, $admin, $eventId, $body)
     $fields[':event'] = $eventId;
     $fields[':admin'] = (int)$admin['id'];
     $fields[':super'] = $admin['tipo_global'] === 'super_admin' ? 1 : 0;
-    $update = $pdo->prepare("UPDATE eventos SET nombre = :name, descripcion = :description, fecha_desde = :start, fecha_hasta = :end, lugar = :venue, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (:super = 1 OR creado_por_admin_id = :admin)");
+    $update = $pdo->prepare("UPDATE eventos SET nombre = :name, descripcion = :description, fecha_desde = :start, fecha_hasta = :end, lugar = :venue, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (CAST(:super AS INTEGER) = 1 OR creado_por_admin_id = :admin)");
     $update->execute($fields);
     return tickex_mobile_admin_event_detail($pdo, $admin, $eventId);
 }
@@ -153,7 +153,7 @@ function tickex_mobile_admin_set_publication($pdo, $admin, $eventId, $published)
         $ready->execute(array(':event' => $eventId));
         if (!$ready->fetchColumn()) return array('error' => 'no_public_tickets');
     }
-    $update = $pdo->prepare("UPDATE eventos SET publicado_site = :published, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (:super = 1 OR creado_por_admin_id = :admin)");
+    $update = $pdo->prepare("UPDATE eventos SET publicado_site = :published, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (CAST(:super AS INTEGER) = 1 OR creado_por_admin_id = :admin)");
     $update->execute(array(':published' => $published ? 1 : 0, ':event' => $eventId, ':super' => $admin['tipo_global'] === 'super_admin' ? 1 : 0, ':admin' => (int)$admin['id']));
     return tickex_mobile_admin_event_detail($pdo, $admin, $eventId);
 }
@@ -162,7 +162,7 @@ function tickex_mobile_admin_update_venue($pdo, $admin, $eventId, $venue)
     if (!is_string($venue)) return null;
     $venue = trim($venue);
     if ($eventId <= 0 || $venue === '' || strlen($venue) > 180 || preg_match('/[\x00-\x1F\x7F]/', $venue)) return null;
-    $update = $pdo->prepare("UPDATE eventos SET lugar = :venue, actualizado_en = :now WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (:super = 1 OR creado_por_admin_id = :admin)");
+    $update = $pdo->prepare("UPDATE eventos SET lugar = :venue, actualizado_en = :now WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (CAST(:super AS INTEGER) = 1 OR creado_por_admin_id = :admin)");
     $update->execute(array(':venue' => $venue, ':now' => date('Y-m-d H:i:s'), ':event' => $eventId, ':super' => $admin['tipo_global'] === 'super_admin' ? 1 : 0, ':admin' => (int)$admin['id']));
     if ($update->rowCount() < 1) return null;
     $read = $pdo->prepare('SELECT id, nombre, fecha_desde, fecha_hasta, lugar, publicado_site FROM eventos WHERE id = :event');

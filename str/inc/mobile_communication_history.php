@@ -4,7 +4,7 @@ function tickex_mobile_communication_history($pdo, $admin, $campaignId, $fetcher
     if (!tickex_mobile_communication_allowed($admin)) return array('error' => 'forbidden');
     $isSuper = tickex_mobile_communication_super($admin);
     $adminId = (int)$admin['id'];
-    $read = $pdo->prepare('SELECT id, name, status FROM communication_campaigns WHERE id=:id AND organization_id=1 AND removed_at IS NULL AND (:super=1 OR created_by_admin_id=:admin) LIMIT 1');
+    $read = $pdo->prepare('SELECT id, name, status FROM communication_campaigns WHERE id=:id AND organization_id=1 AND removed_at IS NULL AND (CAST(:super AS INTEGER)=1 OR created_by_admin_id=:admin) LIMIT 1');
     $read->execute(array(':id' => (int)$campaignId, ':super' => $isSuper ? 1 : 0, ':admin' => $adminId));
     $campaign = $read->fetch(PDO::FETCH_ASSOC);
     if (!$campaign) return array('error' => 'not_found');
