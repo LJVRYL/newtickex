@@ -136,7 +136,16 @@ function tickex_mobile_admin_set_publication($pdo, $admin, $eventId, $published)
     if (!is_bool($published)) return array('error' => 'invalid_state');
     if ($published) {
         $event = tickex_mobile_admin_event_detail($pdo, $admin, $eventId);
-        if (!$event || trim((string)$event['name']) === '' || !$event['startsAt'] || trim((string)$event['venue']) === '') return array('error' => 'event_incomplete');
+        if (!$event || trim((string)$event['name']) === '' || !$event['startsAt'] || !$event['endsAt'] || trim((string)$event['venue']) === '') return array('error' => 'event_incomplete');
+        $columns = array();
+        foreach ($pdo->query('PRAGMA table_info(eventos)')->fetchAll(PDO::FETCH_ASSOC) as $column) $columns[(string)$column['name']] = true;
+        if (!isset($columns['capacidad_total']) || !isset($columns['hora_puertas'])) return array('error' => 'event_incomplete');
+        $read = $pdo->prepare('SELECT capacidad_total, hora_puertas FROM eventos WHERE id = :event LIMIT 1');
+        $read->execute(array(':event' => $eventId));
+        $public = $read->fetch(PDO::FETCH_ASSOC);
+        if (!$public || (int)$public['capacidad_total'] < 1 || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string)$public['hora_puertas'])) return array('error' => 'event_incomplete');
+        require_once __DIR__ . '/event_capacity.php';
+        if ((int)$public['capacidad_total'] < tickex_event_capacity_issued($pdo, $eventId)) return array('error' => 'capacity_below_issued');
         $ready = $pdo->prepare("SELECT 1 FROM tipos_entrada WHERE evento_id = :event AND visible_publico = 1 AND cantidad_disponible > 0 AND precio > 0 AND UPPER(tipo) <> 'PUERTA' LIMIT 1");
         $ready->execute(array(':event' => $eventId));
         if (!$ready->fetchColumn()) return array('error' => 'no_public_tickets');

@@ -7,6 +7,7 @@ function tickex_mobile_datetime($value)
 }
 require_once __DIR__ . '/../inc/mobile_admin.php';
 require_once __DIR__ . '/../inc/mobile_staff_operations.php';
+require_once __DIR__ . '/../inc/mobile_event_presentation.php';
 function admin_event_assert($condition, $message)
 {
     if (!$condition) { fwrite(STDERR, "FAIL: " . $message . "\n"); exit(1); }
@@ -20,6 +21,8 @@ $other = array('id' => 8, 'tipo_global' => 'admin_evento');
 $created = tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Evento de prueba', 'slug' => 'evento-prueba', 'description' => 'Prueba', 'startsAt' => '2026-10-05T20:00:00-03:00', 'endsAt' => '2026-10-06T03:00:00-03:00', 'venue' => 'Sala'));
 admin_event_assert(isset($created['id']) && $created['published'] === false, 'creates private draft for owner');
 $eventId = (int)$created['id'];
+admin_event_assert(tickex_mobile_admin_set_publication($pdo, $owner, $eventId, true)['error'] === 'event_incomplete', 'cannot publish without global capacity and doors time');
+tickex_mobile_admin_update_presentation($pdo, $owner, $eventId, array('capacityTotal' => 100, 'doorsAt' => '20:00'));
 admin_event_assert($created['endsAt'] !== null, 'returns end date');
 admin_event_assert(count(tickex_mobile_admin_events($pdo, $owner)) === 1, 'owner sees event');
 admin_event_assert(count(tickex_mobile_admin_events($pdo, $other)) === 0, 'other producer cannot list event');
@@ -104,8 +107,9 @@ admin_event_assert(tickex_mobile_admin_set_publication($pdo, $owner, $eventId, f
 admin_event_assert(tickex_mobile_admin_create_ticket_type($pdo, $other, $eventId, array('name' => 'Intruso', 'channel' => 'public', 'price' => 100, 'quantity' => 10, 'qrQuantity' => 1))['error'] === 'forbidden', 'other producer cannot create ticket type');
 $newTypes = tickex_mobile_admin_create_ticket_type($pdo, $owner, $eventId, array('name' => 'Puerta', 'channel' => 'door', 'price' => 200, 'quantity' => 10, 'qrQuantity' => 1));
 admin_event_assert(count($newTypes) === 2 && $newTypes[1]['visible'] === false, 'door type is created hidden from public checkout');
-$newEvent = tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Nuevo', 'slug' => 'nuevo-evento', 'startsAt' => '2026-11-05T21:00:00-03:00', 'venue' => 'Sala'));
+$newEvent = tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Nuevo', 'slug' => 'nuevo-evento', 'startsAt' => '2026-11-05T21:00:00-03:00', 'endsAt' => '2026-11-06T02:00:00-03:00', 'venue' => 'Sala'));
 $newId = (int)$newEvent['id'];
+tickex_mobile_admin_update_presentation($pdo, $owner, $newId, array('capacityTotal' => 20, 'doorsAt' => '20:00'));
 admin_event_assert(tickex_mobile_admin_set_publication($pdo, $owner, $newId, true)['error'] === 'no_public_tickets', 'new draft requires public inventory');
 tickex_mobile_admin_create_ticket_type($pdo, $owner, $newId, array('name' => 'General', 'channel' => 'public', 'price' => 150, 'quantity' => 12, 'qrQuantity' => 1));
 admin_event_assert(tickex_mobile_admin_set_publication($pdo, $owner, $newId, true)['published'] === true, 'new event with public inventory can be published');
