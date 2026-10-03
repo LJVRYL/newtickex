@@ -13,6 +13,7 @@ require_once __DIR__ . '/../../../inc/mobile_admin.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_operations.php';
 require_once __DIR__ . '/../../../inc/mobile_event_presentation.php';
 require_once __DIR__ . '/../../../inc/mobile_inventory.php';
+require_once __DIR__ . '/../../../inc/mobile_communication_catalog.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -99,6 +100,12 @@ try {
         if (!$admin) tickex_mobile_response(401, array('error' => 'unauthorized'));
         if ($route === '/admin/me' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_profile($admin));
         if ($route === '/admin/logout' && $method === 'POST') { tickex_mobile_admin_logout($pdo, $adminToken); tickex_mobile_response(200, array('ok' => true)); }
+        if (preg_match('~^/admin/communication/(audiences|templates|campaigns)/?$~', $route, $communicationMatch)) {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $catalog = tickex_mobile_communication_catalog($pdo, $admin, $communicationMatch[1]);
+            if (isset($catalog['error'])) tickex_mobile_response(403, $catalog);
+            tickex_mobile_response(200, $catalog);
+        }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');
             elseif ($method === 'POST') $inventory = tickex_mobile_inventory_create($pdo, $admin, tickex_mobile_body());
