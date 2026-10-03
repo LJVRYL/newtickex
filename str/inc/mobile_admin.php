@@ -432,3 +432,28 @@ function tickex_mobile_admin_send_ticket($pdo, $admin, $eventId, $body, $idempot
     catch (RuntimeException $error) { return array('error' => 'issuance_failed'); }
     return array('orderId' => (string)$issued['order_id'], 'issuedQuantity' => (int)$issued['issued_quantity'], 'emailStatus' => (string)$issued['email_status'], 'mode' => $mode);
 }
+
+function tickex_mobile_admin_sent_tickets($pdo, $admin, $eventId, $query, $beforeId, $limit)
+{
+    if (!tickex_mobile_admin_can_event($pdo, $admin, $eventId)) return array('error' => 'forbidden');
+    $query = trim((string)$query);
+    if (strlen($query) > 80 || !ctype_digit((string)$beforeId) || !ctype_digit((string)$limit) || (int)$limit < 1 || (int)$limit > 50) return array('error' => 'invalid_filter');
+    $sql = "SELECT en.id, en.nombre, en.email, en.tipo, en.fecha_registro, en.checked_in, en.tc_order_request_id, ev.nombre AS evento_nombre FROM entradas en INNER JOIN eventos ev ON ev.id = en.evento_id WHERE en.evento_id = :event AND (en.tc_order_request_id LIKE 'manual-%' OR en.tc_order_request_id LIKE 'mobile-manual-%')";
+    if ((int)$beforeId > 0) $sql .= ' AND en.id < :before';
+    if ($query !== '') $sql .= ' AND (en.email LIKE :email OR en.nombre LIKE :name OR en.codigo LIKE :code)';
+    $sql .= ' ORDER BY en.id DESC LIMIT ' . ((int)$limit + 1);
+    $statement = $pdo->prepare($sql);
+    $statement->bindValue(':event', (int)$eventId, PDO::PARAM_INT);
+    if ((int)$beforeId > 0) $statement->bindValue(':before', (int)$beforeId, PDO::PARAM_INT);
+    if ($query !== '') {
+        $search = '%' . str_replace(array('%', '_'), '', $query) . '%';
+        $statement->bindValue(':email', $search); $statement->bindValue(':name', $search); $statement->bindValue(':code', $search);
+    }
+    $statement->execute();
+    $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+    $hasMore = count($rows) > (int)$limit;
+    if ($hasMore) array_pop($rows);
+    $items = array();
+    foreach ($rows as $row) $items[] = array('ticketId' => (string)$row['id'], 'name' => (string)$row['nombre'], 'email' => (string)$row['email'], 'ticketType' => (string)$row['tipo'], 'issuedAt' => (string)$row['fecha_registro'], 'checkedIn' => (int)$row['checked_in'] === 1, 'eventName' => (string)$row['evento_nombre'], 'channel' => strpos((string)$row['tc_order_request_id'], 'mobile-manual-') === 0 ? 'mobile' : 'web');
+    return array('items' => $items, 'nextBeforeId' => $hasMore && $rows ? (string)$rows[count($rows) - 1]['id'] : null);
+}

@@ -493,6 +493,11 @@ try {
             error_log('mobile_api admin_ticket_sent request_id=' . $requestId . ' event_id=' . $eventId . ' order_id=' . $sent['orderId']);
             tickex_mobile_response(200, $sent);
         }
+        if ($method === 'GET' && preg_match('~^/admin/events/([1-9][0-9]*)/sent-tickex/?$~', $route, $adminSent)) {
+            $history = tickex_mobile_admin_sent_tickets($pdo, $admin, (int)$adminSent[1], isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['beforeId']) ? $_GET['beforeId'] : 0, isset($_GET['limit']) ? $_GET['limit'] : 20);
+            if (isset($history['error'])) tickex_mobile_response($history['error'] === 'forbidden' ? 403 : 422, $history);
+            tickex_mobile_response(200, $history);
+        }
         tickex_mobile_response(405, array('error' => 'method_not_allowed'));
     }
     $token = tickex_mobile_bearer();
