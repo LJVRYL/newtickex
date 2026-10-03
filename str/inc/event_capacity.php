@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/checkout_capacity_holds.php';
 
 if (!function_exists('tickex_event_capacity_ensure_schema')) {
     function tickex_event_capacity_ensure_schema($pdo)
@@ -55,6 +56,7 @@ if (!function_exists('tickex_event_capacity_status')) {
             if ($value !== false && $value !== null && $value !== '' && (int)$value > 0) $explicit = (int)$value;
         }
         $issued = tickex_event_capacity_issued($pdo, $eventId);
+        $reserved = tickex_capacity_holds_active_count($pdo, $eventId);
         $legacy = tickex_event_capacity_legacy_limit($pdo, $eventId);
         $limit = $explicit !== null ? $explicit : $legacy;
         return array(
@@ -62,7 +64,8 @@ if (!function_exists('tickex_event_capacity_status')) {
             'legacy'=>(int)$legacy,
             'limit'=>$limit === null ? null : (int)$limit,
             'issued'=>$issued,
-            'available'=>$limit === null ? null : max(0, (int)$limit - $issued),
+            'reserved'=>$reserved,
+            'available'=>$limit === null ? null : max(0, (int)$limit - $issued - $reserved),
         );
     }
 }
@@ -85,8 +88,9 @@ if (!function_exists('tickex_event_capacity_set')) {
         tickex_event_capacity_ensure_schema($pdo);
         $capacity = (int)$capacity;
         $issued = tickex_event_capacity_issued($pdo, $eventId);
+        $reserved = tickex_capacity_holds_active_count($pdo, $eventId);
         if ($capacity < 1) throw new InvalidArgumentException('El cupo total debe ser mayor a cero.');
-        if ($capacity < $issued) throw new InvalidArgumentException('El cupo total no puede ser menor que los ' . $issued . ' QR ya emitidos.');
+        if ($capacity < $issued + $reserved) throw new InvalidArgumentException('El cupo total no puede ser menor que los ' . ($issued + $reserved) . ' lugares ya emitidos o reservados.');
         $st = $pdo->prepare('UPDATE eventos SET capacidad_total=:capacity WHERE id=:event');
         $st->execute(array(':capacity'=>$capacity, ':event'=>(int)$eventId));
         if ($st->rowCount() !== 1) throw new RuntimeException('No se pudo actualizar el cupo del evento.');

@@ -252,6 +252,7 @@ if (!function_exists('process_tc_order_row')) {
         $pdo->beginTransaction();
         $insertedEntries = array();
         try {
+            $holdConsumed = tickex_capacity_holds_consume($pdo, $eventoId, isset($order['ref']) ? $order['ref'] : '', $tickets);
             // Toda emisión, sin importar su categoría u origen, consume el
             // cupo físico global del evento.
             tickex_event_capacity_assert_available($pdo, $eventoId, $expectedQty);
@@ -316,7 +317,7 @@ if (!function_exists('process_tc_order_row')) {
                     );
 
                     // Descontar stock — nunca debe bloquear la entrega de la entrada
-                    if ($tipoId > 0) {
+                    if ($tipoId > 0 && !$holdConsumed) {
                         try {
                             $stUpd = $pdo->prepare("UPDATE tipos_entrada SET cantidad_disponible = cantidad_disponible - 1 WHERE id = :tid AND cantidad_disponible > 0");
                             $stUpd->execute(array(':tid' => $tipoId));

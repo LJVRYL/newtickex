@@ -769,6 +769,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   // Selección (paso 1 o paso 2)
+  if ($action === 'pay' && $paymentProvider === 'mercadopago') {
+    try {
+      $ownHold = tickex_capacity_holds_active_for_ref(db(), $eventId, $ref);
+      if ($ownHold) {
+        if ($globalCapacityAvailable !== null) $globalCapacityAvailable += (int)$ownHold['quantity'];
+        foreach ($ownHold['lines'] as $heldTypeId => $heldUnits) {
+          $key = (string)$heldTypeId;
+          if (!isset($optionMap[$key])) continue;
+          $qrPerUnit = tickex_ticket_qr_quantity(isset($optionMap[$key]['qr_quantity']) ? $optionMap[$key]['qr_quantity'] : 1);
+          $heldPackages = tickex_ticket_package_capacity((int)$heldUnits, $qrPerUnit);
+          if ($optionMap[$key]['avail'] !== null) $optionMap[$key]['avail'] += $heldPackages;
+          if ($optionMap[$key]['available_qr'] !== null) $optionMap[$key]['available_qr'] += (int)$heldUnits;
+        }
+      }
+    } catch (Exception $_holdReadError) {
+      $errors[] = 'No se pudo verificar la reserva de esta compra. Intentá de nuevo.';
+    }
+  }
   $selIds = isset($_POST['selected_id']) ? $_POST['selected_id'] : (isset($_POST['ticket_id']) ? $_POST['ticket_id'] : array());
   $selQty = isset($_POST['selected_qty']) ? $_POST['selected_qty'] : (isset($_POST['qty']) ? $_POST['qty'] : array());
   list($selectedTickets, $total) = _tickex_parse_selection($optionMap, $selIds, $selQty, $errors, $eventMaxPurchase);
@@ -989,6 +1007,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           // la referencia firmada para que CS/CP/CF siempre identifiquen la orden.
           if ($claimOwned) {
             if ($paymentProvider === 'mercadopago') {
+              $paymentDeadline = date('c', time() + 15 * 60);
+              tickex_capacity_holds_reserve($claimPdo, $eventId, $ref, $selectedTickets, $paymentDeadline);
               $eventPaymentConfig = tickex_mp_event_config($claimPdo, $eventId);
               if ($eventOwnerAdminId <= 0) throw new Exception('El evento no tiene un organizador asociado.');
               $mpCheckout = tickex_mp_create_preference($claimPdo, $eventOwnerAdminId, array(
@@ -1002,7 +1022,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'event_id' => $eventId,
                 'fee_percent' => isset($eventPaymentConfig['marketplace_fee_percent']) ? (float)$eventPaymentConfig['marketplace_fee_percent'] : 0,
                 'marketplace_fee' => $checkoutBreakdown ? (float)$checkoutBreakdown['marketplace_fee'] : 0,
-                'expires_at' => date('c', time() + 15 * 60),
+                'expires_at' => $paymentDeadline,
               ));
               $paymentUrl = (string)$mpCheckout['payment_url'];
               $gatewayRequestId = (string)$mpCheckout['request_id'];

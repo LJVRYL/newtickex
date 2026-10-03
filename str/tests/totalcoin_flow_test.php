@@ -115,4 +115,14 @@ $mismatch = tickex_totalcoin_confirm_from_status($pdo, $mismatchOrder, $fakeWron
 test_ok(empty($mismatch['confirmed']) && $mismatch['result'] === 'amount_mismatch', 'amount mismatch cannot confirm payment');
 test_ok($pdo->query("SELECT payment_status FROM tc_orders WHERE request_id = 'mismatch-rid'")->fetchColumn() === 'pending', 'mismatched order remains pending');
 
+$heldTickets = array(array('id' => 7, 'name' => 'General', 'qty' => 1, 'price' => 100, 'qr_quantity' => 1));
+tickex_capacity_holds_reserve($pdo, 1, 'held-ref', $heldTickets, date('c', time() + 900));
+$stockAfterHold = (int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=7')->fetchColumn();
+$pdo->prepare("INSERT INTO tc_orders (request_id,state,evento_id,ref,amount,buyer_first,buyer_last,buyer_email,selected_tickets_json,payment_status) VALUES ('held-rid','created',1,'held-ref',100,'Held','Buyer','held@example.invalid',:tickets,'confirmed')")->execute(array(':tickets' => json_encode($heldTickets)));
+$heldOrder = $pdo->query("SELECT * FROM tc_orders WHERE request_id='held-rid'")->fetch(PDO::FETCH_ASSOC);
+$heldResult = process_tc_order_row($pdo, $heldOrder);
+test_ok(!empty($heldResult['processed']), 'confirmed order with a hold is issued');
+test_ok((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=7')->fetchColumn() === $stockAfterHold, 'reserved stock is not subtracted twice at issuance');
+test_ok((string)$pdo->query("SELECT status FROM checkout_capacity_holds WHERE ref='held-ref'")->fetchColumn() === 'consumed', 'hold and ticket issuance commit together');
+
 echo "ALL LOCAL FLOW TESTS PASSED\n";

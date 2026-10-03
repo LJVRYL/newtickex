@@ -84,22 +84,6 @@ function tickex_mobile_door_create($pdo, $clientId, $eventId, array $body, $key,
     if ($gross < 1 || $gross > 10000000 || abs($gross - round($gross, 2)) > 0.00001) return array('error' => 'invalid_amount');
     $ref = 'door-' . substr(hash('sha256', $clientId . ':' . $eventId . ':' . $key), 0, 32);
     tickex_mp_ensure_order_columns($pdo);
-    if (tickex_event_sales_paused($pdo, $eventId)) return array('error' => 'sales_paused');
-    $stEvent = $pdo->prepare('SELECT id, nombre FROM eventos WHERE id=:id AND (borrado_en IS NULL OR borrado_en=\'\') LIMIT 1');
-    $stEvent->execute(array(':id' => $eventId));
-    $event = $stEvent->fetch(PDO::FETCH_ASSOC);
-    if (!$event) return array('error' => 'event_not_found');
-    $type = null;
-    foreach (tickex_mobile_door_types($pdo, $eventId) as $candidate) if ((int)$candidate['id'] === $typeId) $type = $candidate;
-    if (!$type || ($type['available'] !== null && $type['available'] < 1)) return array('error' => 'type_unavailable');
-    try { tickex_event_capacity_assert_available($pdo, $eventId, 1); }
-    catch (Exception $_e) { return array('error' => 'event_full'); }
-    $config = tickex_mp_event_config($pdo, $eventId);
-    if (empty($config['enabled']) || empty($config['enforcement_enabled']) || (string)$config['provider'] !== 'mercadopago') return array('error' => 'mercadopago_unavailable');
-    $seller = tickex_mp_event_owner_id($pdo, $eventId);
-    if ($seller <= 0) return array('error' => 'mercadopago_unavailable');
-    $breakdown = tickex_mobile_door_breakdown($gross, $config);
-    $ticketsJson = json_encode(array(array('id' => $typeId, 'name' => $type['name'], 'qty' => 1, 'price' => $breakdown['ticket_subtotal'], 'qr_quantity' => 1)), JSON_UNESCAPED_UNICODE);
     $fingerprint = hash('sha256', implode('|', array($eventId, $typeId, number_format($gross, 2, '.', ''))));
     $existing = tickex_mobile_door_order($pdo, $ref);
     if ($existing) {
@@ -108,6 +92,25 @@ function tickex_mobile_door_create($pdo, $clientId, $eventId, array $body, $key,
         $saved = $stClaim->fetchColumn();
         return $saved !== false && hash_equals((string)$saved, $fingerprint) ? tickex_mobile_door_projection($pdo, $existing) : array('error' => 'idempotency_conflict');
     }
+    if (tickex_event_sales_paused($pdo, $eventId)) return array('error' => 'sales_paused');
+    $stEvent = $pdo->prepare('SELECT id, nombre FROM eventos WHERE id=:id AND (borrado_en IS NULL OR borrado_en=\'\') LIMIT 1');
+    $stEvent->execute(array(':id' => $eventId));
+    $event = $stEvent->fetch(PDO::FETCH_ASSOC);
+    if (!$event) return array('error' => 'event_not_found');
+    $type = null;
+    foreach (tickex_mobile_door_types($pdo, $eventId) as $candidate) if ((int)$candidate['id'] === $typeId) $type = $candidate;
+    $ownHold = tickex_capacity_holds_active_for_ref($pdo, $eventId, $ref);
+    if (!$type || (($type['available'] !== null && $type['available'] < 1) && (!$ownHold || !isset($ownHold['lines'][$typeId])))) return array('error' => 'type_unavailable');
+    if (!$ownHold) {
+        try { tickex_event_capacity_assert_available($pdo, $eventId, 1); }
+        catch (Exception $_e) { return array('error' => 'event_full'); }
+    }
+    $config = tickex_mp_event_config($pdo, $eventId);
+    if (empty($config['enabled']) || empty($config['enforcement_enabled']) || (string)$config['provider'] !== 'mercadopago') return array('error' => 'mercadopago_unavailable');
+    $seller = tickex_mp_event_owner_id($pdo, $eventId);
+    if ($seller <= 0) return array('error' => 'mercadopago_unavailable');
+    $breakdown = tickex_mobile_door_breakdown($gross, $config);
+    $ticketsJson = json_encode(array(array('id' => $typeId, 'name' => $type['name'], 'qty' => 1, 'price' => $breakdown['ticket_subtotal'], 'qr_quantity' => 1)), JSON_UNESCAPED_UNICODE);
     $claim = tickex_totalcoin_checkout_claim($pdo, $ref, $fingerprint, 120);
     if ($claim['result'] === 'conflict') return array('error' => 'idempotency_conflict');
     if ($claim['result'] === 'ready') {
@@ -116,9 +119,11 @@ function tickex_mobile_door_create($pdo, $clientId, $eventId, array $body, $key,
     }
     if ($claim['result'] !== 'acquired') return array('error' => 'order_pending');
     try {
+        $paymentDeadline = date('c', time() + 15 * 60);
+        tickex_capacity_holds_reserve($pdo, $eventId, $ref, array(array('id' => $typeId, 'qty' => 1, 'qr_quantity' => 1)), $paymentDeadline);
         $preference = tickex_mp_create_preference($pdo, $seller, array('amount' => $gross, 'concept' => 'Entrada puerta · ' . $event['nombre'], 'reference' => $ref,
             'event_id' => $eventId, 'marketplace_fee' => $breakdown['marketplace_fee'], 'binary_mode' => true,
-            'expires_at' => date('c', time() + 15 * 60)), $preferenceHttp);
+            'expires_at' => $paymentDeadline), $preferenceHttp);
         $st = $pdo->prepare("INSERT INTO tc_orders (request_id,state,evento_id,ref,concept,amount,buyer_dni,buyer_last,buyer_first,buyer_email,selected_tickets_json,payment_url,payment_provider,provider_preference_id,marketplace_fee,seller_admin_id,ticket_subtotal,service_fee_amount,service_fee_percent,mp_cost_estimate_percent,updated_at) VALUES (:rid,'created',:event,:ref,:concept,:amount,:dni,:last,:first,:email,:tickets,:url,'mercadopago',:pref,:fee,:seller,:subtotal,:service,:rate,:mpcost,CURRENT_TIMESTAMP)");
         $st->execute(array(':rid' => $preference['request_id'], ':event' => $eventId, ':ref' => $ref, ':concept' => 'Entrada puerta · ' . $event['nombre'], ':amount' => $gross,
             ':dni' => '', ':last' => '', ':first' => 'Puerta', ':email' => '', ':tickets' => $ticketsJson, ':url' => $preference['payment_url'], ':pref' => $preference['preference_id'],

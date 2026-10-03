@@ -1,0 +1,58 @@
+<?php
+require_once __DIR__ . '/../inc/event_capacity.php';
+require_once __DIR__ . '/../inc/checkout_capacity_reconciliation.php';
+function reconcile_assert($ok, $message) { if (!$ok) { fwrite(STDERR, 'FAIL: ' . $message . PHP_EOL); exit(1); } echo 'PASS: ' . $message . PHP_EOL; }
+$now = time();
+$hold = array('ref'=>'test-ref','event_id'=>1,'status'=>'active','payment_deadline_at'=>date('c', $now - 16*60));
+$order = array('ref'=>'test-ref','evento_id'=>1,'payment_status'=>'pending','payment_provider'=>'mercadopago','provider_preference_id'=>'pref-1');
+$preference = array('id'=>'pref-1','external_reference'=>'test-ref','collector_id'=>'seller-1','expires'=>true,'expiration_date_to'=>date('c', $now - 16*60));
+$empty = array('paging'=>array('total'=>0),'results'=>array());
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$empty,'seller-1',$now)==='release','expired preference with verified empty payment search can release');
+$hold['payment_deadline_at'] = date('c', $now - 14*60);
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$empty,'seller-1',$now)==='grace_period','grace period retains hold');
+$hold['payment_deadline_at'] = date('c', $now - 16*60);
+$approved = array('paging'=>array('total'=>1),'results'=>array(array('external_reference'=>'test-ref','collector_id'=>'seller-1','status'=>'approved')));
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$approved,'seller-1',$now)==='payment_not_terminal','approved payment retains hold');
+$pending = array('paging'=>array('total'=>1),'results'=>array(array('external_reference'=>'test-ref','status'=>'in_process')));
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$pending,'seller-1',$now)==='payment_not_terminal','in-process payment retains hold');
+$rejected = array('paging'=>array('total'=>1),'results'=>array(array('external_reference'=>'test-ref','status'=>'rejected')));
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$rejected,'seller-1',$now)==='release','fully rejected attempts can release after preference expires');
+$incomplete = array('paging'=>array('total'=>2),'results'=>array(array('external_reference'=>'test-ref','status'=>'rejected')));
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$incomplete,'seller-1',$now)==='payment_search_incomplete','incomplete result page retains hold');
+$order['payment_status'] = 'confirmed';
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$empty,'seller-1',$now)==='paid_pending_issuance','local confirmed order cannot release');
+$order['payment_status'] = 'pending';
+$preference['collector_id'] = 'another-seller';
+reconcile_assert(tickex_capacity_hold_reconciliation_decision($hold,$order,$preference,$empty,'seller-1',$now)==='seller_mismatch','seller mismatch retains hold');
+
+putenv('TICKEX_MP_CLIENT_ID=test-client');
+putenv('TICKEX_MP_CLIENT_SECRET=test-secret');
+putenv('TICKEX_MP_ENCRYPTION_KEY=test-encryption-key-with-enough-entropy');
+$pdo = new PDO('sqlite::memory:');
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE eventos(id INTEGER PRIMARY KEY,creado_por_admin_id INTEGER,capacidad_total INTEGER)');
+$pdo->exec('CREATE TABLE tipos_entrada(id INTEGER PRIMARY KEY,evento_id INTEGER,cantidad_total INTEGER,cantidad_disponible INTEGER)');
+$pdo->exec('CREATE TABLE entradas(id INTEGER PRIMARY KEY,evento_id INTEGER)');
+$pdo->exec('CREATE TABLE tc_orders(id INTEGER PRIMARY KEY,ref TEXT,evento_id INTEGER,payment_provider TEXT,payment_status TEXT)');
+tickex_mp_ensure_order_columns($pdo);
+$pdo->exec('INSERT INTO eventos VALUES(1,7,5)');
+$pdo->exec('INSERT INTO tipos_entrada VALUES(3,1,5,5)');
+tickex_mp_save_account_tokens($pdo, 7, array('access_token'=>'APP_USR-test','refresh_token'=>'TG-test','user_id'=>'seller-1','expires_in'=>15552000));
+reconcile_assert(tickex_mp_refresh_account($pdo, 7, false)['mp_user_id'] === 'seller-1', 'synthetic seller can be read without network');
+$lines = array(array('id'=>3,'qty'=>1,'qr_quantity'=>1));
+tickex_capacity_holds_reserve($pdo, 1, 'lost-preference', $lines, date('c', $now + 900));
+$pdo->exec("UPDATE checkout_capacity_holds SET payment_deadline_at='2020-01-01T00:00:00Z' WHERE ref='lost-preference'");
+$calls = 0;
+$noGatewayRecord = function ($method, $url, $headers) use (&$calls) {
+    $calls++;
+    return strpos($url, '/preferences/search') !== false ? array('total'=>0,'elements'=>array()) : array('paging'=>array('total'=>0),'results'=>array());
+};
+$summary = tickex_capacity_holds_reconcile_due($pdo, 5, $noGatewayRecord, $now);
+reconcile_assert($calls === 2 && $summary['released'] === 1, 'verified missing preference and payment release an abandoned hold');
+reconcile_assert((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id=3')->fetchColumn() === 5, 'reconciliation restores stock once');
+tickex_capacity_holds_reserve($pdo, 1, 'provider-error', $lines, date('c', $now + 900));
+$pdo->exec("UPDATE checkout_capacity_holds SET payment_deadline_at='2020-01-01T00:00:00Z' WHERE ref='provider-error'");
+$providerError = function () { throw new RuntimeException('synthetic_provider_down'); };
+$summary = tickex_capacity_holds_reconcile_due($pdo, 5, $providerError, $now);
+reconcile_assert($summary['errors'] === 1 && tickex_capacity_holds_active_count($pdo, 1) === 1, 'provider outage retains inventory');
+echo "ALL CAPACITY RECONCILIATION TESTS PASSED\n";
