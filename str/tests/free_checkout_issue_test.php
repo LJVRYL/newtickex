@@ -1,0 +1,29 @@
+<?php
+putenv('TICKEX_MAIL_TRANSPORT=fake');
+require_once __DIR__ . '/../inc/free_checkout.php';
+function free_issue_assert($ok, $message) { if (!$ok) { fwrite(STDERR, "FAIL: $message\n"); exit(1); } }
+$pdo = new PDO('sqlite::memory:');
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE eventos (id INTEGER PRIMARY KEY, nombre TEXT, slug TEXT, capacidad_total INTEGER)');
+$pdo->exec("INSERT INTO eventos VALUES (1, 'FREE QA', 'free-qa', 4)");
+$pdo->exec('CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY, evento_id INTEGER, nombre TEXT, cantidad_total INTEGER, cantidad_disponible INTEGER)');
+$pdo->exec("INSERT INTO tipos_entrada VALUES (3, 1, 'FREE QA', 3, 3)");
+$pdo->exec('CREATE TABLE entradas (id INTEGER PRIMARY KEY, evento_id INTEGER, nombre TEXT, email TEXT, fecha_registro TEXT, codigo TEXT UNIQUE, checked_in INTEGER, tipo TEXT, monto_pagado INTEGER, payment_method TEXT)');
+tickex_free_checkout_ensure_schema($pdo);
+$pdo->exec('INSERT INTO event_free_checkout_configs (evento_id, enabled, ticket_type_id, max_uses, captcha_required, unique_email) VALUES (1, 1, 3, 1, 0, 1)');
+$config = tickex_free_checkout_load_config($pdo, 1);
+$first = tickex_free_checkout_issue($pdo, $config, array('nombre' => 'QA', 'apellido' => 'Uno', 'email' => 'qa-one@example.invalid'));
+if (empty($first['ok'])) fwrite(STDERR, 'FIRST_ERROR=' . (isset($first['error']) ? $first['error'] : 'unknown') . "\n");
+free_issue_assert(!empty($first['ok']), 'first FREE ticket is issued');
+free_issue_assert($pdo->query("SELECT payment_method FROM entradas WHERE id = 1")->fetchColumn() === 'free', 'FREE issuance is identifiable');
+free_issue_assert((int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id = 3')->fetchColumn() === 2, 'one unit of stock is consumed');
+$stale = $config;
+$stale['max_uses'] = null;
+$stale['unique_email'] = 0;
+free_issue_assert(empty(tickex_free_checkout_issue($pdo, $stale, array('nombre' => 'QA', 'apellido' => 'Dos', 'email' => 'qa-two@example.invalid'))['ok']), 'current max uses wins over stale form');
+$pdo->exec('UPDATE event_free_checkout_configs SET max_uses = NULL WHERE evento_id = 1');
+free_issue_assert(empty(tickex_free_checkout_issue($pdo, $stale, array('nombre' => 'QA', 'apellido' => 'Uno', 'email' => 'qa-one@example.invalid'))['ok']), 'current email uniqueness wins over stale form');
+$pdo->exec('UPDATE event_free_checkout_configs SET enabled = 0 WHERE evento_id = 1');
+free_issue_assert(empty(tickex_free_checkout_issue($pdo, $stale, array('nombre' => 'QA', 'apellido' => 'Tres', 'email' => 'qa-three@example.invalid'))['ok']), 'disabled checkout rejects already-open form');
+free_issue_assert((int)$pdo->query('SELECT COUNT(*) FROM entradas')->fetchColumn() === 1 && (int)$pdo->query('SELECT cantidad_disponible FROM tipos_entrada WHERE id = 3')->fetchColumn() === 2, 'rejected requests do not consume stock');
+echo "free checkout issue PASS\n";

@@ -292,6 +292,24 @@ if (!function_exists('tickex_free_checkout_issue')) {
                 }
             }
 
+            // The stock update serializes writers. Recheck mutable FREE rules under
+            // the same transaction, so an already-open form cannot bypass a pause.
+            $stCurrent = $pdo->prepare('SELECT enabled, ticket_type_id, max_uses, unique_email FROM event_free_checkout_configs WHERE evento_id = :eid LIMIT 1');
+            $stCurrent->execute(array(':eid' => $eventoId));
+            $current = $stCurrent->fetch(PDO::FETCH_ASSOC);
+            if (!$current || (int)$current['enabled'] !== 1 || (int)$current['ticket_type_id'] !== $ticketTypeId) {
+                $pdo->rollBack();
+                return array('ok' => false, 'error' => 'Checkout free no disponible. Recargá la página.');
+            }
+            if ($current['max_uses'] !== null && (int)$current['max_uses'] > 0 && tickex_free_checkout_count_issued($pdo, $eventoId) >= (int)$current['max_uses']) {
+                $pdo->rollBack();
+                return array('ok' => false, 'error' => 'Este checkout free alcanzó su cupo máximo.');
+            }
+            if ((int)$current['unique_email'] === 1 && tickex_free_checkout_email_exists($pdo, $eventoId, isset($data['email']) ? $data['email'] : '')) {
+                $pdo->rollBack();
+                return array('ok' => false, 'error' => 'Este email ya recibió una entrada gratuita para este evento.');
+            }
+
             $sql = 'INSERT INTO entradas (' . implode(',', $sqlCols) . ') VALUES (' . implode(',', $sqlVals) . ')';
             $stIns = $pdo->prepare($sql);
             $stIns->execute($params);
