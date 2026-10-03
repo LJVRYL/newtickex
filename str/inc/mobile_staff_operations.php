@@ -86,5 +86,8 @@ function tickex_mobile_admin_staff_action($pdo, $admin, $eventId, $body)
 
 function tickex_mobile_admin_staff_datetime_valid($value)
 {
-    return preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?$/', (string)$value) && strtotime((string)$value) !== false;
+    $value = (string)$value;
+    return preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?$/', $value)
+        && checkdate((int)substr($value, 5, 2), (int)substr($value, 8, 2), (int)substr($value, 0, 4))
+        && strtotime($value) !== false;
 }

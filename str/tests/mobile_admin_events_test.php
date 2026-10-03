@@ -83,6 +83,7 @@ admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, arra
 admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'settlement', 'clientId' => 101, 'amount' => 30, 'paid' => true))['members'][0]['settledAmount'] === 30.0, 'records staff settlement');
 admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'settlement', 'clientId' => 101, 'amount' => -1, 'paid' => true))['error'] === 'invalid_settlement', 'rejects negative settlement');
 admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_shift', 'clientId' => 101, 'startsAt' => 'yesterday'))['error'] === 'invalid_shift', 'rejects relative shift date');
+admin_event_assert(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_shift', 'clientId' => 101, 'startsAt' => '2026-02-31T22:00:00-03:00'))['error'] === 'invalid_shift', 'rejects impossible shift date');
 admin_event_assert(count(tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_shift', 'clientId' => 101, 'startsAt' => '2026-10-05T22:00:00-03:00'))['shifts']) === 2, 'creates shift for assigned staff');
 $tasks = tickex_mobile_admin_staff_action($pdo, $owner, $eventId, array('action' => 'add_task', 'clientId' => 101, 'title' => 'Revisar fila'));
 admin_event_assert(count($tasks['tasks']) === 2, 'creates staff task');
