@@ -3,7 +3,7 @@ require_once __DIR__ . '/mercadopago_marketplace.php';
 
 function tickex_mobile_admin_payment_settings($pdo, $admin)
 {
-    if (!isset($admin['id'], $admin['tipo_global']) || (int)$admin['id'] <= 0 || !in_array($admin['tipo_global'], array('admin_evento','super_admin'), true)) return array('error'=>'forbidden');
+    if (!isset($admin['id'], $admin['tipo_global']) || (int)$admin['id'] <= 0 || !in_array($admin['tipo_global'], array('admin_evento','super_admin','superadmin'), true)) return array('error'=>'forbidden');
     $adminId=(int)$admin['id'];
     $accountRead=$pdo->prepare('SELECT status,expires_at,connected_at FROM mercadopago_marketplace_accounts WHERE admin_id=:admin LIMIT 1');
     $accountRead->execute(array(':admin'=>$adminId));
@@ -71,4 +71,34 @@ function tickex_mobile_mp_clear_return($pdo, $state)
 function tickex_mobile_mp_return_location($connected)
 {
     return 'tickex://admin?payment=' . ($connected ? 'connected' : 'error');
+}
+
+function tickex_mobile_admin_payment_disconnect($pdo, $admin, $confirmed)
+{
+    if (!isset($admin['id'], $admin['tipo_global']) || (int)$admin['id'] <= 0 || !in_array($admin['tipo_global'], array('admin_evento', 'super_admin', 'superadmin'), true)) return array('error' => 'forbidden');
+    if ($confirmed !== true) return array('error' => 'confirmation_required');
+    $adminId = (int)$admin['id'];
+    $pdo->exec('PRAGMA busy_timeout=5000');
+    $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        if ($pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='checkout_capacity_holds' LIMIT 1")->fetchColumn()) {
+            $pending = $pdo->prepare("SELECT COUNT(*) FROM checkout_capacity_holds h JOIN eventos e ON e.id=h.event_id WHERE e.creado_por_admin_id=:admin AND h.status='active'");
+            $pending->execute(array(':admin' => $adminId));
+            if ((int)$pending->fetchColumn() > 0) {
+                $pdo->exec('ROLLBACK');
+                return array('error' => 'pending_payments');
+            }
+        }
+        $read = $pdo->prepare('SELECT status FROM mercadopago_marketplace_accounts WHERE admin_id=:admin LIMIT 1');
+        $read->execute(array(':admin' => $adminId));
+        $previous = $read->fetchColumn();
+        $update = $pdo->prepare("UPDATE mercadopago_marketplace_accounts SET status='disconnected',access_token_enc=NULL,refresh_token_enc=NULL,updated_at=CURRENT_TIMESTAMP WHERE admin_id=:admin");
+        $update->execute(array(':admin' => $adminId));
+        $changed = $previous !== false && $previous !== 'disconnected';
+        $pdo->exec('COMMIT');
+        return array('connection' => 'disconnected', 'changed' => $changed);
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) $pdo->exec('ROLLBACK');
+        return array('error' => 'storage_error');
+    }
 }

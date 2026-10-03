@@ -141,6 +141,13 @@ try {
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 503, $result);
             tickex_mobile_response(200, $result);
         }
+        if ($route === '/admin/payment-settings/disconnect') {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            $body = tickex_mobile_body();
+            $result = tickex_mobile_admin_payment_disconnect($pdo, $admin, isset($body['confirmed']) ? $body['confirmed'] : false);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'confirmation_required' ? 422 : ($result['error'] === 'pending_payments' ? 409 : 503)), $result);
+            tickex_mobile_response(200, $result);
+        }
         if ($route === '/admin/site') {
             if ($method === 'GET') $result = tickex_mobile_admin_site($pdo, $admin);
             elseif ($method === 'PATCH') $result = tickex_mobile_admin_site_save($pdo, $admin, tickex_mobile_body());

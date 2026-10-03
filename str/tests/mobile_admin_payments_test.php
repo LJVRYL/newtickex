@@ -2,13 +2,13 @@
 require_once __DIR__.'/../inc/mobile_admin_payments.php';
 function payment_settings_ok($value,$label){if(!$value){fwrite(STDERR,'FAIL: '.$label.PHP_EOL);exit(1);}echo 'PASS: '.$label.PHP_EOL;}
 $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
-$pdo->exec('CREATE TABLE mercadopago_marketplace_accounts(admin_id INTEGER,status TEXT,expires_at TEXT,connected_at TEXT,access_token_enc TEXT,refresh_token_enc TEXT)');
+$pdo->exec('CREATE TABLE mercadopago_marketplace_accounts(admin_id INTEGER,status TEXT,expires_at TEXT,connected_at TEXT,access_token_enc TEXT,refresh_token_enc TEXT,updated_at TEXT)');
 $pdo->exec('CREATE TABLE mercadopago_oauth_states(state_hash TEXT PRIMARY KEY,admin_id INTEGER,expires_at TEXT,used_at TEXT)');
 $pdo->exec('CREATE TABLE mercadopago_admin_policies(admin_id INTEGER,account_type TEXT)');
 $pdo->exec('CREATE TABLE mercadopago_platform_settings(id INTEGER,enforcement_enabled INTEGER)');
 $pdo->exec('CREATE TABLE mercadopago_event_configs(event_id INTEGER,provider TEXT)');
 $pdo->exec('CREATE TABLE eventos(id INTEGER,nombre TEXT,fecha_desde TEXT,creado_por_admin_id INTEGER,borrado_en TEXT)');
-$pdo->exec("INSERT INTO mercadopago_marketplace_accounts VALUES(3,'connected','2099-01-01 00:00:00','2026-01-01','SECRET_ACCESS','SECRET_REFRESH'),(4,'connected','2020-01-01 00:00:00','2020-01-01','OTHER_SECRET','OTHER_REFRESH'); INSERT INTO mercadopago_admin_policies VALUES(3,'client'),(4,'str_owner'); INSERT INTO mercadopago_platform_settings VALUES(1,1); INSERT INTO mercadopago_event_configs VALUES(8,'totalcoin'),(9,'totalcoin'); INSERT INTO eventos VALUES(8,'Propio','2026-12-01',3,NULL),(9,'Ajeno','2026-12-02',4,NULL)");
+$pdo->exec("INSERT INTO mercadopago_marketplace_accounts VALUES(3,'connected','2099-01-01 00:00:00','2026-01-01','SECRET_ACCESS','SECRET_REFRESH',NULL),(4,'connected','2020-01-01 00:00:00','2020-01-01','OTHER_SECRET','OTHER_REFRESH',NULL); INSERT INTO mercadopago_admin_policies VALUES(3,'client'),(4,'str_owner'); INSERT INTO mercadopago_platform_settings VALUES(1,1); INSERT INTO mercadopago_event_configs VALUES(8,'totalcoin'),(9,'totalcoin'); INSERT INTO eventos VALUES(8,'Propio','2026-12-01',3,NULL),(9,'Ajeno','2026-12-02',4,NULL)");
 $owner=array('id'=>3,'tipo_global'=>'admin_evento');$other=array('id'=>4,'tipo_global'=>'admin_evento');
 $result=tickex_mobile_admin_payment_settings($pdo,$owner);
 payment_settings_ok($result['connection']==='connected'&&$result['accountType']==='client'&&$result['commercialEnabled'],'own connection and policy');
@@ -17,6 +17,7 @@ payment_settings_ok(strpos(json_encode($result),'SECRET')===false,'no credential
 $otherResult=tickex_mobile_admin_payment_settings($pdo,$other);
 payment_settings_ok($otherResult['connection']==='expired'&&$otherResult['events'][0]['provider']==='totalcoin','internal account provider and expiry');
 payment_settings_ok(tickex_mobile_admin_payment_settings($pdo,array('id'=>5,'tipo_global'=>'staff'))['error']==='forbidden','staff denied');
+payment_settings_ok(isset(tickex_mobile_admin_payment_settings($pdo,array('id'=>99,'tipo_global'=>'superadmin'))['connection']),'superadmin alias accepted');
 $state = str_repeat('a', 40);
 $begin = function ($db, $adminId) use ($state) {
     payment_settings_ok($adminId === 3, 'OAuth starts for authenticated owner');
@@ -32,4 +33,14 @@ payment_settings_ok(tickex_mobile_mp_return_admin($pdo,$state)===0,'used state r
 tickex_mobile_mp_clear_return($pdo,$state);
 payment_settings_ok((int)$pdo->query('SELECT COUNT(*) FROM mobile_mp_oauth_returns')->fetchColumn()===0,'return binding cleared');
 payment_settings_ok(tickex_mobile_mp_return_location(true)==='tickex://admin?payment=connected' && tickex_mobile_mp_return_location(false)==='tickex://admin?payment=error','return URI carries status only');
+payment_settings_ok(tickex_mobile_admin_payment_disconnect($pdo,$owner,false)['error']==='confirmation_required','disconnect requires explicit confirmation');
+$pdo->exec("CREATE TABLE checkout_capacity_holds(event_id INTEGER,status TEXT); INSERT INTO checkout_capacity_holds VALUES(8,'active'),(9,'active')");
+payment_settings_ok(tickex_mobile_admin_payment_disconnect($pdo,$owner,true)['error']==='pending_payments','own active payment blocks disconnect');
+$pdo->exec("UPDATE checkout_capacity_holds SET status='released' WHERE event_id=8");
+$disconnected=tickex_mobile_admin_payment_disconnect($pdo,$owner,true);
+payment_settings_ok($disconnected['connection']==='disconnected' && $disconnected['changed']===true,'confirmed disconnect succeeds after own holds settle');
+$credential=$pdo->query('SELECT status,access_token_enc,refresh_token_enc FROM mercadopago_marketplace_accounts WHERE admin_id=3')->fetch(PDO::FETCH_ASSOC);
+payment_settings_ok($credential['status']==='disconnected' && $credential['access_token_enc']===null && $credential['refresh_token_enc']===null,'own encrypted tokens cleared');
+payment_settings_ok((string)$pdo->query('SELECT access_token_enc FROM mercadopago_marketplace_accounts WHERE admin_id=4')->fetchColumn()==='OTHER_SECRET','other producer remains connected');
+payment_settings_ok(tickex_mobile_admin_payment_disconnect($pdo,$owner,true)['changed']===false,'retry is idempotent');
 echo 'ALL MOBILE PAYMENT SETTINGS TESTS PASSED'.PHP_EOL;
