@@ -67,7 +67,7 @@ function tickex_mobile_checkout_intent_status($pdo, $client, $ref)
     $statement->execute(array(':ref' => $ref, ':client' => (int)$client['id']));
     $intent = $statement->fetch(PDO::FETCH_ASSOC);
     if (!$intent) return null;
-    $orderQuery = $pdo->prepare('SELECT o.id, o.buyer_email, o.payment_status, o.processing_status, o.amount, o.created_at, COALESCE(e.nombre, :fallback) AS event_title FROM tc_orders o LEFT JOIN eventos e ON e.id = o.evento_id WHERE o.ref = :ref AND o.evento_id = :event AND lower(o.buyer_email) = lower(:email) ORDER BY o.id DESC LIMIT 1');
+    $orderQuery = $pdo->prepare("SELECT o.id, o.buyer_email, o.payment_status, o.processing_status, o.amount, o.created_at, COALESCE(e.nombre, :fallback) AS event_title, CASE WHEN o.payment_status = 'confirmed' AND (o.processing_status IS NULL OR o.processing_status <> 'issued') AND o.payment_confirmed_at IS NOT NULL AND o.payment_confirmed_at <= datetime('now', '-15 minutes') THEN 1 ELSE 0 END AS needs_assistance FROM tc_orders o LEFT JOIN eventos e ON e.id = o.evento_id WHERE o.ref = :ref AND o.evento_id = :event AND lower(o.buyer_email) = lower(:email) ORDER BY o.id DESC LIMIT 1");
     $orderQuery->execute(array(':fallback' => 'Evento Tickex', ':ref' => $ref, ':event' => (int)$intent['evento_id'], ':email' => trim((string)$client['email'])));
     $order = $orderQuery->fetch(PDO::FETCH_ASSOC);
     return array(
