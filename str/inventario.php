@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/inc/bootstrap.php';
+require_once __DIR__.'/inc/mobile_inventory.php';
 require_login();
 
 $cu = current_user();
@@ -62,22 +63,7 @@ function inv_generate_code() {
 }
 
 function inv_upload_photo($file) {
-    if (!isset($file) || !isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) return '';
-    $tmp = $file['tmp_name'];
-    $mime = mime_content_type($tmp);
-    if (strpos($mime, 'image/') !== 0) return '';
-    $dir = __DIR__ . '/uploads_inventario';
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0775, true);
-    }
-    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
-    if ($ext === '') $ext = 'jpg';
-    $fname = 'inv_' . date('Ymd_His') . '_' . bin2hex(function_exists('random_bytes') ? random_bytes(3) : openssl_random_pseudo_bytes(3)) . '.' . $ext;
-    $dest = $dir . '/' . $fname;
-    if (move_uploaded_file($tmp, $dest)) {
-        return 'uploads_inventario/' . $fname;
-    }
-    return '';
+    return tickex_mobile_inventory_upload_photo($file);
 }
 
 // ------------------------------------------------------------------
@@ -115,26 +101,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $itemId = isset($_POST['item_id']) ? (int)$_POST['item_id'] : 0;
         $nota   = isset($_POST['nota']) ? trim($_POST['nota']) : '';
         $estado = isset($_POST['estado']) ? trim($_POST['estado']) : '';
-        $foto   = inv_upload_photo(isset($_FILES['foto']) ? $_FILES['foto'] : null);
         if ($itemId > 0) {
             $stOwn = $pdo->prepare('SELECT 1 FROM inv_items WHERE id=:id' . ($isSuper ? '' : ' AND owner_admin_id=:owner'));
             $ownParams = array(':id'=>$itemId);
             if (!$isSuper) $ownParams[':owner'] = $adminId;
             $stOwn->execute($ownParams);
             if (!$stOwn->fetchColumn()) { http_response_code(404); exit('Item no encontrado'); }
-            $stmt = $pdo->prepare("INSERT INTO inv_logs (item_id, nota, foto_path, estado, created_by) VALUES (:i,:n,:f,:e,:u)");
-            $stmt->execute(array(
-                ':i' => $itemId,
-                ':n' => $nota,
-                ':f' => $foto,
-                ':e' => $estado,
-                ':u' => isset($cu['id']) ? (int)$cu['id'] : null,
-            ));
-            if ($estado !== '') {
-                $up = $pdo->prepare("UPDATE inv_items SET estado = :e WHERE id = :i");
-                $up->execute(array(':e' => $estado, ':i' => $itemId));
+            $photoFile = isset($_FILES['foto']) ? $_FILES['foto'] : null;
+            $foto = inv_upload_photo($photoFile);
+            if ($photoFile !== null && (!is_array($photoFile) || !isset($photoFile['error']) || ((int)$photoFile['error'] !== UPLOAD_ERR_NO_FILE && $foto === ''))) {
+                $flash = 'La foto no es válida. Usá JPG, PNG o WebP de hasta 5 MB.';
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO inv_logs (item_id, nota, foto_path, estado, created_by) VALUES (:i,:n,:f,:e,:u)");
+                $stmt->execute(array(
+                    ':i' => $itemId,
+                    ':n' => $nota,
+                    ':f' => $foto,
+                    ':e' => $estado,
+                    ':u' => isset($cu['id']) ? (int)$cu['id'] : null,
+                ));
+                if ($estado !== '') {
+                    $up = $pdo->prepare("UPDATE inv_items SET estado = :e WHERE id = :i");
+                    $up->execute(array(':e' => $estado, ':i' => $itemId));
+                }
+                $flash = 'Log agregado';
             }
-            $flash = 'Log agregado';
         }
     }
 }

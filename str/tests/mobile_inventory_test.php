@@ -23,5 +23,7 @@ inventory_assert(tickex_mobile_inventory_add_photo_log($pdo, $other, $id, array(
 $photoLog = tickex_mobile_inventory_add_photo_log($pdo, $owner, $id, array(), array(), $uploader);
 inventory_assert($uploadCalled && count($photoLog['logs']) === 2 && $photoLog['logs'][0]['foto_path'] === 'uploads_inventario/inv_' . str_repeat('a', 32) . '.jpg', 'photo-only log keeps safe path');
 inventory_assert(tickex_mobile_inventory_add_photo_log($pdo, $owner, $id, array(), array(), function () { return 'uploads_inventario/unsafe.php'; })['error'] === 'invalid_photo', 'unsafe upload path rejected');
+inventory_assert(tickex_mobile_inventory_upload_photo(array('error' => UPLOAD_ERR_OK, 'size' => 10, 'tmp_name' => __FILE__, 'name' => 'attack.php')) === '', 'local file cannot impersonate an upload');
+inventory_assert(tickex_mobile_inventory_upload_photo(array('error' => UPLOAD_ERR_INI_SIZE, 'size' => 10, 'tmp_name' => __FILE__, 'name' => 'photo.jpg')) === '', 'oversized upload rejected');
 inventory_assert(tickex_mobile_inventory_create($pdo, $owner, array('name' => ''))['error'] === 'invalid_item', 'invalid item rejected');
 echo "mobile inventory PASS\n";
