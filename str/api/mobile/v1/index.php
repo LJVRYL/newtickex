@@ -13,6 +13,7 @@ require_once __DIR__ . '/../../../inc/mobile_admin.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_free_checkout.php';
 require_once __DIR__ . '/../../../inc/mobile_staff_operations.php';
 require_once __DIR__ . '/../../../inc/mobile_event_presentation.php';
+require_once __DIR__ . '/../../../inc/mobile_event_flyer.php';
 require_once __DIR__ . '/../../../inc/mobile_inventory.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_catalog.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_drafts.php';
@@ -148,6 +149,12 @@ try {
             $result = tickex_mobile_admin_payment_disconnect($pdo, $admin, isset($body['confirmed']) ? $body['confirmed'] : false);
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : ($result['error'] === 'confirmation_required' ? 422 : ($result['error'] === 'pending_payments' ? 409 : 503)), $result);
             tickex_mobile_response(200, $result);
+        }
+        if (preg_match('~^/admin/events/([1-9][0-9]*)/flyer/?$~', $route, $eventFlyer)) {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $uploaded = tickex_mobile_admin_event_flyer_upload($pdo, $admin, (int)$eventFlyer[1], isset($_FILES['flyer']) ? $_FILES['flyer'] : null);
+            if (isset($uploaded['error'])) tickex_mobile_response($uploaded['error'] === 'not_found' ? 404 : 422, $uploaded);
+            tickex_mobile_response(200, $uploaded);
         }
         if ($route === '/admin/site') {
             if ($method === 'GET') $result = tickex_mobile_admin_site($pdo, $admin);
