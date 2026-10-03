@@ -135,6 +135,12 @@ try {
             if (isset($result['error'])) tickex_mobile_response(403, $result);
             tickex_mobile_response(200, $result);
         }
+        if ($route === '/admin/payment-settings/connect') {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            $result = tickex_mobile_admin_payment_connect($pdo, $admin);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 503, $result);
+            tickex_mobile_response(200, $result);
+        }
         if ($route === '/admin/site') {
             if ($method === 'GET') $result = tickex_mobile_admin_site($pdo, $admin);
             elseif ($method === 'PATCH') $result = tickex_mobile_admin_site_save($pdo, $admin, tickex_mobile_body());

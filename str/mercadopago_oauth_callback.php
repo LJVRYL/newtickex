@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
+require_once __DIR__ . '/inc/mobile_admin_payments.php';
 
 $returnToOnboarding = !empty($_SESSION['mp_onboarding_admin_id']) && isset($_SESSION['user_id']) && (int)$_SESSION['mp_onboarding_admin_id'] === (int)$_SESSION['user_id'];
 unset($_SESSION['mp_onboarding_admin_id']);
@@ -9,8 +10,10 @@ $code = isset($_GET['code']) ? trim((string)$_GET['code']) : '';
 $error = isset($_GET['error']) ? trim((string)$_GET['error']) : '';
 $onboardingReturn = '';
 $connectionFailed = false;
+$mobileReturnAdminId = 0;
 try {
     $pdo = db();
+    $mobileReturnAdminId = tickex_mobile_mp_return_admin($pdo, $state);
     // The session on www is deliberately not shared with other subdomains.
     $hasOnboardingReturn = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='producer_onboarding_oauth_returns' LIMIT 1")->fetchColumn();
     if ($hasOnboardingReturn) {
@@ -24,12 +27,19 @@ try {
     $pdo = db();
     $adminId = tickex_mp_consume_oauth_state($pdo, $state);
     if ($adminId <= 0) throw new RuntimeException('La autorizacion vencio o ya fue utilizada. Volve a conectar la cuenta.');
+    if ($mobileReturnAdminId > 0 && $adminId !== $mobileReturnAdminId) throw new RuntimeException('La autorizacion no corresponde a esta cuenta.');
     $tokens = tickex_mp_exchange_oauth_code($code, $state);
     tickex_mp_save_account_tokens($pdo, $adminId, $tokens);
     $_SESSION['mp_flash_ok'] = 'Cuenta de Mercado Pago conectada correctamente.';
 } catch (Exception $e) {
     $connectionFailed = true;
     $_SESSION['mp_flash_error'] = $e->getMessage();
+}
+if ($mobileReturnAdminId > 0) {
+    tickex_mobile_mp_clear_return($pdo, $state);
+    header('Cache-Control: no-store');
+    header('Location: ' . tickex_mobile_mp_return_location(!$connectionFailed), true, 303);
+    exit;
 }
 header('Location: ' . ($onboardingReturn !== '' ? $onboardingReturn . ($connectionFailed ? '?mp_error=1' : '') : ($returnToOnboarding ? 'empezar.php' : 'mercadopago_config.php')), true, 303);
 exit;

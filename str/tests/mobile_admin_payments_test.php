@@ -3,6 +3,7 @@ require_once __DIR__.'/../inc/mobile_admin_payments.php';
 function payment_settings_ok($value,$label){if(!$value){fwrite(STDERR,'FAIL: '.$label.PHP_EOL);exit(1);}echo 'PASS: '.$label.PHP_EOL;}
 $pdo=new PDO('sqlite::memory:');$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
 $pdo->exec('CREATE TABLE mercadopago_marketplace_accounts(admin_id INTEGER,status TEXT,expires_at TEXT,connected_at TEXT,access_token_enc TEXT,refresh_token_enc TEXT)');
+$pdo->exec('CREATE TABLE mercadopago_oauth_states(state_hash TEXT PRIMARY KEY,admin_id INTEGER,expires_at TEXT,used_at TEXT)');
 $pdo->exec('CREATE TABLE mercadopago_admin_policies(admin_id INTEGER,account_type TEXT)');
 $pdo->exec('CREATE TABLE mercadopago_platform_settings(id INTEGER,enforcement_enabled INTEGER)');
 $pdo->exec('CREATE TABLE mercadopago_event_configs(event_id INTEGER,provider TEXT)');
@@ -16,4 +17,19 @@ payment_settings_ok(strpos(json_encode($result),'SECRET')===false,'no credential
 $otherResult=tickex_mobile_admin_payment_settings($pdo,$other);
 payment_settings_ok($otherResult['connection']==='expired'&&$otherResult['events'][0]['provider']==='totalcoin','internal account provider and expiry');
 payment_settings_ok(tickex_mobile_admin_payment_settings($pdo,array('id'=>5,'tipo_global'=>'staff'))['error']==='forbidden','staff denied');
+$state = str_repeat('a', 40);
+$begin = function ($db, $adminId) use ($state) {
+    payment_settings_ok($adminId === 3, 'OAuth starts for authenticated owner');
+    $db->prepare("INSERT INTO mercadopago_oauth_states(state_hash,admin_id,expires_at,used_at) VALUES(:hash,:admin,datetime('now','+15 minutes'),NULL)")->execute(array(':hash' => hash('sha256', $state), ':admin' => $adminId));
+    return 'https://auth.mercadopago.com/authorization?state=' . $state;
+};
+payment_settings_ok(tickex_mobile_admin_payment_connect($pdo,array('id'=>5,'tipo_global'=>'staff'),$begin)['error']==='forbidden','staff cannot begin OAuth');
+$connection=tickex_mobile_admin_payment_connect($pdo,$owner,$begin);
+payment_settings_ok(strpos($connection['authorizationUrl'],'https://auth.mercadopago.com/')===0,'server-issued OAuth URL returned');
+payment_settings_ok(tickex_mobile_mp_return_admin($pdo,$state)===3,'valid state bound to owner');
+$pdo->exec("UPDATE mercadopago_oauth_states SET used_at=CURRENT_TIMESTAMP");
+payment_settings_ok(tickex_mobile_mp_return_admin($pdo,$state)===0,'used state rejected');
+tickex_mobile_mp_clear_return($pdo,$state);
+payment_settings_ok((int)$pdo->query('SELECT COUNT(*) FROM mobile_mp_oauth_returns')->fetchColumn()===0,'return binding cleared');
+payment_settings_ok(tickex_mobile_mp_return_location(true)==='tickex://admin?payment=connected' && tickex_mobile_mp_return_location(false)==='tickex://admin?payment=error','return URI carries status only');
 echo 'ALL MOBILE PAYMENT SETTINGS TESTS PASSED'.PHP_EOL;
