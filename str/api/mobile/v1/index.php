@@ -293,6 +293,12 @@ try {
             if (isset($inventory['error'])) tickex_mobile_response($inventory['error'] === 'forbidden' ? 403 : ($inventory['error'] === 'not_found' ? 404 : 422), $inventory);
             tickex_mobile_response(200, $inventory);
         }
+        if (preg_match('~^/admin/inventory/([1-9][0-9]*)/logs/photo/?$~', $route, $inventoryPhotoLog)) {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $inventory = tickex_mobile_inventory_add_photo_log($pdo, $admin, (int)$inventoryPhotoLog[1], $_POST, isset($_FILES['photo']) ? $_FILES['photo'] : null);
+            if (isset($inventory['error'])) tickex_mobile_response($inventory['error'] === 'forbidden' ? 403 : ($inventory['error'] === 'not_found' ? 404 : 422), $inventory);
+            tickex_mobile_response(200, $inventory);
+        }
         if ($route === '/admin/events' && $method === 'GET') tickex_mobile_response(200, tickex_mobile_admin_events($pdo, $admin));
         if ($route === '/admin/billing/report') {
             if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));

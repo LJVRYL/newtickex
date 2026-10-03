@@ -67,17 +67,17 @@ function tickex_mobile_inventory_create($pdo, $admin, $body)
     return tickex_mobile_inventory_detail($pdo, $admin, $pdo->lastInsertId());
 }
 
-function tickex_mobile_inventory_add_log($pdo, $admin, $itemId, $body)
+function tickex_mobile_inventory_add_log($pdo, $admin, $itemId, $body, $photoPath = '')
 {
     $detail = tickex_mobile_inventory_detail($pdo, $admin, $itemId);
     if (isset($detail['error'])) return $detail;
     $note = isset($body['note']) ? trim((string)$body['note']) : '';
     $status = isset($body['status']) ? trim((string)$body['status']) : '';
-    if (($note === '' && $status === '') || strlen($note) > 1000 || strlen($status) > 40) return array('error' => 'invalid_log');
+    if (($note === '' && $status === '' && $photoPath === '') || strlen($note) > 1000 || strlen($status) > 40 || ($photoPath !== '' && !preg_match('~^uploads_inventario/inv_[a-f0-9]{32}\.(?:jpg|png|webp)$~', $photoPath))) return array('error' => 'invalid_log');
     $pdo->beginTransaction();
     try {
         $stmt = $pdo->prepare('INSERT INTO inv_logs (item_id, nota, foto_path, estado, created_by) VALUES (:item, :note, :photo, :status, :admin)');
-        $stmt->execute(array(':item' => (int)$itemId, ':note' => $note, ':photo' => '', ':status' => $status, ':admin' => (int)$admin['id']));
+        $stmt->execute(array(':item' => (int)$itemId, ':note' => $note, ':photo' => $photoPath, ':status' => $status, ':admin' => (int)$admin['id']));
         if ($status !== '') {
             $update = $pdo->prepare('UPDATE inv_items SET estado = :status WHERE id = :item');
             $update->execute(array(':status' => $status, ':item' => (int)$itemId));
@@ -85,4 +85,31 @@ function tickex_mobile_inventory_add_log($pdo, $admin, $itemId, $body)
         $pdo->commit();
     } catch (Exception $error) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $error; }
     return tickex_mobile_inventory_detail($pdo, $admin, $itemId);
+}
+
+function tickex_mobile_inventory_upload_photo($file)
+{
+    if (!is_array($file) || !isset($file['error'], $file['size'], $file['tmp_name']) || (int)$file['error'] !== UPLOAD_ERR_OK || !is_string($file['tmp_name']) || !is_numeric($file['size']) || (int)$file['size'] < 1 || (int)$file['size'] > 5242880 || !is_uploaded_file($file['tmp_name'])) return '';
+    $image = @getimagesize($file['tmp_name']);
+    if (!$image || !isset($image['mime'])) return '';
+    $extensions = array('image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp');
+    if (!isset($extensions[$image['mime']])) return '';
+    $directory = dirname(__DIR__) . '/uploads_inventario';
+    if (!is_dir($directory) && !@mkdir($directory, 0775, true)) return '';
+    $bytes = function_exists('random_bytes') ? random_bytes(16) : openssl_random_pseudo_bytes(16);
+    if ($bytes === false) return '';
+    $filename = 'inv_' . bin2hex($bytes) . '.' . $extensions[$image['mime']];
+    return move_uploaded_file($file['tmp_name'], $directory . '/' . $filename) ? 'uploads_inventario/' . $filename : '';
+}
+
+function tickex_mobile_inventory_add_photo_log($pdo, $admin, $itemId, $body, $file, $uploader = null)
+{
+    $detail = tickex_mobile_inventory_detail($pdo, $admin, $itemId);
+    if (isset($detail['error'])) return $detail;
+    $note = isset($body['note']) ? trim((string)$body['note']) : '';
+    $status = isset($body['status']) ? trim((string)$body['status']) : '';
+    if (strlen($note) > 1000 || strlen($status) > 40) return array('error' => 'invalid_log');
+    $photoPath = $uploader === null ? tickex_mobile_inventory_upload_photo($file) : call_user_func($uploader, $file);
+    if (!is_string($photoPath) || !preg_match('~^uploads_inventario/inv_[a-f0-9]{32}\.(?:jpg|png|webp)$~', $photoPath)) return array('error' => 'invalid_photo');
+    return tickex_mobile_inventory_add_log($pdo, $admin, $itemId, array('note' => $note, 'status' => $status), $photoPath);
 }

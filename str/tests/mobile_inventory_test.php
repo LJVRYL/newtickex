@@ -17,5 +17,11 @@ inventory_assert(tickex_mobile_inventory_add_log($pdo, $other, $id, array('note'
 $logged = tickex_mobile_inventory_add_log($pdo, $owner, $id, array('note' => 'Revisión', 'status' => 'Mantenimiento'));
 inventory_assert($logged['item']['estado'] === 'Mantenimiento' && count($logged['logs']) === 1, 'log changes status atomically');
 inventory_assert(count(tickex_mobile_inventory_list($pdo, $super, '', 'Mantenimiento')['items']) === 1, 'superadmin can read inventory');
+$uploadCalled = false;
+$uploader = function ($file) use (&$uploadCalled) { $uploadCalled = true; return 'uploads_inventario/inv_' . str_repeat('a', 32) . '.jpg'; };
+inventory_assert(tickex_mobile_inventory_add_photo_log($pdo, $other, $id, array(), array(), $uploader)['error'] === 'not_found' && !$uploadCalled, 'other producer cannot upload');
+$photoLog = tickex_mobile_inventory_add_photo_log($pdo, $owner, $id, array(), array(), $uploader);
+inventory_assert($uploadCalled && count($photoLog['logs']) === 2 && $photoLog['logs'][0]['foto_path'] === 'uploads_inventario/inv_' . str_repeat('a', 32) . '.jpg', 'photo-only log keeps safe path');
+inventory_assert(tickex_mobile_inventory_add_photo_log($pdo, $owner, $id, array(), array(), function () { return 'uploads_inventario/unsafe.php'; })['error'] === 'invalid_photo', 'unsafe upload path rejected');
 inventory_assert(tickex_mobile_inventory_create($pdo, $owner, array('name' => ''))['error'] === 'invalid_item', 'invalid item rejected');
 echo "mobile inventory PASS\n";
