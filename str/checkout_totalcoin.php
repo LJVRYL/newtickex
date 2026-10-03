@@ -977,6 +977,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $claimPdo = null;
         $claimFingerprint = '';
         $claimOwned = false;
+        $claimConflict = false;
         $orderPersisted = false;
         try {
           $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
@@ -991,6 +992,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           } elseif ($claimResult === 'acquired') {
             $claimOwned = true;
           } elseif ($claimResult === 'conflict') {
+            $claimConflict = true;
             throw new Exception('La referencia ya pertenece a otra selección. Recargá el checkout.');
           } else {
             throw new Exception('El checkout ya se está generando. Esperá unos segundos y volvé a intentar.');
@@ -1239,7 +1241,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           } catch (Exception $_e) {
             // ignore
           }
-          $errors[] = 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
+          $errors[] = $claimConflict
+            ? 'Esta página ya inició un pago y no puede usarse para otra selección. No se inició un cobro nuevo. Si ya pagaste, esperá la confirmación y no vuelvas a pagar. Si no pagaste, volvé al evento e iniciá una compra nueva. (ID: ' . $debugId . ')'
+            : 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
           if ($isPrivDebug) {
             $gatewayDebug = $e->getMessage();
           }
