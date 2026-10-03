@@ -87,7 +87,8 @@ try {
         if ($id !== null && count($events) === 0) tickex_mobile_response(404, array('error' => 'not_found'));
         $data = array();
         foreach ($events as $event) {
-            $projected = tickex_mobile_event($event, tickex_mobile_ticket_types($pdo, (int)$event['id'], tickex_mobile_global_available($pdo, $event)));
+            $globalAvailable = tickex_mobile_global_available($pdo, $event);
+            $projected = tickex_mobile_event($event, tickex_mobile_ticket_types($pdo, (int)$event['id'], $globalAvailable), tickex_mobile_free_offer($pdo, (int)$event['id'], $globalAvailable));
             if ($id === null) unset($projected['ticketTypes'], $projected['description']);
             $data[] = $projected;
         }

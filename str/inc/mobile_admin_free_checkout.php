@@ -30,10 +30,12 @@ function tickex_mobile_admin_save_free_checkout($pdo, $admin, $eventId, $body)
         $maxUses = filter_var($body['maxUses'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 1000000)));
         if ($maxUses === false) return array('error' => 'invalid_config');
     }
-    $type = $pdo->prepare('SELECT tipo, precio, activo FROM tipos_entrada WHERE id = :type AND evento_id = :event LIMIT 1');
+    $typeColumns = array();
+    foreach ($pdo->query('PRAGMA table_info(tipos_entrada)')->fetchAll(PDO::FETCH_ASSOC) as $column) $typeColumns[(string)$column['name']] = true;
+    $type = $pdo->prepare('SELECT tipo, precio' . (isset($typeColumns['activo']) ? ', activo' : '') . ' FROM tipos_entrada WHERE id = :type AND evento_id = :event LIMIT 1');
     $type->execute(array(':type' => $typeId, ':event' => $eventId));
     $row = $type->fetch(PDO::FETCH_ASSOC);
-    if (!$row || strtoupper((string)$row['tipo']) !== 'FREE' || (float)$row['precio'] !== 0.0 || (int)$row['activo'] !== 1) return array('error' => 'invalid_type');
+    if (!$row || strtoupper((string)$row['tipo']) !== 'FREE' || (float)$row['precio'] !== 0.0 || (isset($typeColumns['activo']) && (int)$row['activo'] !== 1)) return array('error' => 'invalid_type');
     $pdo->beginTransaction();
     try {
         $exists = $pdo->prepare('SELECT id FROM event_free_checkout_configs WHERE evento_id = :event LIMIT 1');

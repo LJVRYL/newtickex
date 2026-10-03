@@ -151,7 +151,16 @@ function tickex_mobile_admin_set_publication($pdo, $admin, $eventId, $published)
         if ((int)$public['capacidad_total'] < tickex_event_capacity_issued($pdo, $eventId)) return array('error' => 'capacity_below_issued');
         $ready = $pdo->prepare("SELECT 1 FROM tipos_entrada WHERE evento_id = :event AND visible_publico = 1 AND cantidad_disponible > 0 AND precio > 0 AND UPPER(tipo) <> 'PUERTA' LIMIT 1");
         $ready->execute(array(':event' => $eventId));
-        if (!$ready->fetchColumn()) return array('error' => 'no_public_tickets');
+        $hasPaid = (bool)$ready->fetchColumn();
+        $hasFree = false;
+        if (!$hasPaid && $pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'event_free_checkout_configs' LIMIT 1")->fetchColumn()) {
+            $typeColumns = array();
+            foreach ($pdo->query('PRAGMA table_info(tipos_entrada)')->fetchAll(PDO::FETCH_ASSOC) as $column) $typeColumns[(string)$column['name']] = true;
+            $free = $pdo->prepare("SELECT 1 FROM event_free_checkout_configs c JOIN tipos_entrada t ON t.id = c.ticket_type_id AND t.evento_id = c.evento_id WHERE c.evento_id = :event AND c.enabled = 1 AND UPPER(t.tipo) = 'FREE' AND t.precio = 0" . (isset($typeColumns['activo']) ? ' AND t.activo = 1' : '') . ' AND t.cantidad_disponible > 0 LIMIT 1');
+            $free->execute(array(':event' => $eventId));
+            $hasFree = (bool)$free->fetchColumn();
+        }
+        if (!$hasPaid && !$hasFree) return array('error' => 'no_public_tickets');
     }
     $update = $pdo->prepare("UPDATE eventos SET publicado_site = :published, actualizado_en = CURRENT_TIMESTAMP WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (CAST(:super AS INTEGER) = 1 OR creado_por_admin_id = :admin)");
     $update->execute(array(':published' => $published ? 1 : 0, ':event' => $eventId, ':super' => $admin['tipo_global'] === 'super_admin' ? 1 : 0, ':admin' => (int)$admin['id']));

@@ -137,7 +137,28 @@ function tickex_mobile_ticket_types($pdo, $eventId, $globalAvailable)
     return $types;
 }
 
-function tickex_mobile_event($row, $types)
+function tickex_mobile_free_offer($pdo, $eventId, $globalAvailable)
+{
+    if (!$pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'event_free_checkout_configs' LIMIT 1")->fetchColumn()) return null;
+    $typeColumns = tickex_mobile_columns($pdo, 'tipos_entrada');
+    $read = $pdo->prepare("SELECT c.max_uses, t.nombre, t.cantidad_disponible FROM event_free_checkout_configs c JOIN tipos_entrada t ON t.id = c.ticket_type_id AND t.evento_id = c.evento_id WHERE c.evento_id = :event AND c.enabled = 1 AND UPPER(t.tipo) = 'FREE' AND t.precio = 0" . (isset($typeColumns['activo']) ? ' AND t.activo = 1' : '') . ' LIMIT 1');
+    $read->execute(array(':event' => $eventId));
+    $row = $read->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return null;
+    $available = max(0, (int)$row['cantidad_disponible']);
+    if ($globalAvailable !== null) $available = min($available, max(0, (int)$globalAvailable));
+    if ($row['max_uses'] !== null) {
+        $entryColumns = tickex_mobile_columns($pdo, 'entradas');
+        if (!isset($entryColumns['payment_method'])) return null;
+        $issued = $pdo->prepare("SELECT COUNT(*) FROM entradas WHERE evento_id = :event AND payment_method = 'free'");
+        $issued->execute(array(':event' => $eventId));
+        $available = min($available, max(0, (int)$row['max_uses'] - (int)$issued->fetchColumn()));
+    }
+    if (function_exists('tickex_event_sales_paused') && tickex_event_sales_paused($pdo, $eventId)) $available = 0;
+    return array('name' => (string)$row['nombre'], 'available' => $available, 'checkoutUrl' => 'https://str.tickex.com.ar/acceso.php?evento_id=' . (int)$eventId);
+}
+
+function tickex_mobile_event($row, $types, $freeOffer)
 {
     $eventEnded = !tickex_mobile_event_is_current($row);
     if ($eventEnded) {
@@ -150,7 +171,8 @@ function tickex_mobile_event($row, $types)
         if ($type['status'] === 'upcoming') $upcoming = true;
         if ($type['status'] === 'sold_out') $soldOut = true;
     }
-    $status = $eventEnded ? 'closed' : ($onSale ? 'on_sale' : ($upcoming || count($types) === 0 ? 'upcoming' : ($soldOut ? 'sold_out' : 'closed')));
+    $freeAvailable = $freeOffer !== null && $freeOffer['available'] > 0;
+    $status = $eventEnded ? 'closed' : ($onSale || $freeAvailable ? 'on_sale' : ($upcoming || (count($types) === 0 && $freeOffer === null) ? 'upcoming' : ($soldOut || $freeOffer !== null ? 'sold_out' : 'closed')));
     return array(
         'id' => (string)$row['id'],
         'slug' => (string)tickex_mobile_value($row, 'slug', (string)$row['id']),
@@ -164,5 +186,6 @@ function tickex_mobile_event($row, $types)
         'status' => $status,
         'maxPerOrder' => isset($row['max_entradas_compra']) && (int)$row['max_entradas_compra'] > 0 ? max(1, min(20, (int)$row['max_entradas_compra'])) : 10,
         'ticketTypes' => $types,
+        'freeCheckout' => $freeOffer,
     );
 }
