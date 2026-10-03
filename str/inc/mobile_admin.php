@@ -52,7 +52,10 @@ function tickex_mobile_admin_can_event($pdo, $admin, $eventId)
 {
     if ($eventId <= 0) return false;
     $statement = $pdo->prepare("SELECT 1 FROM eventos WHERE id = :event AND (borrado_en IS NULL OR borrado_en = '') AND (:super = 1 OR creado_por_admin_id = :admin) LIMIT 1");
-    $statement->execute(array(':event' => $eventId, ':super' => $admin['tipo_global'] === 'super_admin' ? 1 : 0, ':admin' => (int)$admin['id']));
+    $statement->bindValue(':event', (int)$eventId, PDO::PARAM_INT);
+    $statement->bindValue(':super', $admin['tipo_global'] === 'super_admin' ? 1 : 0, PDO::PARAM_INT);
+    $statement->bindValue(':admin', (int)$admin['id'], PDO::PARAM_INT);
+    $statement->execute();
     return (bool)$statement->fetchColumn();
 }
 function tickex_mobile_admin_events($pdo, $admin)

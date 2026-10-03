@@ -21,6 +21,8 @@ require_once __DIR__ . '/../../../inc/mobile_communication_history.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_sales_detail.php';
 require_once __DIR__ . '/../../../inc/billing_financials.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_billing.php';
+require_once __DIR__ . '/../../../inc/unified_tickets.php';
+require_once __DIR__ . '/../../../inc/mobile_admin_clients.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -187,6 +189,12 @@ try {
         if ($route === '/admin/billing/report') {
             if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
             $result = tickex_mobile_admin_billing_report($pdo, $admin, $_GET);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
+            tickex_mobile_response(200, $result);
+        }
+        if ($route === '/admin/clients') {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $result = tickex_mobile_admin_clients($pdo, $admin, $_GET);
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
             tickex_mobile_response(200, $result);
         }
