@@ -72,3 +72,20 @@ function tickex_mobile_communication_run_detail($pdo, $admin, $runId, $limit, $o
         'metrics' => $detail['metrics'],
     );
 }
+
+function tickex_mobile_communication_engine_state($pdo, $admin, $fetcher = null)
+{
+    if (!tickex_mobile_communication_allowed($admin)) return array('error' => 'forbidden');
+    if (!tickex_mobile_communication_table_exists($pdo, 'communication_campaigns')) return array('counts' => array('campaigns_queued' => 0, 'campaigns_running' => 0, 'campaigns_finished' => 0, 'campaigns_failed' => 0, 'active_runs' => 0, 'queue_pending' => 0), 'recipientByStatus' => array(), 'runs' => array());
+    if ($fetcher === null) {
+        require_once __DIR__ . '/communication_ops.php';
+        $state = communication_ops_fetch_engine_state($pdo, 1, (int)$admin['id'], tickex_mobile_communication_super($admin));
+    } else {
+        $state = call_user_func($fetcher, $pdo, 1, (int)$admin['id'], tickex_mobile_communication_super($admin));
+    }
+    return array(
+        'counts' => isset($state['counts']) ? $state['counts'] : array(),
+        'recipientByStatus' => isset($state['recipient_by_status']) ? $state['recipient_by_status'] : array(),
+        'runs' => isset($state['run_progress']) ? $state['run_progress'] : array(),
+    );
+}

@@ -28,4 +28,11 @@ history_assert($detail['run']['campaignId'] === '9' && $detail['recipients'][0][
 history_assert(!isset($detail['recipients'][0]['last_response_message']), 'provider response omitted');
 history_assert(tickex_mobile_communication_run_detail($pdo, array('id' => 4, 'tipo_global' => 'staff'), 14, 10, 0, $runMock)['error'] === 'forbidden', 'staff denied');
 history_assert(tickex_mobile_communication_run_detail($pdo, $owner, 14, 10, 0, function () { return array('run' => null); })['error'] === 'not_found', 'foreign run hidden');
+$engineMock = function ($db, $org, $adminId, $isSuper) {
+    history_assert($org === 1 && $adminId === 2 && !$isSuper, 'engine stays scoped');
+    return array('counts' => array('campaigns_queued' => 1), 'recipient_by_status' => array(array('status' => 'sent', 'count' => 2)), 'run_progress' => array(array('run_id' => 14, 'status' => 'running')));
+};
+$engine = tickex_mobile_communication_engine_state($pdo, $owner, $engineMock);
+history_assert($engine['counts']['campaigns_queued'] === 1 && $engine['runs'][0]['run_id'] === 14, 'engine state returned');
+history_assert(tickex_mobile_communication_engine_state($pdo, array('id' => 4, 'tipo_global' => 'staff'), $engineMock)['error'] === 'forbidden', 'staff engine denied');
 echo 'mobile communication history PASS' . PHP_EOL;

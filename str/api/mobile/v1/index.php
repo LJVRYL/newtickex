@@ -226,6 +226,12 @@ try {
             if (isset($detail['error'])) tickex_mobile_response($detail['error'] === 'not_found' ? 404 : 403, $detail);
             tickex_mobile_response(200, $detail);
         }
+        if ($route === '/admin/communication/engine') {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $state = tickex_mobile_communication_engine_state($pdo, $admin);
+            if (isset($state['error'])) tickex_mobile_response(403, $state);
+            tickex_mobile_response(200, $state);
+        }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');
             elseif ($method === 'POST') $inventory = tickex_mobile_inventory_create($pdo, $admin, tickex_mobile_body());
