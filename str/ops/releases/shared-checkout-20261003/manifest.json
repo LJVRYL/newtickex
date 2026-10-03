@@ -1,0 +1,32 @@
+{
+  "release_id": "shared-checkout-20261003",
+  "project": "tickex",
+  "resource": "ferozo",
+  "credential_ref": "ferozo-prod-root",
+  "docroot": "/opt/ferozo3/web/str",
+  "files": [
+    {
+      "path": "str/checkout_totalcoin.php",
+      "base_sha256": "def7bf27ba7c6a98d6ddb2dc4c6b6c94f63fa38cea178e68a28b550175b86cb6",
+      "result_sha256": "b18f194085a50a9028e27234f21314c8f0ca0cc22de5656c3b3e771abdb2d731",
+      "patch": "checkout_totalcoin.php.patch"
+    },
+    {
+      "path": "str/inc/totalcoin_checkout_claim.php",
+      "base_sha256": "c9d139a9db91c1d25386916134068c67ac40c73eb96dfe54ab9e47cb0ffe0d4b",
+      "result_sha256": "5e2f54f87c3f0b15e2c84c21d0690d58bdad9e24a382cd7329e49362e76a4963",
+      "patch": "totalcoin_checkout_claim.php.patch"
+    },
+    {
+      "path": "str/inc/web_checkout_attempt.php",
+      "base_sha256": null,
+      "result_sha256": "75d08aaf02c2d74535eb2d1ee3bb2b07cfa6d2e77b3595296fcd979d2b83be86",
+      "source": "str/inc/web_checkout_attempt.php"
+    }
+  ],
+  "database_migration": false,
+  "rollback_keep_claim_dispatch_guard": true,
+  "canonical_branch": "fix/shared-checkout-intent",
+  "canonical_base": "cdcb444",
+  "main_merge": false
+}

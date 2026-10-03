@@ -58,6 +58,9 @@ test_ok((int)$pdo->query($testOrderMailCountSql)->fetchColumn() === 1, 'fake tra
 test_ok((int)$pdo->query("SELECT cantidad_disponible FROM tipos_entrada WHERE id = 7")->fetchColumn() === 8, 'normal tickets decrement one stock unit per QR');
 test_ok(abs((float)$pdo->query("SELECT SUM(monto_pagado) FROM entradas WHERE tc_order_request_id = 'test-rid'")->fetchColumn() - 200.0) < 0.001, 'normal ticket revenue is not duplicated');
 
+// SQLite 3.7/PDO invalidates prepared statements after issuance bootstraps
+// schema. Reprepare the read just as a later callback request would do.
+$st = $pdo->prepare($st->queryString);
 $st->execute();
 $orderAgain = $st->fetch(PDO::FETCH_ASSOC);
 $resultAgain = process_tc_order_row($pdo, $orderAgain);

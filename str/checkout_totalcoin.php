@@ -8,6 +8,7 @@ require_once __DIR__ . '/inc/order_events.php';
 require_once __DIR__ . '/inc/free_checkout.php';
 require_once __DIR__ . '/inc/totalcoin_callback_auth.php';
 require_once __DIR__ . '/inc/totalcoin_checkout_claim.php';
+require_once __DIR__ . '/inc/web_checkout_attempt.php';
 require_once __DIR__ . '/inc/ticket_packages.php';
 require_once __DIR__ . '/inc/communication_tracking.php';
 require_once __DIR__ . '/inc/mercadopago_marketplace.php';
@@ -83,6 +84,12 @@ $defaults = array(
   'email'       => isset($_GET['email']) ? (string)$_GET['email'] : '',
 );
 $eventId = isset($_GET['event']) ? (int)$_GET['event'] : 0;
+// Public references are source aliases only. Payment identity stays in the
+// server session and an opaque, session-bound form token, never in a shared URL.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+$checkoutAttempt = tickex_web_checkout_attempt($eventId, isset($_GET['ref']) ? (string)$_GET['ref'] : '', $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : null);
+$defaults['ref'] = $checkoutAttempt['ref'];
+if (!$checkoutAttempt['valid']) $errors[] = 'La sesión de esta compra cambió o venció. No se inició otro pago. Conservamos tu selección: verificá cualquier pago anterior antes de confirmar nuevamente.';
 $freeCheckoutTypeId = 0;
 
 // Si venimos de un redirect interno (POST-Redirect-GET), cargar el payment_url desde DB
@@ -93,7 +100,7 @@ if ($tcGo === 1 && $tcRid !== '' && $paymentUrl === null) {
     $stGo = $pdoGo->prepare('SELECT payment_url, evento_id, ref FROM tc_orders WHERE request_id = :rid LIMIT 1');
     $stGo->execute(array(':rid' => (string)$tcRid));
     $rowGo = $stGo->fetch(PDO::FETCH_ASSOC);
-    if ($rowGo && !empty($rowGo['payment_url'])) {
+    if ($rowGo && !empty($rowGo['payment_url']) && tickex_web_checkout_can_continue((string)$rowGo['ref'], (int)$rowGo['evento_id'])) {
       $paymentUrl = (string)$rowGo['payment_url'];
       $redirectFallback = array('auto' => true, 'reason' => 'prg_get', 'hs_file' => '', 'hs_line' => 0);
       // Ajustar eventId si no estaba en GET
@@ -739,7 +746,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   $concept = $eventName;
-  $ref = trim(isset($_POST['ref']) ? (string)$_POST['ref'] : (string)($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId)));
+  $ref = (string)$checkoutAttempt['ref'];
   if ($ref === '') $errors[] = 'Referencia requerida';
   if (stripos($ref, 'mobile-') === 0) {
     try {
@@ -854,6 +861,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     _tickex_validate_buyer_fields($dni, $last, $first, $email, $errors);
     if ($legalCheckoutRequired && empty($_POST['legal_acceptance'])) $errors[] = 'Tenés que aceptar los Términos y la Política de privacidad para continuar.';
+
+    if (empty($errors) && !tickex_web_checkout_freeze($checkoutAttempt['token'], $eventId, array(
+      $paymentProvider, (int)$eventId, number_format((float)$total, 2, '.', ''),
+      strtolower(trim($email)), $dni, $last, $first, $selectedTickets, (int)$revendedorId
+    ))) {
+      $errors[] = 'Esta compra ya inició un intento con otros datos. Conservamos tu selección y no iniciamos otro pago. Verificá el intento anterior; para otra compra, volvé a Comprar entradas desde el evento.';
+    }
 
     if (!empty($errors) && $lastDebugId !== '') {
       // Asegurar correlación si falla antes del gateway
@@ -978,6 +992,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $claimFingerprint = '';
         $claimOwned = false;
         $claimConflict = false;
+        $claimResult = '';
+        $gatewayDispatched = false;
         $orderPersisted = false;
         try {
           $ticketsJson = json_encode($selectedTickets, JSON_UNESCAPED_UNICODE);
@@ -987,6 +1003,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $claim = tickex_totalcoin_checkout_claim($claimPdo, $ref, $claimFingerprint, 120);
           $claimResult = isset($claim['result']) ? (string)$claim['result'] : 'pending';
           if ($claimResult === 'ready' && !empty($claim['payment_url'])) {
+            $retryOrder = $claimPdo->prepare('SELECT payment_status FROM tc_orders WHERE ref=:ref AND request_id=:rid LIMIT 1');
+            $retryOrder->execute(array(':ref'=>$ref, ':rid'=>(string)$claim['request_id']));
+            $retryState = $retryOrder->fetchColumn();
+            if ($retryState === false || !in_array((string)$retryState, array('', 'pending'), true)) {
+              throw new RuntimeException('Consultá el estado del pago anterior antes de continuar. No se inició otro pago.');
+            }
             $paymentUrl = (string)$claim['payment_url'];
             $gatewayRequestId = isset($claim['request_id']) ? (string)$claim['request_id'] : '';
           } elseif ($claimResult === 'acquired') {
@@ -995,7 +1017,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $claimConflict = true;
             throw new Exception('La referencia ya pertenece a otra selección. Recargá el checkout.');
           } else {
-            throw new Exception('El checkout ya se está generando. Esperá unos segundos y volvé a intentar.');
+            throw new Exception('El intento de pago está en curso o necesita verificación. No se inició otro pago. Esperá unos segundos; si persiste, consultá su estado antes de iniciar otra compra.');
           }
 
           try {
@@ -1014,6 +1036,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               tickex_capacity_holds_reserve($claimPdo, $eventId, $ref, $selectedTickets, $paymentDeadline);
               $eventPaymentConfig = tickex_mp_event_config($claimPdo, $eventId);
               if ($eventOwnerAdminId <= 0) throw new Exception('El evento no tiene un organizador asociado.');
+              tickex_web_checkout_dispatch($claimPdo, $ref, $claimFingerprint);
+              $gatewayDispatched = true;
               $mpCheckout = tickex_mp_create_preference($claimPdo, $eventOwnerAdminId, array(
                 'amount' => $total,
                 'concept' => $concept,
@@ -1034,6 +1058,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
               $tcCfg = tc_config();
               $tcCallbacks = tickex_totalcoin_build_callbacks($tcCfg['callback_base'], $ref);
+              tickex_web_checkout_dispatch($claimPdo, $ref, $claimFingerprint);
+              $gatewayDispatched = true;
               $paymentUrl = tc_checkout($total, $concept, $dni, $ref, $last, $first, $email, null, $tcCallbacks);
             }
           }
@@ -1047,7 +1073,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           }
 
           // Persistir orden (requestId) para auditoría/atribución (revendedor)
-          if ($paymentUrl) {
+          if ($paymentUrl && $claimOwned) {
             $requestId = (string)$gatewayRequestId;
             try {
               $u = @parse_url($paymentUrl);
@@ -1243,7 +1269,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           }
           $errors[] = $claimConflict
             ? 'Esta página ya inició un pago y no puede usarse para otra selección. No se inició un cobro nuevo. Si ya pagaste, esperá la confirmación y no vuelvas a pagar. Si no pagaste, volvé al evento e iniciá una compra nueva. (ID: ' . $debugId . ')'
-            : 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')';
+            : (($gatewayDispatched || $claimResult === 'pending' || $claimResult === 'ready')
+              ? 'El intento anterior está en curso o necesita verificación. No reenviamos el pago. Esperá la confirmación o consultá con soporte usando este ID antes de iniciar otra compra. (ID: ' . $debugId . ')'
+              : 'No pudimos iniciar el pago en este momento. Probá de nuevo en unos minutos. (ID: ' . $debugId . ')');
           if ($isPrivDebug) {
             $gatewayDebug = $e->getMessage();
           }
@@ -1441,6 +1469,7 @@ include __DIR__.'/inc/layout_top.php';
         <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:end;">
           <input type="hidden" name="csrf" value="<?php echo e($csrfTokConfirm); ?>">
           <input type="hidden" name="action" value="pay">
+          <input type="hidden" name="checkout_attempt" value="<?php echo e($checkoutAttempt['token']); ?>">
           <input type="hidden" name="ref" value="<?php echo e($preview['ref'] !== '' ? $preview['ref'] : ($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId))); ?>">
           <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
           <?php if ($communicationTrackingToken !== ''): ?><input type="hidden" name="ct" value="<?php echo e($communicationTrackingToken); ?>"><?php endif; ?>
@@ -1499,6 +1528,7 @@ include __DIR__.'/inc/layout_top.php';
   <form method="post" id="checkoutFlow" class="tickex-safe-bottom" style="display:grid;gap:12px;">
     <input type="hidden" name="csrf" value="<?php echo e($csrfTok); ?>">
     <input type="hidden" name="action" value="pay">
+    <input type="hidden" name="checkout_attempt" value="<?php echo e($checkoutAttempt['token']); ?>">
     <input type="hidden" name="ref" value="<?php echo e($defaults['ref'] !== '' ? $defaults['ref'] : tickex_totalcoin_new_reference((string)$eventId)); ?>">
     <input type="hidden" name="aff" value="<?php echo (int)$revendedorId; ?>">
     <?php if ($communicationTrackingToken !== ''): ?><input type="hidden" name="ct" value="<?php echo e($communicationTrackingToken); ?>"><?php endif; ?>

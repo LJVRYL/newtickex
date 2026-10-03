@@ -96,7 +96,7 @@ if (!function_exists('tickex_totalcoin_checkout_claim')) {
         }
 
         $modifier = '-' . $staleSeconds . ' seconds';
-        $stTake = $pdo->prepare("UPDATE totalcoin_checkout_claims SET status='creating',last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE ref=:ref AND fingerprint=:fp AND (status='failed' OR updated_at < datetime('now',:modifier))");
+        $stTake = $pdo->prepare("UPDATE totalcoin_checkout_claims SET status='creating',last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE ref=:ref AND fingerprint=:fp AND (status='failed' OR (status='creating' AND updated_at < datetime('now',:modifier)))");
         $stTake->execute(array(':ref' => $ref, ':fp' => $fingerprint, ':modifier' => $modifier));
         if ($stTake->rowCount() === 1) return array('result' => 'acquired');
         return array('result' => 'pending');

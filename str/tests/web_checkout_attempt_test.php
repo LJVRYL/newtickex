@@ -1,0 +1,43 @@
+<?php
+require_once __DIR__ . '/../inc/web_checkout_attempt.php';
+require_once __DIR__ . '/../inc/totalcoin_checkout_claim.php';
+function attempt_assert($condition, $message) {
+    if (!$condition) throw new RuntimeException('FAIL: ' . $message);
+    echo 'PASS: ' . $message . "\n";
+}
+$_SESSION=array();
+$a=tickex_web_checkout_attempt(23,'shared-ref',null);
+$post=array('ref'=>$a['ref'],'checkout_attempt'=>$a['token']);
+attempt_assert($a['ref']!=='shared-ref', 'public reference is never adopted');
+attempt_assert(tickex_web_checkout_attempt(23,'shared-ref',null)['ref']===$a['ref'], 'reload/back retains own attempt');
+attempt_assert(tickex_web_checkout_attempt(23,'shared-ref',$post)['ref']===$a['ref'], 'retry retains own attempt');
+attempt_assert(!tickex_web_checkout_attempt(24,'shared-ref',$post)['valid'], 'event tampering rejected');
+$saved=$_SESSION;
+$_SESSION=array();
+$b=tickex_web_checkout_attempt(23,'shared-ref',null);
+attempt_assert($b['ref']!==$a['ref'], 'independent browser gets independent purchase with identical data');
+attempt_assert(!tickex_web_checkout_attempt(23,'shared-ref',$post)['valid'], 'copied form token/ref cannot cross sessions');
+$_SESSION=$saved;
+attempt_assert(tickex_web_checkout_freeze($a['token'],23,array('email','qty'=>1)), 'first valid pay freezes payload');
+attempt_assert(tickex_web_checkout_freeze($a['token'],23,array('email','qty'=>1)), 'identical retry stays idempotent');
+attempt_assert(!tickex_web_checkout_freeze($a['token'],23,array('email','qty'=>2)), 'changing paid attempt cannot silently create another payment');
+attempt_assert(tickex_web_checkout_can_continue($a['ref'],23), 'own PRG continuation permitted');
+attempt_assert(!tickex_web_checkout_can_continue($b['ref'],23), 'other browser payment cannot be returned');
+$_SESSION['usuario_id']=7;
+attempt_assert(!tickex_web_checkout_attempt(23,'shared-ref',$post)['valid'], 'identity change invalidates old form');
+$logged=tickex_web_checkout_attempt(23,'shared-ref',null);
+attempt_assert($logged['ref']!==$a['ref'], 'logged buyer owns a separate attempt');
+$mobile='mobile-'.str_repeat('a',32);
+attempt_assert(tickex_web_checkout_attempt(23,$mobile,null)['ref']===$mobile, 'mobile reference remains exact');
+$pdo=new PDO('sqlite::memory:');
+$pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+attempt_assert(tickex_totalcoin_checkout_claim($pdo,$a['ref'],'fp',120)['result']==='acquired', 'one initial claim');
+tickex_web_checkout_dispatch($pdo,$a['ref'],'fp');
+$pdo->exec("UPDATE totalcoin_checkout_claims SET updated_at='2000-01-01'");
+tickex_totalcoin_checkout_claim_failed($pdo,$a['ref'],'fp','simulated response lost');
+attempt_assert(tickex_totalcoin_checkout_claim($pdo,$a['ref'],'fp',120)['result']==='pending', 'ambiguous/stale dispatch never calls provider again');
+attempt_assert($pdo->query('SELECT status FROM totalcoin_checkout_claims')->fetchColumn()==='dispatching','failure preserves dispatch evidence');
+tickex_totalcoin_checkout_claim_ready($pdo,$a['ref'],'fp','rid','https://provider.invalid/checkout');
+attempt_assert(tickex_totalcoin_checkout_claim($pdo,$a['ref'],'fp',120)['result']==='ready', 'persisted result is reusable');
+attempt_assert(tickex_totalcoin_checkout_claim($pdo,$a['ref'],'changed',120)['result']==='conflict', 'database dedupe remains enabled');
+echo "web checkout attempts PASS\n";
