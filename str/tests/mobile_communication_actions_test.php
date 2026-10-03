@@ -35,4 +35,19 @@ actions_assert($pdo->query('SELECT status FROM communication_execution_commands 
 actions_assert($pdo->query('SELECT status FROM communication_campaign_run_recipients WHERE id=2')->fetchColumn() === 'queued', 'foreign recipient untouched');
 actions_assert(tickex_mobile_communication_cancel_run($pdo, $owner, 14, true)['error'] === 'run_finalized', 'completed cancellation not repeated');
 actions_assert(tickex_mobile_communication_queue($pdo, array('id' => 4, 'tipo_global' => 'staff'), 9, true, str_repeat('a', 20), $enqueue)['error'] === 'forbidden', 'staff cannot queue');
+$pdo->exec("INSERT INTO communication_campaign_runs VALUES(16,9,'failed',NULL,NULL,NULL,NULL,NULL),(17,9,'running',NULL,NULL,NULL,NULL,NULL)");
+$requeueCalls = 0;
+$requeue = function ($db, $org, $campaignId, $adminId, $isSuper, $options) use (&$requeueCalls) {
+    $requeueCalls++;
+    actions_assert($org === 1 && $campaignId === 9 && $adminId === 2 && !$isSuper && strlen($options['request_key']) === 64, 'run requeue scoped with hashed key');
+    return array('ok' => true, 'command_id' => 42, 'status' => 'queued', 'reused' => false);
+};
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 16, 'retry', false, str_repeat('b', 20), $requeue)['error'] === 'confirmation_required', 'retry requires confirmation');
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 16, 'retry', true, 'short', $requeue)['error'] === 'idempotency_required', 'retry requires key');
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 15, 'retry', true, str_repeat('b', 20), $requeue)['error'] === 'not_found', 'foreign retry denied');
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 17, 'retry', true, str_repeat('b', 20), $requeue)['error'] === 'run_not_retryable', 'active run cannot retry');
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 14, 'resume', true, str_repeat('b', 20), $requeue)['error'] === 'run_not_resumable', 'cancelled run cannot resume');
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 16, 'retry', true, str_repeat('b', 20), $requeue)['commandId'] === '42', 'failed run retried');
+actions_assert(tickex_mobile_communication_requeue_run($pdo, $owner, 17, 'resume', true, str_repeat('c', 20), $requeue)['commandId'] === '42', 'active run resumed');
+actions_assert($requeueCalls === 2, 'only allowed retries reach engine');
 echo 'mobile communication actions PASS' . PHP_EOL;

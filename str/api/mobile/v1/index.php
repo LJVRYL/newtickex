@@ -260,6 +260,13 @@ try {
             if (isset($cancelled['error'])) tickex_mobile_response($cancelled['error'] === 'forbidden' ? 403 : ($cancelled['error'] === 'not_found' ? 404 : (in_array($cancelled['error'], array('run_finalized', 'cancel_unavailable'), true) ? 409 : 422)), $cancelled);
             tickex_mobile_response(200, $cancelled);
         }
+        if (preg_match('~^/admin/communication/runs/([1-9][0-9]*)/(retry|resume)/?$~', $route, $communicationRequeue)) {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $body = tickex_mobile_body();
+            $queued = tickex_mobile_communication_requeue_run($pdo, $admin, (int)$communicationRequeue[1], $communicationRequeue[2], isset($body['confirmed']) ? $body['confirmed'] : false, isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? $_SERVER['HTTP_IDEMPOTENCY_KEY'] : '');
+            if (isset($queued['error'])) tickex_mobile_response($queued['error'] === 'forbidden' ? 403 : ($queued['error'] === 'not_found' ? 404 : (in_array($queued['error'], array('run_not_retryable', 'run_not_resumable', 'queue_unavailable'), true) ? 409 : 422)), $queued);
+            tickex_mobile_response(202, $queued);
+        }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');
             elseif ($method === 'POST') $inventory = tickex_mobile_inventory_create($pdo, $admin, tickex_mobile_body());

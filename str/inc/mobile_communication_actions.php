@@ -42,3 +42,28 @@ function tickex_mobile_communication_cancel_run($pdo, $admin, $runId, $confirmed
     }
     return !empty($result['ok']) ? array('cancelled' => true, 'runId' => (string)$runId) : array('error' => 'cancel_unavailable');
 }
+
+function tickex_mobile_communication_requeue_run($pdo, $admin, $runId, $action, $confirmed, $requestId, $enqueue = null)
+{
+    if (!tickex_mobile_communication_allowed($admin)) return array('error' => 'forbidden');
+    if (!in_array($action, array('retry', 'resume'), true)) return array('error' => 'invalid_action');
+    if ($confirmed !== true) return array('error' => 'confirmation_required');
+    if (!is_string($requestId) || !preg_match('/^[A-Za-z0-9_-]{16,100}$/', $requestId)) return array('error' => 'idempotency_required');
+    $isSuper = tickex_mobile_communication_super($admin);
+    $read = $pdo->prepare('SELECT r.status,r.campaign_id FROM communication_campaign_runs r JOIN communication_campaigns c ON c.id=r.campaign_id WHERE r.id=:id AND c.organization_id=1 AND c.removed_at IS NULL AND (CAST(:super AS INTEGER)=1 OR c.created_by_admin_id=:admin) LIMIT 1');
+    $read->execute(array(':id' => (int)$runId, ':super' => $isSuper ? 1 : 0, ':admin' => (int)$admin['id']));
+    $run = $read->fetch(PDO::FETCH_ASSOC);
+    if (!$run) return array('error' => 'not_found');
+    $status = (string)$run['status'];
+    if ($action === 'retry' && $status !== 'failed') return array('error' => 'run_not_retryable');
+    if ($action === 'resume' && !in_array($status, array('requested', 'preparing', 'running', 'failed'), true)) return array('error' => 'run_not_resumable');
+    $key = hash('sha256', 'mobile_run|' . $action . '|' . (int)$admin['id'] . '|' . (int)$runId . '|' . $requestId);
+    if ($enqueue === null) {
+        require_once __DIR__ . '/communication_execution_engine.php';
+        $result = communication_execution_enqueue_campaign($pdo, 1, (int)$run['campaign_id'], (int)$admin['id'], $isSuper, array('request_key' => $key));
+    } else {
+        $result = call_user_func($enqueue, $pdo, 1, (int)$run['campaign_id'], (int)$admin['id'], $isSuper, array('request_key' => $key));
+    }
+    if (empty($result['ok'])) return array('error' => 'queue_unavailable');
+    return array('commandId' => (string)$result['command_id'], 'status' => (string)$result['status'], 'reused' => !empty($result['reused']));
+}
