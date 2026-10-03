@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../../inc/mobile_communication_catalog.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_drafts.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_audiences.php';
 require_once __DIR__ . '/../../../inc/mobile_communication_templates.php';
+require_once __DIR__ . '/../../../inc/mobile_communication_history.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -153,6 +154,12 @@ try {
             $preview = tickex_mobile_communication_preview($pdo, $admin, (int)$campaignPreview[1]);
             if (isset($preview['error'])) tickex_mobile_response($preview['error'] === 'forbidden' ? 403 : 404, $preview);
             tickex_mobile_response(200, $preview);
+        }
+        if (preg_match('~^/admin/communication/campaigns/([1-9][0-9]*)/history/?$~', $route, $campaignHistory)) {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error' => 'method_not_allowed'));
+            $history = tickex_mobile_communication_history($pdo, $admin, (int)$campaignHistory[1]);
+            if (isset($history['error'])) tickex_mobile_response($history['error'] === 'not_found' ? 404 : 403, $history);
+            tickex_mobile_response(200, $history);
         }
         if ($route === '/admin/inventory') {
             if ($method === 'GET') $inventory = tickex_mobile_inventory_list($pdo, $admin, isset($_GET['q']) ? $_GET['q'] : '', isset($_GET['status']) ? $_GET['status'] : '');
