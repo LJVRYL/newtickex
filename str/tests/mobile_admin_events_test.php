@@ -99,6 +99,8 @@ $pdo->exec('CREATE TABLE tipos_entrada (id INTEGER PRIMARY KEY, evento_id INTEGE
 $pdo->exec("INSERT INTO tipos_entrada (id, evento_id, nombre, tipo, tipo_venta, precio, cantidad_total, cantidad_disponible, visible_publico, qr_quantity, activo) VALUES (10, $eventId, 'General', 'PAGA', 'PAGA', 100, 20, 20, 1, 1, 1)");
 $stock = tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 20, 'available' => 5, 'visible' => false));
 admin_event_assert($stock[0]['available'] === 5 && !$stock[0]['visible'] && $stock[0]['total'] === 5, 'owner adjusts stock and visibility');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 5, 'available' => 5, 'visible' => false, 'qrQuantity' => 2))[0]['qrQuantity'] === 2, 'owner updates QR quantity');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 5, 'available' => 5, 'visible' => false, 'qrQuantity' => 11))['error'] === 'invalid_type', 'rejects excessive QR quantity');
 admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, 10, array('expectedAvailable' => 20, 'available' => 0, 'visible' => false))['error'] === 'stock_changed', 'stale stock edit rejected');
 admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $other, $eventId, 10, array('expectedAvailable' => 5, 'available' => 0, 'visible' => false))['error'] === 'forbidden', 'other producer cannot edit stock');
 admin_event_assert(tickex_mobile_admin_set_publication($pdo, $owner, $eventId, true)['error'] === 'no_public_tickets', 'event without public stock cannot be published');
@@ -109,6 +111,7 @@ admin_event_assert(tickex_mobile_admin_set_publication($pdo, $owner, $eventId, f
 admin_event_assert(tickex_mobile_admin_create_ticket_type($pdo, $other, $eventId, array('name' => 'Intruso', 'channel' => 'public', 'price' => 100, 'quantity' => 10, 'qrQuantity' => 1))['error'] === 'forbidden', 'other producer cannot create ticket type');
 $newTypes = tickex_mobile_admin_create_ticket_type($pdo, $owner, $eventId, array('name' => 'Puerta', 'channel' => 'door', 'price' => 200, 'quantity' => 10, 'qrQuantity' => 1));
 admin_event_assert(count($newTypes) === 2 && $newTypes[1]['visible'] === false, 'door type is created hidden from public checkout');
+admin_event_assert(tickex_mobile_admin_update_ticket_type($pdo, $owner, $eventId, (int)$newTypes[1]['id'], array('expectedAvailable' => 10, 'available' => 10, 'visible' => false, 'qrQuantity' => 2))['error'] === 'invalid_type', 'door tickets keep one QR');
 $newEvent = tickex_mobile_admin_create_event($pdo, $owner, array('name' => 'Nuevo', 'slug' => 'nuevo-evento', 'startsAt' => '2026-11-05T21:00:00-03:00', 'endsAt' => '2026-11-06T02:00:00-03:00', 'venue' => 'Sala'));
 $newId = (int)$newEvent['id'];
 tickex_mobile_admin_update_presentation($pdo, $owner, $newId, array('capacityTotal' => 20, 'doorsAt' => '20:00'));

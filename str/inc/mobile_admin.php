@@ -228,14 +228,16 @@ function tickex_mobile_admin_update_ticket_type($pdo, $admin, $eventId, $typeId,
     if ($expected === false || $available === false) return array('error' => 'invalid_stock');
     $pdo->beginTransaction();
     try {
-        $read = $pdo->prepare('SELECT cantidad_disponible FROM tipos_entrada WHERE id = :type AND evento_id = :event LIMIT 1');
+        $read = $pdo->prepare('SELECT cantidad_disponible, qr_quantity, tipo FROM tipos_entrada WHERE id = :type AND evento_id = :event LIMIT 1');
         $read->execute(array(':type' => $typeId, ':event' => $eventId));
-        $current = $read->fetchColumn();
-        if ($current === false) { $pdo->rollBack(); return array('error' => 'not_found'); }
-        if ((int)$current !== $expected) { $pdo->rollBack(); return array('error' => 'stock_changed'); }
+        $current = $read->fetch(PDO::FETCH_ASSOC);
+        if (!$current) { $pdo->rollBack(); return array('error' => 'not_found'); }
+        if ((int)$current['cantidad_disponible'] !== $expected) { $pdo->rollBack(); return array('error' => 'stock_changed'); }
+        $qrQuantity = array_key_exists('qrQuantity', $body) ? filter_var($body['qrQuantity'], FILTER_VALIDATE_INT, array('options' => array('min_range' => 1, 'max_range' => 10))) : (int)$current['qr_quantity'];
+        if ($qrQuantity === false || (strtoupper((string)$current['tipo']) === 'PUERTA' && $qrQuantity !== 1)) { $pdo->rollBack(); return array('error' => 'invalid_type'); }
         $change = $available - $expected;
-        $write = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = :available, cantidad_total = CASE WHEN cantidad_total IS NULL THEN NULL ELSE MAX(0, cantidad_total + :change) END, visible_publico = :visible WHERE id = :type AND evento_id = :event AND cantidad_disponible = :expected');
-        $write->execute(array(':available' => $available, ':change' => $change, ':visible' => $body['visible'] ? 1 : 0, ':type' => $typeId, ':event' => $eventId, ':expected' => $expected));
+        $write = $pdo->prepare('UPDATE tipos_entrada SET cantidad_disponible = :available, cantidad_total = CASE WHEN cantidad_total IS NULL THEN NULL ELSE MAX(0, cantidad_total + :change) END, visible_publico = :visible, qr_quantity = :qr_quantity WHERE id = :type AND evento_id = :event AND cantidad_disponible = :expected');
+        $write->execute(array(':available' => $available, ':change' => $change, ':visible' => $body['visible'] ? 1 : 0, ':qr_quantity' => $qrQuantity, ':type' => $typeId, ':event' => $eventId, ':expected' => $expected));
         if ($write->rowCount() !== 1) { $pdo->rollBack(); return array('error' => 'stock_changed'); }
         $pdo->commit();
     } catch (Exception $error) {
