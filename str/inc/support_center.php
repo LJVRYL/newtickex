@@ -34,7 +34,7 @@ if (!function_exists('tickex_support_ensure_schema')) {
 if (!function_exists('tickex_support_public_id')) {
     function tickex_support_public_id()
     {
-        try { $random = strtoupper(bin2hex(random_bytes(3))); }
+        try { $random = function_exists('random_bytes') ? strtoupper(bin2hex(random_bytes(3))) : (function_exists('openssl_random_pseudo_bytes') ? strtoupper(bin2hex(openssl_random_pseudo_bytes(3))) : strtoupper(substr(sha1(uniqid('', true)), 0, 6))); }
         catch (Exception $e) { $random = strtoupper(substr(sha1(uniqid('', true)), 0, 6)); }
         return 'SOP-' . date('ymd') . '-' . $random;
     }

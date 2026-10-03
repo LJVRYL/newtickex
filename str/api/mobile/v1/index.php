@@ -26,6 +26,7 @@ require_once __DIR__ . '/../../../inc/unified_tickets.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_clients.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_economy.php';
 require_once __DIR__ . '/../../../inc/mobile_admin_site.php';
+require_once __DIR__ . '/../../../inc/mobile_admin_support.php';
 require_once __DIR__ . '/../../../inc/mobile_checkout_intents.php';
 require_once __DIR__ . '/../../../inc/mobile_door_checkout.php';
 
@@ -118,6 +119,25 @@ try {
             elseif ($method === 'PATCH') $result = tickex_mobile_admin_site_save($pdo, $admin, tickex_mobile_body());
             else tickex_mobile_response(405, array('error'=>'method_not_allowed'));
             if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : (in_array($result['error'], array('conflict','slug_taken'), true) ? 409 : 422), $result);
+            tickex_mobile_response(200, $result);
+        }
+        if ($route === '/admin/support/tickets') {
+            if ($method === 'GET') $result = tickex_mobile_support_list($pdo, $admin, $_GET);
+            elseif ($method === 'POST') $result = tickex_mobile_support_create($pdo, $admin, tickex_mobile_body());
+            else tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'forbidden' ? 403 : 422, $result);
+            tickex_mobile_response($method === 'POST' ? 201 : 200, $result);
+        }
+        if (preg_match('~^/admin/support/tickets/([1-9][0-9]*)/?$~', $route, $supportTicket)) {
+            if ($method !== 'GET') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            $result = tickex_mobile_support_detail($pdo, $admin, (int)$supportTicket[1]);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'not_found' ? 404 : 403, $result);
+            tickex_mobile_response(200, $result);
+        }
+        if (preg_match('~^/admin/support/tickets/([1-9][0-9]*)/(reply|reopen)/?$~', $route, $supportAction)) {
+            if ($method !== 'POST') tickex_mobile_response(405, array('error'=>'method_not_allowed'));
+            $result = $supportAction[2] === 'reply' ? tickex_mobile_support_reply($pdo, $admin, (int)$supportAction[1], tickex_mobile_body()) : tickex_mobile_support_reopen($pdo, $admin, (int)$supportAction[1]);
+            if (isset($result['error'])) tickex_mobile_response($result['error'] === 'not_found' ? 404 : ($result['error'] === 'forbidden' ? 403 : 422), $result);
             tickex_mobile_response(200, $result);
         }
         if (preg_match('~^/admin/communication/(audiences|templates|campaigns)/?$~', $route, $communicationMatch)) {

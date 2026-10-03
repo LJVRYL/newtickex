@@ -10,7 +10,7 @@ function tickex_notifications_ensure_table($pdo) {
             mensaje TEXT NOT NULL,
             tipo TEXT DEFAULT "info",
             extra TEXT,
-            created_at DATETIME DEFAULT (datetime("now")),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             leida INTEGER DEFAULT 0
         )');
     } catch (Exception $e) {
