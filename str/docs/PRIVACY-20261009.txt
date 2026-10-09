@@ -1,0 +1,26 @@
+Política de privacidad de Tickex
+Vigente desde el 9 de octubre de 2026
+
+1. Responsable y alcance
+Leonardo Javier Ayala es el responsable del tratamiento de los datos personales gestionados por Tickex en www.tickex.com.ar. Esta política comprende el sitio, las cuentas, la gestión de entradas y los canales de atención de Tickex. Los organizadores también son responsables del uso que hacen de los datos recibidos para realizar sus propios eventos.
+
+2. Qué datos tratamos y para qué
+Tratamos los datos identificatorios y de contacto que proporcionás al registrarte, comprar, consultar o solicitar soporte; información del evento, compra, entradas y validación de accesos; comunicaciones y registros técnicos necesarios para seguridad y funcionamiento. Los utilizamos para gestionar cuentas y eventos, tramitar compras y cobros, emitir y validar entradas, atender consultas y derechos, prevenir fraude y cumplir obligaciones legales. Los datos solicitados como obligatorios son necesarios para la operación correspondiente. No completar esos datos puede impedir prestarla. Las comunicaciones promocionales requieren una autorización específica, que puede retirarse.
+
+3. Con quién se comparten
+El organizador del evento correspondiente recibe los datos necesarios para gestionar la compra, la atención y el acceso. Intervienen proveedores de pagos, alojamiento y comunicaciones para prestar sus servicios. Cuando el pago se realiza mediante Mercado Pago, se aplican también sus propias políticas de privacidad. Tickex no incluye datos de tarjetas en la medición de visitas. Podemos comunicar información a autoridades cuando exista una obligación legal o un requerimiento válido.
+
+4. Cookies y medición opcional
+El sitio utiliza cookies y mecanismos necesarios para mantener sesiones, seguridad y operaciones. La medición con Google Analytics se habilita solamente si elegís «Aceptar medición». Si rechazás, podés seguir utilizando el sitio. La preferencia se recuerda durante 180 días; la procedencia de campañas, cuando autorizás la medición, hasta 30 días. Las cookies de Analytics tienen una duración configurada de hasta 180 días.
+La medición registra visitas e interacciones, identificadores técnicos seudónimos y datos del navegador y dispositivo. Google recibe estos datos al prestar el servicio y puede procesarlos en otros países. No enviamos nombres, correos, datos de tarjetas, códigos QR, credenciales ni contenido de formularios mediante esta integración. La medición automática de formularios y enlaces está desactivada. Información sobre el tratamiento de Google: https://policies.google.com/technologies/partner-sites
+Podés cambiar la elección desde «Preferencias de medición». Retirar el permiso detiene los nuevos envíos y elimina las cookies de medición de ese navegador; no elimina retroactivamente datos que Google ya haya recibido. También podés gestionar cookies desde tu navegador.
+
+5. Conservación y seguridad
+Conservamos la información durante el tiempo necesario para prestar el servicio, atender reclamos, prevenir fraude y cumplir obligaciones legales. Los registros cuya conservación resulte obligatoria pueden mantenerse aunque cierres una cuenta. Aplicamos controles de acceso y medidas técnicas y organizativas para proteger la información. Los proveedores internacionales deben tratar los datos conforme sus condiciones y las garantías aplicables al servicio.
+
+6. Tus derechos y contacto
+Podés solicitar acceso, rectificación, actualización o supresión de tus datos, y retirar autorizaciones opcionales, mediante el formulario público https://www.tickex.com.ar/datos_personales.php . No requiere iniciar sesión y entrega un código para identificar la solicitud. Podremos solicitar únicamente la información necesaria para verificar tu identidad y evitar entregar datos a terceros. La supresión puede estar limitada por obligaciones legales de conservación.
+El derecho de acceso puede ejercerse gratuitamente en los términos de la Ley 25.326. La Agencia de Acceso a la Información Pública, como autoridad de control, recibe denuncias y reclamos relacionados con la protección de datos personales: https://www.argentina.gob.ar/aaip/datospersonales
+
+7. Actualizaciones
+Publicaremos las modificaciones en esta página con su fecha y versión. Si una nueva finalidad requiere consentimiento, lo solicitaremos antes de utilizar los datos para esa finalidad.
