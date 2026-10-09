@@ -4,4 +4,11 @@ Disallow: /administrar
 Disallow: /tests/
 Disallow: /migrations/
 Disallow: /tools/
+Disallow: /mi-cuenta
+Disallow: /entrada/
+Disallow: /validar/
+Disallow: /ticket.php
+Disallow: /checkin.php
+
+Sitemap: https://www.tickex.com.ar/sitemap.xml
 
