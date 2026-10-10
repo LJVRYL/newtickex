@@ -1026,6 +1026,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stOrdId = $evPdo->prepare("SELECT id FROM tc_orders WHERE request_id = :rid LIMIT 1");
                 $stOrdId->execute(array(':rid' => $requestId));
                 $ordRow = $stOrdId->fetch(PDO::FETCH_ASSOC);
+                try { require_once __DIR__ . '/inc/sales_measurement.php'; if ($ordRow) tickex_sales_capture_order((int)$ordRow['id']); } catch (Throwable $_measurementError) {}
                 log_order_event($evPdo, $ordRow ? (int)$ordRow['id'] : null, $requestId, 'order_checkout_created', array(
                   'evento_id' => (int)$eventId,
                   'amount' => (float)$total,

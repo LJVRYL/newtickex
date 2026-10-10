@@ -1,0 +1,32 @@
+<?php
+require __DIR__.'/consented-purchase.php';
+$tests=0;
+function check($ok,$name) { global $tests; if (!$ok) throw new RuntimeException($name); $tests++; }
+$now=1800000000;
+$cookies=array('ge_growth_consent'=>'granted','ge_sales_scope_v1'=>'granted','_ga'=>'GA1.1.123456.789012');
+$context=ConsentedPurchase::context($cookies,$now);
+$payment=array('confirmed'=>true,'order_id'=>24,'value'=>1200.5,'currency'=>'ARS','items'=>array(array('id'=>23,'quantity'=>2,'price'=>600.25)),'buyer_email'=>'excluded@example.com','payment_url'=>'https://example.com/?token=private');
+check($context!==null,'valid consent');
+$old=$cookies;unset($old['ge_sales_scope_v1']);check(ConsentedPurchase::context($old,$now)===null,'visit consent alone refused');
+$oldContext=$context;unset($oldContext['scope']);check(ConsentedPurchase::payload('tickex',$oldContext,$payment,$now)===null,'payload also requires sales scope');
+check(ConsentedPurchase::context(array(),$now)===null,'no implicit consent');
+$denied=$cookies;$denied['ge_growth_consent']='denied';
+check(ConsentedPurchase::context($denied,$now)===null,'rejected consent');
+$pending=$payment;$pending['confirmed']=false;
+check(ConsentedPurchase::payload('tickex',$context,$pending,$now)===null,'pending is not purchase');
+$free=$payment;$free['value']=0;
+check(ConsentedPurchase::payload('tickex',$context,$free,$now)===null,'free registration not paid sale');
+$refunded=$payment;$refunded['refunded']=true;
+check(ConsentedPurchase::payload('tickex',$context,$refunded,$now)===null,'refunded is not new purchase');
+check(ConsentedPurchase::payload('tickex',$context,$payment,$now+181*86400)===null,'expired consent');
+$payload=ConsentedPurchase::payload('tickex',$context,$payment,$now);
+check($payload['events'][0]['params']['transaction_id']==='tickex-24','stable transaction');
+$json=json_encode($payload);
+check(strpos($json,'example.com')===false&&strpos($json,'private')===false,'PII and URL excluded');
+$box=new PurchaseOutbox(new PDO('sqlite::memory:'));
+check($box->enqueue('tickex',$context,$payment,$now),'first confirmation');
+check(!$box->enqueue('tickex',$context,$payment,$now),'webhook replay deduplicated');
+check($box->enqueue('graphex',$context,$payment,$now),'brands cannot collide');
+$box->revoke($context['client_id']);
+check(!$box->enqueue('tickex',$context,$payment,$now),'revocation cannot replay transaction');
+echo json_encode(array('passed'=>$tests,'real_network_requests'=>0,'real_payments_created'=>0))."\n";

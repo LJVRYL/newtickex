@@ -22,12 +22,17 @@
     var campaign=touch(),fields={utm_source:'campaign_source',utm_medium:'campaign_medium',utm_campaign:'campaign_name',utm_content:'campaign_content',utm_term:'campaign_term'};
     Object.keys(fields).forEach(function(k){if(campaign[k])config[fields[k]]=campaign[k];});
     w.gtag('config',cfg.measurementId,config);
+    w.gtag('get',cfg.measurementId,'session_id',function(id){if(granted && /^\d{1,12}$/.test(String(id)))cookie('ge_growth_session',String(id),1);});
     var script=d.createElement('script');script.async=true;script.src='https://www.googletagmanager.com/gtag/js?id='+cfg.measurementId;d.head.appendChild(script);
+  }
+  var withdrawal = Promise.resolve(true);
+  function permission(action) {
+    return w.fetch('/measurement_permission.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action='+action,cache:'no-store'}).then(function(response){if(!response.ok)throw new Error('No se pudo guardar la preferencia');return response.json();}).then(function(result){if(!result.ok)throw new Error('No se pudo guardar la preferencia');cookie('ge_sales_scope_v1',action==='grant'?'granted':'denied',180);return true;});
   }
   function consent(value) {
     if(cfg.measurementReady!==true)return;
     granted=value === true;cookie('ge_growth_consent',granted?'granted':'denied',180);
-    if(granted){w['ga-disable-'+cfg.measurementId]=false;persist();load();if(w.gtag&&loaded&&!pageViewed){pageViewed=true;w.gtag('event','page_view',{send_to:cfg.measurementId,page_location:w.location.origin+touch().landing,page_referrer:'',page_title:''});}if(cfg.pageEvent)emit({event:cfg.pageEvent,product_id:cfg.pageId});companyEvents();}else{w['ga-disable-'+cfg.measurementId]=true;cookie('ge_growth_touch','',0);clearGaCookies();if(w.gtag)w.gtag('consent','update',{analytics_storage:'denied',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied'});}
+    if(granted){w['ga-disable-'+cfg.measurementId]=false;persist();load();if(w.gtag&&loaded&&!pageViewed){pageViewed=true;w.gtag('event','page_view',{send_to:cfg.measurementId,page_location:w.location.origin+touch().landing,page_referrer:'',page_title:''});}if(cfg.pageEvent)emit({event:cfg.pageEvent,product_id:cfg.pageId});companyEvents();}else{if(read('ge_sales_scope_v1')==='granted'){withdrawal=permission('revoke');withdrawal.catch(function(){banner();});}w['ga-disable-'+cfg.measurementId]=true;cookie('ge_growth_touch','',0);cookie('ge_growth_session','',0);clearGaCookies();if(w.gtag)w.gtag('consent','update',{analytics_storage:'denied',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied'});}
   }
   function emit(detail) {
     if(!granted || !detail || events.indexOf(detail.event)<0)return;
@@ -55,15 +60,16 @@
   if(cfg.analyticsConsent === true)consent(true);
   if(cfg.measurementReady!==true)return;
   function banner() {
+    if(d.querySelector('section[aria-label="Preferencias de medición"]'))return;
     var box=d.createElement('section');box.setAttribute('aria-label','Preferencias de medición');
     box.style.cssText='position:fixed;bottom:16px;left:16px;right:16px;z-index:99999;background:#0E1424;color:#F7F8FC;padding:16px;border:1px solid #A8B0C3;border-radius:12px;box-shadow:0 4px 20px #0002;max-width:680px';
-    var text=d.createElement('p');text.textContent='¿Nos permitís usar Google Analytics para medir visitas e interacciones? Es opcional. Recordamos la procedencia hasta 30 días y tu elección durante 180 días. Podés rechazar o retirar el permiso en Preferencias de medición. Retirarlo detiene los nuevos envíos y elimina las cookies de medición de este navegador; no borra información ya recibida por Google.';box.appendChild(text);
+    var text=d.createElement('p');text.textContent='¿Nos permitís usar Google Analytics para medir visitas, interacciones y compras confirmadas? En las compras enviamos un identificador seudónimo, productos, moneda e importe de los productos; sin nombre, DNI ni correo. Es opcional. Recordamos la procedencia hasta 30 días y tu elección durante 180 días. Podés rechazar o retirar el permiso en Preferencias de medición. Retirarlo detiene los nuevos envíos y elimina las cookies de medición de este navegador; no borra información ya recibida por Google.';box.appendChild(text);
     if(cfg.privacyUrl){var link=d.createElement('a');link.href=cfg.privacyUrl;link.textContent='Política de privacidad';link.style.color='#90F3AF';box.appendChild(link);}
-    function choice(label,value){var button=d.createElement('button');button.type='button';button.textContent=label;button.style.cssText='min-height:44px;padding:10px 14px;margin:4px;border:1px solid #A8B0C3;border-radius:12px;background:#0E1424;color:#F7F8FC;font:inherit';button.onclick=function(){consent(value);box.remove();};box.appendChild(button);}
+    function choice(label,value){var button=d.createElement('button');button.type='button';button.textContent=label;button.style.cssText='min-height:44px;padding:10px 14px;margin:4px;border:1px solid #A8B0C3;border-radius:12px;background:#0E1424;color:#F7F8FC;font:inherit';button.onclick=function(){Array.from(box.querySelectorAll('button')).forEach(function(b){b.disabled=true;});var hadSales=read('ge_sales_scope_v1')==='granted';consent(value);(value?permission('grant'):(hadSales?withdrawal:permission('revoke'))).then(function(){box.remove();}).catch(function(){Array.from(box.querySelectorAll('button')).forEach(function(b){b.disabled=false;});text.textContent='La medición del navegador se detuvo si rechazaste. No pudimos guardar la preferencia en el servidor; reintentá para detener también los envíos de compras pendientes.';});};box.appendChild(button);}
     choice('Aceptar medición',true);choice('Rechazar medición',false);d.body.appendChild(box);
   }
   var prefs=d.createElement('button');prefs.type='button';prefs.textContent='Preferencias de medición';prefs.style.cssText='position:fixed;bottom:4px;right:4px;z-index:99998;min-height:44px;padding:8px 12px;background:#0E1424;color:#F7F8FC;border:1px solid #A8B0C3;border-radius:12px;font:inherit';prefs.onclick=banner;d.body.appendChild(prefs);
-  if(!read('ge_growth_consent'))banner();
+  if(!read('ge_growth_consent') || !read('ge_sales_scope_v1'))banner();
 })(window, document);
 
 
